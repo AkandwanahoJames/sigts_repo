@@ -1,0 +1,74 @@
+function showLoading() {
+    const app = document.getElementById('app');
+    if (app) {
+        app.innerHTML = `<div class="loading-container"><div class="spinner"></div><p>Loading Bwindi SIGTS...</p></div>`;
+    }
+}
+
+function renderLoginScreen() {
+    return `<div class="login-container"><div class="login-card"><div class="login-logo">🦍</div><h1 class="login-title">Welcome to Bwindi</h1><p class="login-subtitle">Smart Information Tour Guide System</p><input type="text" id="loginUsername" class="login-input" placeholder="Username"><input type="password" id="loginPassword" class="login-input" placeholder="Password"><button onclick="handleLogin()" class="login-btn">Login</button><button onclick="handleGuestLogin()" class="register-btn">Continue as Guest</button><button onclick="renderView('register')" class="register-btn">Create Account</button><div class="demo-credentials"><strong>Demo:</strong> "admin" / "password" or "tourist" / "password"</div></div></div>`;
+}
+
+function renderRegisterScreen() {
+    return `<div class="login-container"><div class="login-card"><div class="login-logo">📝</div><h1 class="login-title">Create Account</h1><input type="text" id="regFullName" placeholder="Full Name"><input type="email" id="regEmail" placeholder="Email"><input type="text" id="regUsername" placeholder="Username"><input type="password" id="regPassword" placeholder="Password"><input type="password" id="regConfirmPassword" placeholder="Confirm Password"><select id="regUserType"><option value="tourist">Tourist</option><option value="guide">Tour Guide</option><option value="it_manager">IT Manager</option></select><button onclick="handleRegistration()" class="login-btn">Register</button><button onclick="renderView('login')" class="register-btn">Back</button></div></div>`;
+}
+
+async function handleRegistration() {
+    const result = await Auth.register({
+        fullName: document.getElementById('regFullName')?.value,
+        email: document.getElementById('regEmail')?.value,
+        username: document.getElementById('regUsername')?.value,
+        password: document.getElementById('regPassword')?.value,
+        confirmPassword: document.getElementById('regConfirmPassword')?.value,
+        userType: document.getElementById('regUserType')?.value
+    });
+    alert(result.message || (result.success ? 'Success! Please login.' : result.error));
+    if (result.success) renderView('login');
+    else renderView('register');
+}
+
+async function handleLogin() {
+    const result = await Auth.login(
+        document.getElementById('loginUsername')?.value,
+        document.getElementById('loginPassword')?.value
+    );
+    if (result.success) renderView('dashboard');
+    else alert('Login failed: ' + result.error);
+}
+
+async function handleGuestLogin() {
+    await Auth.guestAccess();
+    renderView('dashboard');
+}
+
+async function renderView(view) {
+    window.currentView = view;
+    const app = document.getElementById('app');
+    if (!app) return;
+    
+    if (!Auth.isAuthenticated() && view !== 'login' && view !== 'register') {
+        renderView('login');
+        return;
+    }
+    
+    let content = '';
+    switch(view) {
+        case 'login': app.innerHTML = renderLoginScreen(); return;
+        case 'register': app.innerHTML = renderRegisterScreen(); return;
+        case 'dashboard': content = await renderDashboardContent(); break;
+        case 'animals': content = renderAnimalsContent(); break;
+        case 'map': content = renderMapContent(); break;
+        case 'culture': content = renderCultureContent(); break;
+        case 'sightings': content = renderSightingsContent(); break;
+        case 'profile': content = renderProfileContent(); break;
+        case 'info': content = renderInfoContent(); break;
+        case 'guide_dashboard': content = await renderGuideDashboard(); break;
+        case 'it_dashboard': content = await renderITManagerDashboard(); break;
+        case 'intranet': content = await renderIntranetDashboard(); break;
+        default: content = await renderDashboardContent();
+    }
+    app.innerHTML = renderMainLayout(content);
+}
+
+// Global functions for UI actions
+
