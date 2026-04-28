@@ -60,6 +60,19 @@ function calculateChecksum(filePath) {
     return crypto.createHash('sha256').update(content).digest('hex');
 }
 
+// Detect legacy/manual schema that predates migration tracking
+async function hasLegacyBaselineSchema() {
+    const requiredTables = ['users', 'parks', 'animals', 'tourists', 'tour_guides'];
+    const result = await pool.query(
+        `SELECT COUNT(*)::int AS present
+         FROM information_schema.tables
+         WHERE table_schema = 'public'
+           AND table_name = ANY($1::text[])`,
+        [requiredTables]
+    );
+    return result.rows[0]?.present === requiredTables.length;
+}
+
 // Apply a single migration
 async function applyMigration(migrationFile, migrationName) {
     const filePath = path.join(MIGRATIONS_DIR, migrationFile);
@@ -86,6 +99,23 @@ async function applyMigration(migrationFile, migrationName) {
         return true;
     } catch (error) {
         await pool.query('ROLLBACK');
+
+        // Reconcile common legacy state: schema exists but migration tracking does not.
+        if (
+            migrationName === '001_initial_schema.sql' &&
+            /already exists/i.test(error.message) &&
+            await hasLegacyBaselineSchema()
+        ) {
+            await pool.query(
+                `INSERT INTO ${MIGRATION_TABLE} (migration_name, checksum)
+                 VALUES ($1, $2)
+                 ON CONFLICT (migration_name) DO NOTHING`,
+                [migrationName, checksum]
+            );
+            log(`  ⚠ Baseline detected, marked as applied: ${migrationName}`, 'yellow');
+            return true;
+        }
+
         log(`  ✗ Failed: ${migrationName} - ${error.message}`, 'red');
         return false;
     }

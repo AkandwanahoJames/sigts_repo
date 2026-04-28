@@ -29,6 +29,7 @@ ensureSecurityConfiguration();
 
 // Import middleware
 const { authenticateJWT, authorize, ipWhitelist } = require('./middleware/auth');
+const { requireInsidePark } = require('./middleware/parkGeofence');
 const { errorHandler, notFound } = require('./middleware/errorHandler');
 
 // Import routes
@@ -44,6 +45,7 @@ const adminRoutes = require('./routes/admin');
 const analyticsRoutes = require('./routes/analytics');
 const syncRoutes = require('./routes/sync');
 const aiRoutes = require('./routes/ai');
+const intranetRoutes = require('./routes/intranet');
 
 // Initialize Express app
 const app = express();
@@ -304,14 +306,15 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', authenticateJWT, userRoutes);
 app.use('/api/animals', authenticateJWT, animalRoutes);
 app.use('/api/locations', authenticateJWT, locationRoutes);
-app.use('/api/sightings', authenticateJWT, sightingRoutes);
-app.use('/api/tours', authenticateJWT, tourRoutes);
+app.use('/api/sightings', authenticateJWT, requireInsidePark({ bypassRoles: ['it_manager'] }), sightingRoutes);
+app.use('/api/tours', authenticateJWT, requireInsidePark({ bypassRoles: ['it_manager'] }), tourRoutes);
 app.use('/api/cultural', authenticateJWT, culturalRoutes);
 app.use('/api/geofence', authenticateJWT, geofenceRoutes);
-app.use('/api/sync', authenticateJWT, syncRoutes);
+app.use('/api/sync', authenticateJWT, requireInsidePark({ bypassRoles: ['it_manager'] }), syncRoutes);
 app.use('/api/admin', authenticateJWT, adminRoutes);
 app.use('/api/analytics', authenticateJWT, analyticsRoutes);
 app.use('/api/ai', authenticateJWT, aiRoutes);
+app.use('/api/intranet', intranetRoutes);
 
 // =====================================================
 // WEBSOCKET SETUP (Optional)

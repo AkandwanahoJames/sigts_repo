@@ -1,7 +1,11 @@
 // backend/src/routes/intranet.js
 const express = require('express');
 const router = express.Router();
+const { body, validationResult } = require('express-validator');
 const { pool } = require('../config/database');
+const { authenticateJWT, authorize } = require('../middleware/auth');
+
+router.use(authenticateJWT, authorize('it_manager'));
 
 // Get current intranet status
 router.get('/status', async (req, res) => {
@@ -41,6 +45,173 @@ router.get('/peers', async (req, res) => {
         res.json({ count: peers.length, peers });
     } catch (error) {
         res.json({ count: 0, peers: [] });
+    }
+});
+
+// Announcements
+router.get('/announcements', async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT ia.announcement_id, ia.title, ia.content, ia.priority, ia.created_at,
+                    COALESCE(u.first_name || ' ' || u.last_name, u.username, 'System') AS author_name
+             FROM internal_announcements ia
+             LEFT JOIN users u ON ia.author_user_id = u.user_id
+             ORDER BY ia.created_at DESC
+             LIMIT 200`
+        );
+        return res.json({ announcements: result.rows });
+    } catch (error) {
+        return res.status(500).json({ error: 'Failed to fetch announcements' });
+    }
+});
+
+router.post('/announcements', [
+    body('title').notEmpty().trim(),
+    body('content').notEmpty().trim(),
+    body('priority').optional().isIn(['high', 'medium', 'low'])
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { title, content, priority = 'medium' } = req.body;
+    try {
+        const result = await pool.query(
+            `INSERT INTO internal_announcements (title, content, priority, author_user_id)
+             VALUES ($1, $2, $3, $4)
+             RETURNING announcement_id`,
+            [title, content, priority, req.user.user_id]
+        );
+        return res.status(201).json({ success: true, announcement_id: result.rows[0].announcement_id });
+    } catch (error) {
+        return res.status(500).json({ error: 'Failed to create announcement' });
+    }
+});
+
+router.delete('/announcements/:id', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM internal_announcements WHERE announcement_id = $1', [req.params.id]);
+        return res.json({ success: true });
+    } catch (error) {
+        return res.status(500).json({ error: 'Failed to delete announcement' });
+    }
+});
+
+// Inventory
+router.get('/inventory', async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT inventory_item_id, name, quantity, category, status, updated_at
+             FROM inventory_items
+             ORDER BY updated_at DESC, inventory_item_id DESC`
+        );
+        return res.json({ items: result.rows });
+    } catch (error) {
+        return res.status(500).json({ error: 'Failed to fetch inventory' });
+    }
+});
+
+router.post('/inventory', [
+    body('name').notEmpty().trim(),
+    body('quantity').isInt({ min: 0 }),
+    body('category').optional().trim(),
+    body('status').optional().isIn(['available', 'low_stock', 'out_of_stock', 'retired'])
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { name, quantity, category = null, status = 'available' } = req.body;
+    try {
+        const result = await pool.query(
+            `INSERT INTO inventory_items (name, quantity, category, status, updated_at)
+             VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+             RETURNING inventory_item_id`,
+            [name, quantity, category, status]
+        );
+        return res.status(201).json({ success: true, inventory_item_id: result.rows[0].inventory_item_id });
+    } catch (error) {
+        return res.status(500).json({ error: 'Failed to create inventory item' });
+    }
+});
+
+router.put('/inventory/:id', [
+    body('quantity').optional().isInt({ min: 0 }),
+    body('name').optional().trim(),
+    body('category').optional().trim(),
+    body('status').optional().isIn(['available', 'low_stock', 'out_of_stock', 'retired'])
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { quantity, name, category, status } = req.body;
+    try {
+        await pool.query(
+            `UPDATE inventory_items
+             SET quantity = COALESCE($1, quantity),
+                 name = COALESCE($2, name),
+                 category = COALESCE($3, category),
+                 status = COALESCE($4, status),
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE inventory_item_id = $5`,
+            [quantity, name, category, status, req.params.id]
+        );
+        return res.json({ success: true });
+    } catch (error) {
+        return res.status(500).json({ error: 'Failed to update inventory item' });
+    }
+});
+
+// Employees
+router.get('/employees', async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT employee_id, name, role, department, status, hire_date
+             FROM hr_employees
+             ORDER BY created_at DESC`
+        );
+        return res.json({ employees: result.rows });
+    } catch (error) {
+        return res.status(500).json({ error: 'Failed to fetch employees' });
+    }
+});
+
+router.post('/employees', [
+    body('name').notEmpty().trim(),
+    body('role').notEmpty().trim(),
+    body('department').optional().trim()
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { name, role, department = null } = req.body;
+    try {
+        const result = await pool.query(
+            `INSERT INTO hr_employees (name, role, department, status, hire_date)
+             VALUES ($1, $2, $3, 'active', CURRENT_DATE)
+             RETURNING employee_id`,
+            [name, role, department]
+        );
+        return res.status(201).json({ success: true, employee_id: result.rows[0].employee_id });
+    } catch (error) {
+        return res.status(500).json({ error: 'Failed to create employee' });
+    }
+});
+
+router.put('/employees/:id/status', [
+    body('status').isIn(['active', 'inactive'])
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    try {
+        await pool.query(
+            `UPDATE hr_employees
+             SET status = $1
+             WHERE employee_id = $2`,
+            [req.body.status, req.params.id]
+        );
+        return res.json({ success: true });
+    } catch (error) {
+        return res.status(500).json({ error: 'Failed to update employee status' });
     }
 });
 

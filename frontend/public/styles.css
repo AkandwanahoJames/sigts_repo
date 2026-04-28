@@ -392,6 +392,26 @@ body.auth-page {
     overflow: hidden;
 }
 
+.quick-photo::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: url('/images/dashboard-reference.png');
+    background-size: cover;
+    background-repeat: no-repeat;
+    opacity: 0.35;
+}
+
+.quick-photo.animals::before { background-position: 9% 18%; }
+.quick-photo.map::before { background-position: 46% 18%; }
+.quick-photo.culture::before { background-position: 68% 20%; }
+.quick-photo.info::before { background-position: 93% 22%; }
+
+.quick-photo > * {
+    position: relative;
+    z-index: 1;
+}
+
 .quick-card:hover {
     transform: translateY(-6px) scale(1.02);
     box-shadow: var(--shadow-lg);
@@ -443,6 +463,38 @@ body.auth-page {
     box-shadow: var(--shadow-sm);
     border: 1px solid rgba(212, 163, 115, 0.2);
     transition: box-shadow 0.2s;
+}
+
+.dashboard-feature-grid {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    gap: 20px;
+    margin-bottom: 24px;
+}
+
+.dashboard-feature-grid .section-card {
+    margin-bottom: 0;
+}
+
+.dashboard-quote-card {
+    min-height: 210px;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid rgba(212, 163, 115, 0.2);
+    padding: 24px;
+    display: flex;
+    align-items: flex-end;
+    color: #fff;
+    background-image: linear-gradient(160deg, rgba(15, 59, 15, 0.18), rgba(0, 0, 0, 0.56)), url('/images/dashboard-reference.png');
+    background-size: cover;
+    background-position: 60% 36%;
+}
+
+.dashboard-quote-card blockquote {
+    margin: 0;
+    font-size: 28px;
+    line-height: 1.15;
+    max-width: 280px;
 }
 
 .section-card:hover {
@@ -741,6 +793,24 @@ body.auth-page {
     padding: 16px 20px;
     border-bottom: 1px solid #E8EDDF;
     gap: 16px;
+}
+
+.rec-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
+    flex-shrink: 0;
+    background-image: url('/images/dashboard-reference.png');
+    background-size: cover;
+    background-position: 14% 28%;
+}
+
+.rec-card:nth-child(2) .rec-avatar {
+    background-position: 31% 52%;
+}
+
+.rec-card:nth-child(3) .rec-avatar {
+    background-position: 72% 28%;
 }
 
 .rec-info {
@@ -1363,7 +1433,7 @@ select {
 .auth-panel {
     width: min(100%, 640px);
     padding: 8px 0 0 8px;
-    margin: 0 auto;
+    margin: 0;
 }
 
 .auth-copy {
@@ -1585,6 +1655,28 @@ select {
     text-align: left;
 }
 
+.auth-photo-panel {
+    position: absolute;
+    right: 26px;
+    top: 26px;
+    bottom: 26px;
+    width: min(42%, 460px);
+    border-radius: 28px;
+    box-shadow: var(--shadow-lg);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    background-image: linear-gradient(160deg, rgba(255,255,255,0.1), rgba(0,0,0,0.32)), url('/images/auth-reference.png');
+    background-size: cover;
+    background-repeat: no-repeat;
+}
+
+.auth-screen-login .auth-photo-panel {
+    background-position: left center;
+}
+
+.auth-screen-register .auth-photo-panel {
+    background-position: right center;
+}
+
 @media (max-width: 960px) {
     .auth-stage {
         padding: 16px;
@@ -1594,9 +1686,14 @@ select {
     .auth-panel {
         width: 100%;
         padding: 12px 0 0;
+        margin: 0 auto;
     }
 
     .auth-figure {
+        display: none;
+    }
+
+    .auth-photo-panel {
         display: none;
     }
 
@@ -1777,6 +1874,10 @@ select {
     .quick-grid {
         grid-template-columns: repeat(2, 1fr);
         gap: 12px;
+    }
+
+    .dashboard-feature-grid {
+        grid-template-columns: 1fr;
     }
     
     .quick-card {

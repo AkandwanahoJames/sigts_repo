@@ -98,7 +98,7 @@ async function renderDashboardContent() {
     const animals = await Content.getAnimals();
     const recommendations = await AI.getRecommendations(3);
     const seasonal = await AI.getSeasonalRecommendations();
-    return `<div class="quick-grid"><div class="quick-card animals" onclick="navigateTo('animals')"><div class="quick-icon">${icon('paw', 'icon-xl')}</div><div class="quick-label">Animals</div><div class="quick-count">${animals.length} species</div></div><div class="quick-card map" onclick="navigateTo('map')"><div class="quick-icon">${icon('map', 'icon-xl')}</div><div class="quick-label">Map</div></div><div class="quick-card culture" onclick="navigateTo('culture')"><div class="quick-icon">${icon('book', 'icon-xl')}</div><div class="quick-label">Culture</div></div><div class="quick-card info" onclick="navigateTo('info')"><div class="quick-icon">${icon('info', 'icon-xl')}</div><div class="quick-label">Info</div></div></div><div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} AI Recommendations</h3></div><div id="recList">${recommendations.map(r => `<div class="rec-card"><div class="rec-info"><div class="rec-title">${r.name}</div><div class="rec-match">${Math.round(r.score * 100)}% match</div><div class="rec-reason">${r.reason}</div></div></div>`).join('')}</div></div><div class="section-card"><div class="section-header"><h3>${icon('leaf', 'icon-sm')} Seasonal: ${seasonal.season === 'dry' ? `${icon('sun', 'icon-sm')} Dry Season` : `${icon('rain', 'icon-sm')} Wet Season`}</h3></div><div class="seasonal-list">${seasonal.recommendations.map(a => `<div class="seasonal-item">• ${a}</div>`).join('')}</div></div>`;
+    return `<div class="quick-grid"><div class="quick-card quick-photo animals" onclick="navigateTo('animals')"><div class="quick-icon">${icon('paw', 'icon-xl')}</div><div class="quick-label">Animals</div><div class="quick-count">${animals.length} species</div></div><div class="quick-card quick-photo map" onclick="navigateTo('map')"><div class="quick-icon">${icon('map', 'icon-xl')}</div><div class="quick-label">Map</div></div><div class="quick-card quick-photo culture" onclick="navigateTo('culture')"><div class="quick-icon">${icon('book', 'icon-xl')}</div><div class="quick-label">Culture</div></div><div class="quick-card quick-photo info" onclick="navigateTo('info')"><div class="quick-icon">${icon('info', 'icon-xl')}</div><div class="quick-label">Info</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} AI Recommendations</h3></div><div id="recList">${recommendations.map(r => `<div class="rec-card"><div class="rec-avatar" aria-hidden="true"></div><div class="rec-info"><div class="rec-title">${r.name}</div><div class="rec-match">${Math.round(r.score * 100)}% match</div><div class="rec-reason">${r.reason}</div></div></div>`).join('')}</div></div><div class="dashboard-quote-card"><blockquote>"The best view comes after the hardest climb."</blockquote></div></div><div class="section-card"><div class="section-header"><h3>${icon('leaf', 'icon-sm')} Seasonal: ${seasonal.season === 'dry' ? `${icon('sun', 'icon-sm')} Dry Season` : `${icon('rain', 'icon-sm')} Wet Season`}</h3></div><div class="seasonal-list">${seasonal.recommendations.map(a => `<div class="seasonal-item">• ${a}</div>`).join('')}</div></div>`;
 }
 
 async function renderAnimalsContent() {
@@ -167,7 +167,8 @@ async function renderSightingsContent() {
 
 function renderProfileContent() {
     const user = Auth.getCurrentUser() || { name: 'Tourist' };
-    return `<div class="profile-header"><div class="profile-avatar">${icon('user', 'icon-xl')}</div><div class="profile-name">${escapeHtml(user.name)}</div><div class="profile-role">${user.role || 'tourist'}</div><div class="profile-dept">${user.department || ''}</div></div><div class="profile-menu"><div class="menu-item" onclick="downloadOfflineContent()"><div class="menu-icon">${icon('download', 'icon-md')}</div><div class="menu-text">Download Offline Content</div></div><div class="menu-item" onclick="Auth.logout()"><div class="menu-icon">${icon('logout', 'icon-md')}</div><div class="menu-text">Logout</div></div></div>`;
+    const isITManager = user?.role === 'it_manager' || user?.userType === 'it_manager';
+    return `<div class="profile-header"><div class="profile-avatar">${icon('user', 'icon-xl')}</div><div class="profile-name">${escapeHtml(user.name)}</div><div class="profile-role">${user.role || 'tourist'}</div><div class="profile-dept">${user.department || ''}</div></div><div class="profile-menu"><div class="menu-item" onclick="downloadOfflineContent()"><div class="menu-icon">${icon('download', 'icon-md')}</div><div class="menu-text">Download Offline Content</div></div>${isITManager ? `<div class="menu-item" onclick="handleMFASetup()"><div class="menu-icon">${icon('shield', 'icon-md')}</div><div class="menu-text">Configure MFA</div></div>` : ''}<div class="menu-item" onclick="Auth.logout()"><div class="menu-icon">${icon('logout', 'icon-md')}</div><div class="menu-text">Logout</div></div></div>`;
 }
 
 function renderInfoContent() {
@@ -202,17 +203,19 @@ async function renderITManagerDashboard() {
     const metrics = await ITAPI.getSystemMetrics();
     const users = await ITAPI.getUserList();
     const schemaStatus = await ITAPI.getSchemaStatus();
-    return `<div class="it-dashboard"><div class="welcome-card"><h2>Welcome back, ${escapeHtml(Auth.getCurrentUser()?.name)}</h2></div><div class="metrics-grid"><div class="metric-card"><div class="metric-value">${metrics.activeUsers}</div><div class="metric-label">Active Users</div></div><div class="metric-card"><div class="metric-value">${metrics.syncQueueSize}</div><div class="metric-label">Pending Sync</div></div><div class="metric-card"><div class="metric-value">${metrics.totalSightings}</div><div class="metric-label">Sightings</div></div><div class="metric-card"><div class="metric-value">${metrics.totalStaff || 0}</div><div class="metric-label">Staff Total</div></div><div class="metric-card"><div class="metric-value">${metrics.guidesOnDuty || 0}</div><div class="metric-label">Guides Active</div></div><div class="metric-card"><div class="metric-value">${metrics.inventoryItems || 0}</div><div class="metric-label">Inventory Items</div></div></div><div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Users</h3></div>${users.map(u => `<div class="user-item">${u.full_name} (${u.user_type}) - ${u.department || ''}</div>`).join('')}</div><div class="section-card"><div class="section-header"><h3>${icon('database', 'icon-sm')} Database Schema (Extended)</h3></div><div class="schema-items">${Object.entries(schemaStatus).slice(0,12).map(([name, info]) => `<div class="schema-item">${icon('chart', 'icon-sm')} ${name}: ${info.count} records</div>`).join('')}</div></div><div class="admin-actions"><button class="admin-action-btn" onclick="clearAllCache()">Clear Cache</button><button class="admin-action-btn" onclick="exportData()">Export Data</button><button class="admin-action-btn danger" onclick="resetApp()">Reset App</button></div></div>`;
+    return `<div class="it-dashboard"><div class="welcome-card"><h2>Welcome back, ${escapeHtml(Auth.getCurrentUser()?.name)}</h2></div><div class="metrics-grid"><div class="metric-card"><div class="metric-value">${metrics.activeUsers}</div><div class="metric-label">Active Users</div></div><div class="metric-card"><div class="metric-value">${metrics.syncQueueSize}</div><div class="metric-label">Pending Sync</div></div><div class="metric-card"><div class="metric-value">${metrics.totalSightings}</div><div class="metric-label">Sightings</div></div><div class="metric-card"><div class="metric-value">${metrics.totalStaff || 0}</div><div class="metric-label">Staff Total</div></div><div class="metric-card"><div class="metric-value">${metrics.guidesOnDuty || 0}</div><div class="metric-label">Guides Active</div></div><div class="metric-card"><div class="metric-value">${metrics.inventoryItems || 0}</div><div class="metric-label">Inventory Items</div></div></div><div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Users</h3></div>${users.map(u => `<div class="user-item">${u.full_name} (${u.user_type}) - ${u.department || ''}</div>`).join('')}</div><div class="section-card"><div class="section-header"><h3>${icon('database', 'icon-sm')} Database Schema (Extended)</h3></div><div class="schema-items">${Object.entries(schemaStatus).slice(0,12).map(([name, info]) => `<div class="schema-item">${icon('chart', 'icon-sm')} ${name}: ${info.count} records</div>`).join('')}</div></div><div class="admin-actions"><button class="admin-action-btn" onclick="handleMFASetup()">${icon('shield', 'icon-sm')} Configure MFA</button><button class="admin-action-btn" onclick="clearAllCache()">Clear Cache</button><button class="admin-action-btn" onclick="exportData()">Export Data</button><button class="admin-action-btn danger" onclick="resetApp()">Reset App</button></div></div>`;
 }
 
 // =====================================================
 // INTRANET DASHBOARD (HR, Announcements, Inventory)
 // =====================================================
 async function renderIntranetDashboard() {
-    const announcements = Intranet.getAnnouncements();
-    const inventory = Intranet.getInventory();
-    const employees = Intranet.getEmployees();
-    const hrStats = Intranet.getHRStats();
+    const [announcements, inventory, employees, hrStats] = await Promise.all([
+        Intranet.getAnnouncements(),
+        Intranet.getInventory(),
+        Intranet.getEmployees(),
+        Intranet.getHRStats()
+    ]);
     
     return `<div class="intranet-dashboard">
         <div class="metrics-grid">
@@ -240,54 +243,54 @@ async function renderIntranetDashboard() {
 }
 
 // Modal handlers for Intranet
-window.showAddAnnouncementModal = function() {
+window.showAddAnnouncementModal = async function() {
     const title = prompt('Announcement Title:');
     const content = prompt('Announcement Content:');
     const priority = prompt('Priority (high/medium/low):', 'medium');
     if (title && content) {
-        Intranet.addAnnouncement(title, content, priority);
+        await Intranet.addAnnouncement(title, content, priority);
         renderView('intranet');
     }
 };
 
-window.deleteAnnouncement = function(id) {
+window.deleteAnnouncement = async function(id) {
     if (confirm('Delete this announcement?')) {
-        Intranet.deleteAnnouncement(id);
+        await Intranet.deleteAnnouncement(id);
         renderView('intranet');
     }
 };
 
-window.showAddInventoryModal = function() {
+window.showAddInventoryModal = async function() {
     const name = prompt('Item Name:');
     const quantity = prompt('Quantity:');
     const category = prompt('Category (Equipment/Medical/Communication):');
     if (name && quantity) {
-        Intranet.addInventoryItem(name, parseInt(quantity), category);
+        await Intranet.addInventoryItem(name, parseInt(quantity), category);
         renderView('intranet');
     }
 };
 
-window.updateInventoryQuantity = function(id) {
+window.updateInventoryQuantity = async function(id) {
     const newQty = prompt('Enter new quantity:');
     if (newQty !== null) {
-        Intranet.updateInventoryItem(id, { quantity: parseInt(newQty) });
+        await Intranet.updateInventoryItem(id, { quantity: parseInt(newQty) });
         renderView('intranet');
     }
 };
 
-window.showAddEmployeeModal = function() {
+window.showAddEmployeeModal = async function() {
     const name = prompt('Employee Name:');
     const role = prompt('Role (e.g., Senior Guide, Ranger):');
     const department = prompt('Department:');
     if (name && role) {
-        Intranet.addEmployee({ name, role, department });
+        await Intranet.addEmployee({ name, role, department });
         renderView('intranet');
     }
 };
 
-window.toggleEmployeeStatus = function(id, currentStatus) {
+window.toggleEmployeeStatus = async function(id, currentStatus) {
     const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
-    Intranet.updateEmployeeStatus(id, newStatus);
+    await Intranet.updateEmployeeStatus(id, newStatus);
     renderView('intranet');
 };
 
@@ -347,6 +350,41 @@ async function handleLogin() {
     );
     if (result.success) renderView('dashboard');
     else alert('Login failed: ' + result.error);
+}
+
+async function handleForgotPassword() {
+    const email = prompt('Enter your account email to receive a password reset link');
+    if (!email) return;
+
+    const result = await Auth.requestPasswordReset(email);
+    if (result.success) {
+        alert(result.message || 'If the email exists, a reset link has been sent.');
+        return;
+    }
+
+    alert('Password reset request failed: ' + (result.error || 'Unknown error'));
+}
+
+async function handleMFASetup() {
+    const setup = await Auth.initializeMFA();
+    if (!setup.success) {
+        alert('MFA setup failed: ' + (setup.error || 'Unknown error'));
+        return;
+    }
+
+    const preview = setup.secret ? `Secret: ${setup.secret}` : 'Secret generated';
+    alert(`MFA setup initialized.\nAdd this to your authenticator app.\n\n${preview}`);
+
+    const code = prompt('Enter the 6-digit code from your authenticator app to enable MFA');
+    if (!code) return;
+
+    const verify = await Auth.verifyMFASetup(code.trim());
+    if (!verify.success) {
+        alert('MFA verification failed: ' + (verify.error || 'Invalid code'));
+        return;
+    }
+
+    alert(verify.message || 'MFA enabled successfully.');
 }
 
 async function downloadOfflineContent() {
@@ -434,10 +472,12 @@ function renderLoginScreen() {
                     </label>
                     <div class="auth-actions">
                         <button onclick="handleLogin()" class="auth-primary-btn">Login</button>
+                        <button onclick="handleForgotPassword()" class="auth-secondary-btn">Forgot Password</button>
                         <button onclick="renderView('register')" class="auth-secondary-btn">Create Account</button>
                     </div>
                 </div>
             </div>
+            <div class="auth-photo-panel" aria-hidden="true"></div>
         </div>
     </div>`;
 }
@@ -498,6 +538,7 @@ function renderRegisterScreen() {
                     </div>
                 </div>
             </div>
+            <div class="auth-photo-panel" aria-hidden="true"></div>
         </div>
     </div>`;
 }

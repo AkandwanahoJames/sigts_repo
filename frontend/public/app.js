@@ -10,6 +10,8 @@ var Intranet = new IntranetManager();
 
 window.renderView = renderView;
 window.handleLogin = handleLogin;
+window.handleForgotPassword = handleForgotPassword;
+window.handleMFASetup = handleMFASetup;
 window.handleRegistration = handleRegistration;
 window.downloadOfflineContent = downloadOfflineContent;
 window.toggleSidebar = toggleSidebar;

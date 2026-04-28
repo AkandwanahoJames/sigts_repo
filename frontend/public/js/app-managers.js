@@ -84,13 +84,47 @@ class AuthManager {
             return { success: false, error: 'Too many failed attempts. Account temporarily locked.' };
         }
 
+        let geo = null;
+        if (navigator.geolocation) {
+            try {
+                geo = await new Promise((resolve) => {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => resolve({
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        }),
+                        () => resolve(null),
+                        { enableHighAccuracy: true, timeout: 6000, maximumAge: 120000 }
+                    );
+                });
+            } catch (_) {}
+        }
+
         const result = await API.request('/auth/login', {
             method: 'POST',
             body: JSON.stringify({
                 username: username?.trim(),
-                password
+                password,
+                lat: geo?.lat,
+                lng: geo?.lng
             })
         });
+
+        if (result?.success && result.mfaRequired && result.mfaToken) {
+            const code = prompt('Enter your 6-digit authenticator code');
+            if (!code) return { success: false, error: 'MFA code required' };
+            const mfaResult = await API.request('/auth/mfa/complete', {
+                method: 'POST',
+                body: JSON.stringify({
+                    mfaToken: result.mfaToken,
+                    code: code.trim()
+                })
+            });
+            if (mfaResult?.success && mfaResult.token && mfaResult.user) {
+                return this.completeLogin(mfaResult.user, mfaResult.token, rememberMe);
+            }
+            return { success: false, error: mfaResult?.error || 'MFA verification failed' };
+        }
 
         if (result?.success && result.token && result.user) {
             return this.completeLogin(result.user, result.token, rememberMe);
@@ -179,13 +213,87 @@ class AuthManager {
     hasRole(role) { return this.user?.role === role || this.user?.userType === role; }
     
     sendVerificationEmail(email) { return email; }
+
+    async requestPasswordReset(email) {
+        const value = (email || '').trim();
+        if (!value) return { success: false, error: 'Email is required' };
+        const result = await API.request('/auth/forgot-password', {
+            method: 'POST',
+            body: JSON.stringify({ email: value })
+        });
+        if (result?.success) return result;
+        return { success: false, error: result?.error || 'Failed to request password reset' };
+    }
+
+    async resetPassword(token, newPassword) {
+        const result = await API.request('/auth/reset-password', {
+            method: 'POST',
+            body: JSON.stringify({
+                token: (token || '').trim(),
+                password: newPassword
+            })
+        });
+        if (result?.success) return result;
+        return { success: false, error: result?.error || 'Failed to reset password' };
+    }
+
+    async initializeMFA() {
+        const result = await API.request('/auth/mfa/setup', {
+            method: 'POST',
+            body: JSON.stringify({})
+        });
+        if (result?.success) return result;
+        return { success: false, error: result?.error || 'Failed to initialize MFA setup' };
+    }
+
+    async verifyMFASetup(code) {
+        const result = await API.request('/auth/mfa/verify-setup', {
+            method: 'POST',
+            body: JSON.stringify({ code: String(code || '').trim() })
+        });
+        if (result?.success) return result;
+        return { success: false, error: result?.error || 'Failed to verify MFA code' };
+    }
     
     async guestAccess() {
-        this.user = { name: 'Guest User', role: 'tourist', userType: 'tourist', isGuest: true, department: 'Visitor' };
-        this.token = 'guest-token-' + Date.now();
-        sessionStorage.setItem('token', this.token);
-        sessionStorage.setItem('user', JSON.stringify(this.user));
-        return { success: true, user: this.user };
+        let geo = null;
+        if (navigator.geolocation) {
+            try {
+                geo = await new Promise((resolve) => {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => resolve({
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        }),
+                        () => resolve(null),
+                        { enableHighAccuracy: true, timeout: 6000, maximumAge: 120000 }
+                    );
+                });
+            } catch (_) {}
+        }
+
+        const result = await API.request('/auth/guest', {
+            method: 'POST',
+            body: JSON.stringify({
+                lat: geo?.lat,
+                lng: geo?.lng
+            })
+        });
+
+        if (result?.success && result.token && result.user) {
+            const loggedIn = this.completeLogin(
+                { ...result.user, user_type: result.user.role || result.user.user_type, isGuest: true },
+                result.token,
+                false
+            );
+            if (loggedIn.success) {
+                loggedIn.user.isGuest = true;
+                sessionStorage.setItem('user', JSON.stringify(loggedIn.user));
+            }
+            return loggedIn;
+        }
+
+        return { success: false, error: result?.error || 'Guest access unavailable' };
     }
 }
 
@@ -245,6 +353,17 @@ class GeofenceManager {
             this.onBoundaryCross(isInside);
         }
         this.storeLocationOffline(newLocation);
+        if (Auth?.isAuthenticated?.()) {
+            API.request('/geofence/location-update', {
+                method: 'POST',
+                body: JSON.stringify({
+                    lat: latitude,
+                    lng: longitude,
+                    accuracy,
+                    timestamp: new Date(timestamp || Date.now()).toISOString()
+                })
+            });
+        }
         this.checkProximityAlerts(latitude, longitude);
         AppState.currentLocation = newLocation;
     }
@@ -689,79 +808,111 @@ class IntranetManager {
         }
     }
 
-    getAnnouncements() {
+    async getAnnouncements() {
+        const result = await API.request('/intranet/announcements');
+        if (result?.announcements) {
+            const normalized = result.announcements.map(a => ({
+                id: a.announcement_id,
+                title: a.title,
+                content: a.content,
+                date: a.created_at,
+                priority: a.priority,
+                author: a.author_name || 'System'
+            }));
+            localStorage.setItem('internal_announcements', JSON.stringify(normalized));
+            return normalized;
+        }
         return JSON.parse(localStorage.getItem('internal_announcements') || '[]');
     }
 
-    addAnnouncement(title, content, priority) {
-        const announcements = this.getAnnouncements();
-        const newAnnouncement = {
-            id: Date.now(),
-            title,
-            content,
-            date: new Date().toISOString(),
-            priority: priority || 'medium',
-            author: Auth.getCurrentUser()?.name || 'System'
-        };
-        announcements.unshift(newAnnouncement);
-        localStorage.setItem('internal_announcements', JSON.stringify(announcements));
-        return newAnnouncement;
+    async addAnnouncement(title, content, priority) {
+        const result = await API.request('/intranet/announcements', {
+            method: 'POST',
+            body: JSON.stringify({ title, content, priority: priority || 'medium' })
+        });
+        if (result?.success) return result;
+        return { success: false, error: result?.error || 'Failed to add announcement' };
     }
 
-    deleteAnnouncement(id) {
-        let announcements = this.getAnnouncements();
-        announcements = announcements.filter(a => a.id != id);
-        localStorage.setItem('internal_announcements', JSON.stringify(announcements));
+    async deleteAnnouncement(id) {
+        const result = await API.request(`/intranet/announcements/${id}`, {
+            method: 'DELETE'
+        });
+        if (result?.success) return result;
+        return { success: false, error: result?.error || 'Failed to delete announcement' };
     }
 
-    getInventory() {
+    async getInventory() {
+        const result = await API.request('/intranet/inventory');
+        if (result?.items) {
+            const normalized = result.items.map(item => ({
+                id: item.inventory_item_id,
+                name: item.name,
+                quantity: item.quantity,
+                category: item.category,
+                status: item.status
+            }));
+            localStorage.setItem('inventory_items', JSON.stringify(normalized));
+            return normalized;
+        }
         return JSON.parse(localStorage.getItem('inventory_items') || '[]');
     }
 
-    updateInventoryItem(id, updates) {
-        const items = this.getInventory();
-        const index = items.findIndex(i => i.id == id);
-        if (index !== -1) {
-            items[index] = { ...items[index], ...updates };
-            localStorage.setItem('inventory_items', JSON.stringify(items));
-            return items[index];
+    async updateInventoryItem(id, updates) {
+        const result = await API.request(`/intranet/inventory/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(updates)
+        });
+        if (result?.success) return result;
+        return { success: false, error: result?.error || 'Failed to update inventory item' };
+    }
+
+    async addInventoryItem(name, quantity, category) {
+        const result = await API.request('/intranet/inventory', {
+            method: 'POST',
+            body: JSON.stringify({ name, quantity: parseInt(quantity, 10), category, status: 'available' })
+        });
+        if (result?.success) return result;
+        return { success: false, error: result?.error || 'Failed to add inventory item' };
+    }
+
+    async getEmployees() {
+        const result = await API.request('/intranet/employees');
+        if (result?.employees) {
+            const normalized = result.employees.map(e => ({
+                id: e.employee_id,
+                name: e.name,
+                role: e.role,
+                department: e.department,
+                status: e.status,
+                hireDate: e.hire_date
+            }));
+            localStorage.setItem('hr_employees', JSON.stringify(normalized));
+            return normalized;
         }
-        return null;
-    }
-
-    addInventoryItem(name, quantity, category) {
-        const items = this.getInventory();
-        const newItem = { id: Date.now(), name, quantity: parseInt(quantity), category, status: 'available' };
-        items.push(newItem);
-        localStorage.setItem('inventory_items', JSON.stringify(items));
-        return newItem;
-    }
-
-    getEmployees() {
         return JSON.parse(localStorage.getItem('hr_employees') || '[]');
     }
 
-    addEmployee(employeeData) {
-        const employees = this.getEmployees();
-        const newEmployee = { id: Date.now(), ...employeeData, status: 'active', hireDate: new Date().toISOString().split('T')[0] };
-        employees.push(newEmployee);
-        localStorage.setItem('hr_employees', JSON.stringify(employees));
-        return newEmployee;
+    async addEmployee(employeeData) {
+        const result = await API.request('/intranet/employees', {
+            method: 'POST',
+            body: JSON.stringify(employeeData)
+        });
+        if (result?.success) return result;
+        return { success: false, error: result?.error || 'Failed to add employee' };
     }
 
-    updateEmployeeStatus(id, status) {
-        const employees = this.getEmployees();
-        const index = employees.findIndex(e => e.id == id);
-        if (index !== -1) {
-            employees[index].status = status;
-            localStorage.setItem('hr_employees', JSON.stringify(employees));
-            return employees[index];
-        }
-        return null;
+    async updateEmployeeStatus(id, status) {
+        const result = await API.request(`/intranet/employees/${id}/status`, {
+            method: 'PUT',
+            body: JSON.stringify({ status })
+        });
+        if (result?.success) return result;
+        return { success: false, error: result?.error || 'Failed to update employee status' };
     }
 
-    getHRStats() {
-        const employees = this.getEmployees();
+    async getHRStats() {
+        const employees = await this.getEmployees();
         const totalStaff = employees.length;
         const guidesOnDuty = employees.filter(e => e.role.includes('Guide') && e.status === 'active').length;
         const itStaff = employees.filter(e => e.department === 'IT' && e.status === 'active').length;
@@ -775,7 +926,7 @@ class IntranetManager {
 class ITManagerAPI {
     async getSystemMetrics() {
         const result = await API.request('/admin/stats');
-        const hrStats = Intranet.getHRStats();
+        const hrStats = await Intranet.getHRStats();
         if (result) {
             return {
                 activeUsers: result.totalUsers || 0,
@@ -785,7 +936,7 @@ class ITManagerAPI {
                 averageRating: result.avgRating || 0,
                 totalStaff: hrStats.totalStaff,
                 guidesOnDuty: hrStats.guidesOnDuty,
-                inventoryItems: Intranet.getInventory().length,
+                inventoryItems: (await Intranet.getInventory()).length,
                 activeTours: result.activeTours || 0
             };
         }
@@ -800,7 +951,7 @@ class ITManagerAPI {
             averageRating: 4.5,
             totalStaff: hrStats.totalStaff,
             guidesOnDuty: hrStats.guidesOnDuty,
-            inventoryItems: Intranet.getInventory().length
+            inventoryItems: (await Intranet.getInventory()).length
         };
     }
     
