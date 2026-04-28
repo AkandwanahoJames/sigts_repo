@@ -477,6 +477,3 @@ async function renderView(view) {
     }
     app.innerHTML = renderMainLayout(content);
 }
-
-// Global functions for UI actions
-

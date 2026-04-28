@@ -78,7 +78,7 @@ async function createDatabase() {
         
         await client.end();
         
-        // Enable PostGIS extension
+        // Enable PostGIS extension with error handling
         log('\n🔧 Enabling PostGIS extension...', 'blue');
         const pgClient = new Client({
             host: DB_HOST,
@@ -87,9 +87,24 @@ async function createDatabase() {
             database: DB_NAME,
         });
         await pgClient.connect();
-        await pgClient.query('CREATE EXTENSION IF NOT EXISTS postgis');
-        await pgClient.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"');
-        log('✓ PostGIS and UUID extensions enabled', 'green');
+        
+        try {
+            await pgClient.query('CREATE EXTENSION IF NOT EXISTS postgis');
+            log('✓ PostGIS extension enabled', 'green');
+        } catch (postgisError) {
+            log('⚠️  PostGIS extension not available - some geographic features may not work', 'yellow');
+            log(`   Install PostGIS package on your PostgreSQL server and try again.`, 'yellow');
+            log(`   Error: ${postgisError.message}`, 'yellow');
+        }
+        
+        try {
+            await pgClient.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"');
+            log('✓ UUID extension enabled', 'green');
+        } catch (uuidError) {
+            log('⚠️  UUID extension not available', 'yellow');
+            log(`   Error: ${uuidError.message}`, 'yellow');
+        }
+        
         await pgClient.end();
         
         return true;

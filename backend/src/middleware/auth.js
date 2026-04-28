@@ -4,7 +4,22 @@ const { pool } = require('../config/database');
 const { logger } = require('../utils/logger');
 const { REQUIREMENTS } = require('../config/requirements');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'bwindi-secret-key-change-in-production';
+// Get JWT secret with production enforcement
+function getJwtSecret() {
+    const secret = process.env.JWT_SECRET;
+    const isProd = process.env.NODE_ENV === 'production';
+    
+    if (!secret || secret.includes('bwindi') || secret.includes('secret')) {
+        if (isProd) {
+            throw new Error('CRITICAL: JWT_SECRET must be set to a strong, unique value in production');
+        }
+        logger.warn('⚠️ WARNING: Using weak JWT_SECRET. Set JWT_SECRET environment variable in production.');
+    }
+    
+    return secret || 'bwindi-dev-key-change-in-production';
+}
+
+const JWT_SECRET = getJwtSecret();
 
 /**
  * Generate JWT token for authenticated user

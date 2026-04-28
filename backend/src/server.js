@@ -300,26 +300,18 @@ app.post('/api/auth/create-test-user', async (req, res) => {
 // Public routes
 app.use('/api/auth', authRoutes);
 
-// Protected routes (with error handling)
-const protectRoute = (route, handler) => {
-    try {
-        app.use(route, authenticateJWT, handler);
-    } catch (e) {
-        logger.warn(`Route ${route} not loaded:`, e.message);
-    }
-};
-
-protectRoute('/api/users', userRoutes);
-protectRoute('/api/animals', animalRoutes);
-protectRoute('/api/locations', locationRoutes);
-protectRoute('/api/sightings', sightingRoutes);
-protectRoute('/api/tours', tourRoutes);
-protectRoute('/api/cultural', culturalRoutes);
-protectRoute('/api/geofence', geofenceRoutes);
-protectRoute('/api/sync', syncRoutes);
-protectRoute('/api/admin', adminRoutes);
-protectRoute('/api/analytics', analyticsRoutes);
-protectRoute('/api/ai', aiRoutes);
+// Protected routes - CRITICAL: Don't silently fail
+app.use('/api/users', authenticateJWT, userRoutes);
+app.use('/api/animals', authenticateJWT, animalRoutes);
+app.use('/api/locations', authenticateJWT, locationRoutes);
+app.use('/api/sightings', authenticateJWT, sightingRoutes);
+app.use('/api/tours', authenticateJWT, tourRoutes);
+app.use('/api/cultural', authenticateJWT, culturalRoutes);
+app.use('/api/geofence', authenticateJWT, geofenceRoutes);
+app.use('/api/sync', authenticateJWT, syncRoutes);
+app.use('/api/admin', authenticateJWT, adminRoutes);
+app.use('/api/analytics', authenticateJWT, analyticsRoutes);
+app.use('/api/ai', authenticateJWT, aiRoutes);
 
 // =====================================================
 // WEBSOCKET SETUP (Optional)
@@ -344,7 +336,9 @@ try {
 
         try {
             const jwt = require('jsonwebtoken');
-            const decoded = jwt.verify(token, process.env.JWT_SECRET || 'bwindi-super-secret-key');
+            // Use same JWT_SECRET as main app for consistency
+            const jwtSecret = process.env.JWT_SECRET || 'bwindi-dev-key-change-in-production';
+            const decoded = jwt.verify(token, jwtSecret);
             const result = await pool.query(
                 'SELECT user_id, username, user_type FROM users WHERE user_id = $1 AND is_active = true',
                 [decoded.userId]

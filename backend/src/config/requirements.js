@@ -21,10 +21,20 @@ const REQUIREMENTS = {
 
 function ensureSecurityConfiguration() {
     const isProd = process.env.NODE_ENV === 'production';
-    const weakOrMissingSecret = !process.env.JWT_SECRET || process.env.JWT_SECRET.includes('bwindi-super-secret-key');
+    const secret = process.env.JWT_SECRET || '';
+    const isWeakSecret = 
+        !secret || 
+        secret.includes('bwindi') || 
+        secret.includes('secret') || 
+        secret.includes('change-in-production') ||
+        secret.length < 32;
 
-    if (isProd && REQUIREMENTS.security.enforceJwtSecretInProduction && weakOrMissingSecret) {
-        throw new Error('JWT_SECRET must be explicitly set to a strong value in production.');
+    if (isProd && REQUIREMENTS.security.enforceJwtSecretInProduction && isWeakSecret) {
+        throw new Error(
+            'CRITICAL SECURITY ERROR: JWT_SECRET must be explicitly set to a strong, unique value (32+ chars) in production.\n' +
+            'Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"\n' +
+            'Set in environment: export JWT_SECRET="<generated-secret>"'
+        );
     }
 }
 

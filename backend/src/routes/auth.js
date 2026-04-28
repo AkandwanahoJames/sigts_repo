@@ -6,9 +6,24 @@ const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const { pool } = require('../config/database');
 const { REQUIREMENTS } = require('../config/requirements');
+const { logger } = require('../utils/logger');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'bwindi-super-secret-key';
-const BCRYPT_ROUNDS = 12;
+// Get JWT secret with production enforcement
+function getJwtSecret() {
+    const secret = process.env.JWT_SECRET;
+    const isProd = process.env.NODE_ENV === 'production';
+    
+    if (!secret || secret.includes('bwindi') || secret.includes('secret')) {
+        if (isProd) {
+            throw new Error('CRITICAL: JWT_SECRET must be set to a strong, unique value in production');
+        }
+    }
+    
+    return secret || 'bwindi-dev-key-change-in-production';
+}
+
+const JWT_SECRET = getJwtSecret();
+const BCRYPT_ROUNDS = REQUIREMENTS.security.bcryptRounds || 12;
 
 // =====================================================
 // POST /api/auth/register
