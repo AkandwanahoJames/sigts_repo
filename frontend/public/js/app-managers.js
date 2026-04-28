@@ -15,8 +15,18 @@ class AuthManager {
         
         if (this.token) {
             try {
+                if ((this.token.match(/\./g) || []).length !== 2) {
+                    throw new Error('Legacy demo token');
+                }
                 this.user = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || 'null');
-            } catch(e) { this.user = null; }
+            } catch(e) {
+                this.token = null;
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                sessionStorage.removeItem('token');
+                sessionStorage.removeItem('user');
+                this.user = null;
+            }
         }
     }
 
@@ -34,28 +44,39 @@ class AuthManager {
         if (!password || password.length < 4) return { success: false, error: 'Password must be at least 4 characters' };
         if (password !== confirmPassword) return { success: false, error: 'Passwords do not match' };
         
-        const users = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
-        if (users.find(u => u.username === username)) {
-            return { success: false, error: 'Username already exists' };
+        const nameParts = fullName.split(/\s+/).filter(Boolean);
+        const firstName = nameParts.shift() || '';
+        const lastName = nameParts.join(' ');
+
+        const result = await API.request('/auth/register', {
+            method: 'POST',
+            body: JSON.stringify({
+                username,
+                email,
+                password,
+                firstName,
+                lastName,
+                userType
+            })
+        });
+
+        if (!result) {
+            return { success: false, error: 'Registration service unavailable' };
         }
-        
-        const newUser = {
-            id: crypto.randomUUID ? crypto.randomUUID() : 'user_' + Date.now(),
-            name: fullName,
-            email,
-            username,
-            role: userType,
-            userType: userType,
-            createdAt: new Date().toISOString(),
-            is_active: true,
-            twoFactorEnabled: userType === 'it_manager',
-            department: userType === 'it_manager' ? 'IT' : (userType === 'guide' ? 'Tour Operations' : 'Visitor')
+
+        if (result.error) {
+            return { success: false, error: result.error };
+        }
+
+        if (result.errors?.length) {
+            return { success: false, error: result.errors[0].msg || 'Registration failed' };
+        }
+
+        return {
+            success: true,
+            message: result.message || 'Registration successful',
+            user: result.user || null
         };
-        users.push(newUser);
-        localStorage.setItem('registeredUsers', JSON.stringify(users));
-        
-        this.sendVerificationEmail(email);
-        return { success: true, message: 'Registration successful! Please verify your email.', user: newUser };
     }
 
     async login(username, password, rememberMe = false) {
@@ -63,21 +84,23 @@ class AuthManager {
             return { success: false, error: 'Too many failed attempts. Account temporarily locked.' };
         }
 
-        const users = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
-        const foundUser = users.find(u => u.username === username?.trim());
-        
-        if (foundUser && password === 'password' && foundUser.is_active !== false) {
-            if (foundUser.twoFactorEnabled) {
-                this.twoFactorPending = true;
-                this.pending2FACode = Math.floor(100000 + Math.random() * 900000).toString();
-                this.send2FACode(foundUser.email, this.pending2FACode);
-                return { success: true, requires2FA: true, userId: foundUser.id, message: '2FA code sent' };
-            }
-            return this.completeLogin(foundUser, rememberMe);
+        const result = await API.request('/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({
+                username: username?.trim(),
+                password
+            })
+        });
+
+        if (result?.success && result.token && result.user) {
+            return this.completeLogin(result.user, result.token, rememberMe);
         }
-        
+
         this.failedAttempts++;
-        return { success: false, error: 'Invalid credentials. Use "admin" or "tourist" with password "password"' };
+        return {
+            success: false,
+            error: result?.error || result?.message || 'Invalid credentials'
+        };
     }
 
     async verify2FACode(userId, code) {
@@ -92,17 +115,17 @@ class AuthManager {
         return this.completeLogin(user, false);
     }
 
-    completeLogin(user, rememberMe) {
+    completeLogin(user, token, rememberMe) {
         this.user = {
-            user_id: user.id,
-            name: user.name,
+            user_id: user.id || user.user_id,
+            name: user.name || user.username || 'User',
             email: user.email,
             username: user.username,
-            role: user.role,
-            userType: user.userType,
-            department: user.department
+            role: user.role || user.user_type,
+            userType: user.userType || user.role || user.user_type,
+            department: user.department || ''
         };
-        this.token = 'jwt_' + btoa(JSON.stringify({ userId: user.id, exp: Date.now() + this.sessionTimeout }));
+        this.token = token;
         
         if (rememberMe) {
             localStorage.setItem('token', this.token);
@@ -111,6 +134,7 @@ class AuthManager {
             sessionStorage.setItem('token', this.token);
             sessionStorage.setItem('user', JSON.stringify(this.user));
         }
+        API.setToken(this.token);
         
         this.startSessionTimer();
         AppState.currentUser = this.user;
@@ -135,6 +159,7 @@ class AuthManager {
     async logout() {
         this.token = null;
         this.user = null;
+        API.setToken(null);
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         sessionStorage.removeItem('token');
@@ -150,10 +175,10 @@ class AuthManager {
         return this.user;
     }
 
-    isAuthenticated() { return !!this.token; }
+    isAuthenticated() { return !!this.token && (this.token.match(/\./g) || []).length === 2; }
     hasRole(role) { return this.user?.role === role || this.user?.userType === role; }
     
-    sendVerificationEmail(email) { alert(`Demo: Verification email sent to ${email}`); }
+    sendVerificationEmail(email) { return email; }
     
     async guestAccess() {
         this.user = { name: 'Guest User', role: 'tourist', userType: 'tourist', isGuest: true, department: 'Visitor' };
@@ -185,8 +210,12 @@ class GeofenceManager {
 
     async loadParkBoundary() {
         try {
-            const response = await fetch(`${API_URL}/parks/boundary`);
-            this.parkBoundary = await response.json();
+            const response = await fetch(`${API_URL}/geofence/boundary`, {
+                headers: Auth.token ? { Authorization: `Bearer ${Auth.token}` } : {}
+            });
+            if (response.ok) {
+                this.parkBoundary = await response.json();
+            }
         } catch (error) {}
     }
 
@@ -221,8 +250,25 @@ class GeofenceManager {
     }
 
     isInsidePark(lat, lng) {
+        if (this.parkBoundary?.type === 'Polygon' && Array.isArray(this.parkBoundary.coordinates)) {
+            return this.isPointInPolygon(lat, lng, this.parkBoundary.coordinates[0] || []);
+        }
         return lat >= this.parkBoundary.minLat && lat <= this.parkBoundary.maxLat &&
                lng >= this.parkBoundary.minLng && lng <= this.parkBoundary.maxLng;
+    }
+
+    isPointInPolygon(lat, lng, polygon) {
+        let inside = false;
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+            const xi = polygon[i][0];
+            const yi = polygon[i][1];
+            const xj = polygon[j][0];
+            const yj = polygon[j][1];
+            const intersects = ((yi > lat) !== (yj > lat)) &&
+                (lng < ((xj - xi) * (lat - yi)) / ((yj - yi) || Number.EPSILON) + xi);
+            if (intersects) inside = !inside;
+        }
+        return inside;
     }
 
     onBoundaryCross(isInside) {
@@ -371,9 +417,8 @@ class TourGuideManager {
     }
 
     async getGuideDashboard() {
-        const guideId = Auth.getCurrentUser()?.user_id;
-        const tours = JSON.parse(localStorage.getItem('tour_sessions') || '[]');
-        const myTours = tours.filter(t => t.guide_id === guideId);
+        const tours = await API.getToursForGuide();
+        const myTours = Array.isArray(tours) ? tours : [];
         const todayStr = new Date().toISOString().split('T')[0];
         
         const upcoming = myTours.filter(t => t.scheduled_start?.split('T')[0] > todayStr);
@@ -399,9 +444,9 @@ class TourGuideManager {
     }
 
     async startTour(tourId) {
-        const tours = JSON.parse(localStorage.getItem('tour_sessions') || '[]');
-        const tour = tours.find(t => t.tour_session_id === tourId);
-        if (!tour) return { success: false, error: 'Tour not found' };
+        const result = await API.startTour(tourId, AppState.currentLocation);
+        if (!result?.success) return { success: false, error: result?.error || 'Tour not found' };
+        const tour = { tour_session_id: tourId };
         
         this.activeTour = tour;
         this.elapsedSeconds = 0;
@@ -410,10 +455,6 @@ class TourGuideManager {
             this.elapsedSeconds++;
             this.updateTimerDisplay();
         }, 1000);
-        
-        tour.status = 'ongoing';
-        tour.actual_start = new Date().toISOString();
-        localStorage.setItem('tour_sessions', JSON.stringify(tours));
         
         return { success: true, tour: this.activeTour };
     }
@@ -430,15 +471,12 @@ class TourGuideManager {
 
     async endTour(tourId) {
         if (this.tourTimer) clearInterval(this.tourTimer);
-        const tours = JSON.parse(localStorage.getItem('tour_sessions') || '[]');
-        const tour = tours.find(t => t.tour_session_id === tourId);
-        if (tour) {
-            tour.status = 'completed';
-            tour.actual_end = new Date().toISOString();
-            localStorage.setItem('tour_sessions', JSON.stringify(tours));
-        }
+        const result = await API.endTour(tourId, AppState.currentLocation);
         this.activeTour = null;
-        return { success: true, report: await this.generateTourReport(tourId) };
+        if (!result?.success) {
+            return { success: false, error: result?.error || 'Failed to end tour' };
+        }
+        return { success: true, report: result.summary || await this.generateTourReport(tourId) };
     }
 
     async generateTourReport(tourId) {
@@ -736,9 +774,24 @@ class IntranetManager {
 // =====================================================
 class ITManagerAPI {
     async getSystemMetrics() {
+        const result = await API.request('/admin/stats');
+        const hrStats = Intranet.getHRStats();
+        if (result) {
+            return {
+                activeUsers: result.totalUsers || 0,
+                syncQueueSize: OfflineSync.getPendingCount(),
+                storageUsed: Content.getOfflineStorageSize(),
+                totalSightings: result.pendingApprovals || 0,
+                averageRating: result.avgRating || 0,
+                totalStaff: hrStats.totalStaff,
+                guidesOnDuty: hrStats.guidesOnDuty,
+                inventoryItems: Intranet.getInventory().length,
+                activeTours: result.activeTours || 0
+            };
+        }
+
         const users = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
         const sightings = JSON.parse(localStorage.getItem('sightings') || '[]');
-        const hrStats = Intranet.getHRStats();
         return {
             activeUsers: users.length + 1,
             syncQueueSize: OfflineSync.getPendingCount(),
@@ -752,6 +805,18 @@ class ITManagerAPI {
     }
     
     async getUserList() {
+        const result = await API.request('/admin/users');
+        if (result?.users) {
+            return result.users.map(u => ({
+                user_id: u.user_id,
+                username: u.username,
+                email: u.email,
+                full_name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username,
+                user_type: u.user_type,
+                department: u.department || ''
+            }));
+        }
+
         return JSON.parse(localStorage.getItem('registeredUsers') || '[]').map(u => ({
             user_id: u.id, username: u.username, email: u.email, full_name: u.name, user_type: u.role, department: u.department
         }));

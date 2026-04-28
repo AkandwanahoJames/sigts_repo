@@ -119,9 +119,31 @@ router.post('/users', [
             [username, hashedPassword, email, first_name, last_name, phone, user_type]
         );
 
+        const newUser = result.rows[0];
+
+        if (newUser.user_type === 'tourist') {
+            await pool.query(
+                `INSERT INTO tourists (user_id, interests)
+                 VALUES ($1, $2)`,
+                [newUser.user_id, '[]']
+            );
+        } else if (newUser.user_type === 'guide') {
+            await pool.query(
+                `INSERT INTO tour_guides (user_id, license_number, specialization, languages)
+                 VALUES ($1, $2, $3, $4)`,
+                [newUser.user_id, `GUIDE-${Date.now()}`, '[]', '[]']
+            );
+        } else if (newUser.user_type === 'it_manager') {
+            await pool.query(
+                `INSERT INTO it_managers (user_id, employee_id, access_level)
+                 VALUES ($1, $2, $3)`,
+                [newUser.user_id, `ITM-${Date.now()}`, 'admin']
+            );
+        }
+
         res.status(201).json({
             success: true,
-            user: result.rows[0],
+            user: newUser,
             message: 'User created successfully'
         });
 

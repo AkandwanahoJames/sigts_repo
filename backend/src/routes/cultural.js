@@ -154,7 +154,7 @@ router.post('/', authenticateJWT, authorize('it_manager'), [
                 narrative_id, title_en, title_local, narrative_en, narrative_local,
                 storyteller_name, storyteller_photo_url, community, story_type,
                 audio_url, video_url, image_urls, cultural_significance, taboos,
-                curated_by, created_at
+                user_id, created_at
              ) VALUES (
                 gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP
              ) RETURNING narrative_id`,

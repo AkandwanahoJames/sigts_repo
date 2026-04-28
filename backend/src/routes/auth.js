@@ -31,7 +31,8 @@ const BCRYPT_ROUNDS = REQUIREMENTS.security.bcryptRounds || 12;
 router.post('/register', [
     body('username').isLength({ min: 3 }).trim(),
     body('email').isEmail().normalizeEmail(),
-    body('password').isLength({ min: 4 })
+    body('password').isLength({ min: 4 }),
+    body('userType').optional().isIn(['tourist', 'guide', 'it_manager'])
 ], async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -64,12 +65,23 @@ router.post('/register', [
 
         const user = result.rows[0];
 
-        // Create tourist profile
         if (user.user_type === 'tourist') {
             await pool.query(
                 `INSERT INTO tourists (user_id, interests)
                  VALUES ($1, $2)`,
                 [user.user_id, '[]']
+            );
+        } else if (user.user_type === 'guide') {
+            await pool.query(
+                `INSERT INTO tour_guides (user_id, license_number, specialization, languages)
+                 VALUES ($1, $2, $3, $4)`,
+                [user.user_id, `GUIDE-${Date.now()}`, '[]', '[]']
+            );
+        } else if (user.user_type === 'it_manager') {
+            await pool.query(
+                `INSERT INTO it_managers (user_id, employee_id, access_level)
+                 VALUES ($1, $2, $3)`,
+                [user.user_id, `ITM-${Date.now()}`, 'admin']
             );
         }
 
@@ -107,7 +119,7 @@ router.post('/login', [
     try {
         const result = await pool.query(
             `SELECT user_id, username, password_hash, user_type, first_name, last_name, is_active
-             FROM users WHERE username = $1`,
+             FROM users WHERE username = $1 OR email = $1`,
             [username]
         );
 

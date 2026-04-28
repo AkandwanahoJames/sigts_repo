@@ -5,15 +5,49 @@ const { body, query, validationResult } = require('express-validator');
 const { pool } = require('../config/database');
 const { authenticateJWT, authorize } = require('../middleware/auth');
 
+async function resolveGuideProfileId(userId) {
+    const result = await pool.query(
+        'SELECT tourguide_id FROM tour_guides WHERE user_id = $1 LIMIT 1',
+        [userId]
+    );
+    return result.rows[0]?.tourguide_id || null;
+}
+
+async function hasTable(tableName) {
+    const result = await pool.query(
+        `SELECT 1
+         FROM pg_tables
+         WHERE schemaname = 'public' AND tablename = $1`,
+        [tableName]
+    );
+    return result.rows.length > 0;
+}
+
+async function hasTourSchedulingTables() {
+    const [sessions, participants] = await Promise.all([
+        hasTable('tour_sessions'),
+        hasTable('tour_participants')
+    ]);
+    return sessions && participants;
+}
+
 // =====================================================
 // GET /api/tours/schedule (Guide only)
 // Get tour schedule for a guide
 // =====================================================
 router.get('/schedule', authenticateJWT, authorize('guide'), async (req, res) => {
-    const guideId = req.user.user_id;
+    const guideId = await resolveGuideProfileId(req.user.user_id);
     const { date, start, end } = req.query;
 
     try {
+        if (!(await hasTourSchedulingTables())) {
+            return res.json([]);
+        }
+
+        if (!guideId) {
+            return res.status(404).json({ error: 'Guide profile not found' });
+        }
+
         let query = `
             SELECT ts.tour_session_id, ts.scheduled_start, ts.actual_start, ts.actual_end,
                    ts.status, ts.group_size, ts.special_requests,
@@ -22,7 +56,7 @@ router.get('/schedule', authenticateJWT, authorize('guide'), async (req, res) =>
             FROM tour_sessions ts
             JOIN tour_routes tr ON ts.route_id = tr.route_id
             LEFT JOIN tour_participants tp ON ts.tour_session_id = tp.tour_session_id
-            WHERE ts.guide_id = $1
+            WHERE ts.tourguide_id = $1
         `;
         const params = [guideId];
         let paramIndex = 2;
@@ -58,13 +92,18 @@ router.get('/:id', authenticateJWT, async (req, res) => {
     const { id } = req.params;
 
     try {
+        if (!(await hasTourSchedulingTables())) {
+            return res.status(503).json({ error: 'Tour scheduling is unavailable until database migrations are applied' });
+        }
+
         const tourResult = await pool.query(
             `SELECT ts.*, tr.name as route_name, tr.description as route_description,
                     tr.difficulty, tr.distance_km, tr.duration_hours,
                     u.first_name, u.last_name, u.profile_pic_url
              FROM tour_sessions ts
              JOIN tour_routes tr ON ts.route_id = tr.route_id
-             JOIN users u ON ts.guide_id = u.user_id
+             JOIN tour_guides tg ON ts.tourguide_id = tg.tourguide_id
+             JOIN users u ON tg.user_id = u.user_id
              WHERE ts.tour_session_id = $1`,
             [id]
         );
@@ -80,8 +119,8 @@ router.get('/:id', authenticateJWT, async (req, res) => {
             `SELECT tp.*, u.username, u.first_name, u.last_name, u.profile_pic_url,
                     t.nationality, t.interests
              FROM tour_participants tp
-             JOIN users u ON tp.tourist_id = u.user_id
-             LEFT JOIN tourists t ON u.user_id = t.user_id
+             JOIN tourists t ON tp.tourist_id = t.tourist_id
+             JOIN users u ON t.user_id = u.user_id
              WHERE tp.tour_session_id = $1`,
             [id]
         );
@@ -116,10 +155,18 @@ router.get('/:id', authenticateJWT, async (req, res) => {
 // =====================================================
 router.put('/:id/start', authenticateJWT, authorize('guide'), async (req, res) => {
     const { id } = req.params;
-    const guideId = req.user.user_id;
+    const guideId = await resolveGuideProfileId(req.user.user_id);
     const { current_lat, current_lng } = req.body;
 
     try {
+        if (!(await hasTourSchedulingTables())) {
+            return res.status(503).json({ error: 'Tour scheduling is unavailable until database migrations are applied' });
+        }
+
+        if (!guideId) {
+            return res.status(404).json({ error: 'Guide profile not found' });
+        }
+
         const result = await pool.query(
             `UPDATE tour_sessions 
              SET status = 'ongoing', 
@@ -127,7 +174,7 @@ router.put('/:id/start', authenticateJWT, authorize('guide'), async (req, res) =
                  current_lat = COALESCE($1, current_lat),
                  current_lng = COALESCE($2, current_lng),
                  last_location_update = CURRENT_TIMESTAMP
-             WHERE tour_session_id = $3 AND guide_id = $4
+             WHERE tour_session_id = $3 AND tourguide_id = $4
              RETURNING tour_session_id`,
             [current_lat, current_lng, id, guideId]
         );
@@ -154,16 +201,24 @@ router.put('/:id/start', authenticateJWT, authorize('guide'), async (req, res) =
 // =====================================================
 router.put('/:id/end', authenticateJWT, authorize('guide'), async (req, res) => {
     const { id } = req.params;
-    const guideId = req.user.user_id;
+    const guideId = await resolveGuideProfileId(req.user.user_id);
     const { guide_notes } = req.body;
 
     try {
+        if (!(await hasTourSchedulingTables())) {
+            return res.status(503).json({ error: 'Tour scheduling is unavailable until database migrations are applied' });
+        }
+
+        if (!guideId) {
+            return res.status(404).json({ error: 'Guide profile not found' });
+        }
+
         const result = await pool.query(
             `UPDATE tour_sessions 
              SET status = 'completed', 
                  actual_end = CURRENT_TIMESTAMP,
                  guide_notes = COALESCE($1, guide_notes)
-             WHERE tour_session_id = $2 AND guide_id = $3
+             WHERE tour_session_id = $2 AND tourguide_id = $3
              RETURNING tour_session_id, actual_start, actual_end`,
             [guide_notes, id, guideId]
         );
@@ -179,7 +234,7 @@ router.put('/:id/end', authenticateJWT, authorize('guide'), async (req, res) => 
         await pool.query(
             `UPDATE tour_guides 
              SET total_tours_conducted = total_tours_conducted + 1
-             WHERE user_id = $1`,
+             WHERE tourguide_id = $1`,
             [guideId]
         );
 
@@ -191,7 +246,7 @@ router.put('/:id/end', authenticateJWT, authorize('guide'), async (req, res) => 
             `SELECT COUNT(*) as total_sightings,
                     COUNT(DISTINCT animal_id) as unique_species
              FROM sightings
-             WHERE tour_session_id = $1`,
+             WHERE toursession_id = $1`,
             [id]
         );
 
@@ -223,13 +278,21 @@ router.post('/:id/location', authenticateJWT, authorize('guide'), [
 
     const { id } = req.params;
     const { lat, lng } = req.body;
-    const guideId = req.user.user_id;
+    const guideId = await resolveGuideProfileId(req.user.user_id);
 
     try {
+        if (!(await hasTourSchedulingTables())) {
+            return res.status(503).json({ error: 'Tour scheduling is unavailable until database migrations are applied' });
+        }
+
+        if (!guideId) {
+            return res.status(404).json({ error: 'Guide profile not found' });
+        }
+
         await pool.query(
             `UPDATE tour_sessions 
              SET current_lat = $1, current_lng = $2, last_location_update = CURRENT_TIMESTAMP
-             WHERE tour_session_id = $3 AND guide_id = $4 AND status = 'ongoing'`,
+             WHERE tour_session_id = $3 AND tourguide_id = $4 AND status = 'ongoing'`,
             [lat, lng, id, guideId]
         );
 
@@ -260,6 +323,10 @@ router.post('/:id/notes', authenticateJWT, authorize('guide'), [
     const { notes } = req.body;
 
     try {
+        if (!(await hasTourSchedulingTables())) {
+            return res.status(503).json({ error: 'Tour scheduling is unavailable until database migrations are applied' });
+        }
+
         await pool.query(
             `UPDATE tour_sessions 
              SET guide_notes = COALESCE(guide_notes, '') || E'\n' || $1

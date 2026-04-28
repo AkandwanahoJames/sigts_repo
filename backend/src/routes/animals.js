@@ -9,22 +9,17 @@ const { authenticateJWT } = require('../middleware/auth');
 // Get all animals
 // =====================================================
 router.get('/', authenticateJWT, async (req, res) => {
-    const { category, search, limit = 50, offset = 0 } = req.query;
+    const { search, limit = 50, offset = 0 } = req.query;
 
     try {
         let query = `
             SELECT animal_id, name, scientific_name, conservation_status, 
-                   habitat, diet, image_urls, audio_call_url, fun_facts
+                   habitat, diet, image_urls, fun_facts
             FROM animals
             WHERE 1=1
         `;
         const params = [];
         let paramIndex = 1;
-
-        if (category && category !== 'all') {
-            query += ` AND category = $${paramIndex++}`;
-            params.push(category);
-        }
 
         if (search) {
             query += ` AND (name ILIKE $${paramIndex++} OR scientific_name ILIKE $${paramIndex++})`;

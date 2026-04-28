@@ -5,31 +5,54 @@
 // APP STATE MANAGEMENT (Extended for Intranet)
 // =====================================================
 
-const API_BASE_URL = 'http://localhost:3000/api'; // Change to your backend URL
+const API_BASE_URL = 'http://localhost:8000/api';
 
 class APIService {
-    constructor() {
-        this.token = localStorage.getItem('token');
+    getToken() {
+        return localStorage.getItem('token') || sessionStorage.getItem('token');
+    }
+
+    setToken(token) {
+        if (token) {
+            this.token = token;
+        }
     }
 
     async request(endpoint, options = {}) {
+        const token = this.getToken();
         const headers = {
-            'Content-Type': 'application/json',
-            ...(this.token && { 'Authorization': `Bearer ${this.token}` }),
             ...options.headers
         };
+
+        if (!(options.body instanceof FormData) && !headers['Content-Type']) {
+            headers['Content-Type'] = 'application/json';
+        }
+        if (token) {
+            headers.Authorization = `Bearer ${token}`;
+        }
 
         try {
             const response = await fetch(`${API_BASE_URL}${endpoint}`, {
                 ...options,
                 headers
             });
+            const raw = await response.text();
+            let payload = null;
 
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+            try {
+                payload = raw ? JSON.parse(raw) : null;
+            } catch {
+                payload = raw;
             }
 
-            return await response.json();
+            if (!response.ok) {
+                if (payload && typeof payload === 'object') {
+                    return { ...payload, status: response.status };
+                }
+                return { error: `HTTP ${response.status}`, status: response.status, raw };
+            }
+
+            return payload;
         } catch (error) {
             console.error(`API Error (${endpoint}):`, error);
             // Fallback to localStorage if API fails
@@ -40,7 +63,8 @@ class APIService {
     // Sightings endpoints
     async getRecentSightings(limit = 20) {
         const result = await this.request(`/sightings/recent?limit=${limit}`);
-        if (result && result.success) return result.data;
+        if (Array.isArray(result)) return result;
+        if (result && result.success && result.data) return result.data;
         // Fallback to localStorage
         return JSON.parse(localStorage.getItem('sightings') || '[]').slice(0, limit);
     }
@@ -50,7 +74,7 @@ class APIService {
             method: 'POST',
             body: JSON.stringify(sightingData)
         });
-        if (result && result.success) return result.data;
+        if (result && (result.sighting_id || result.success)) return result;
         // Fallback to localStorage
         const sightings = JSON.parse(localStorage.getItem('sightings') || '[]');
         const newSighting = { sighting_id: Date.now(), ...sightingData, timestamp: new Date().toISOString(), verified: false };
@@ -61,7 +85,8 @@ class APIService {
 
     async getSightingStats(animal = null, days = 30) {
         const result = await this.request(`/sightings/stats?animal=${animal || ''}&days=${days}`);
-        if (result && result.success) return result.data;
+        if (result && result.total !== undefined) return result;
+        if (result && result.success && result.data) return result.data;
         // Fallback to localStorage calculation
         const sightings = JSON.parse(localStorage.getItem('sightings') || '[]');
         const cutoff = new Date();
@@ -76,13 +101,16 @@ class APIService {
     // Animals endpoints
     async getAnimals() {
         const result = await this.request('/animals');
-        if (result && result.success) return result.data;
+        if (result?.animals) return result.animals;
+        if (Array.isArray(result)) return result;
+        if (result && result.success && result.data) return result.data;
         return JSON.parse(localStorage.getItem('offline_animals') || '[]');
     }
 
     async getAnimalById(id) {
         const result = await this.request(`/animals/${id}`);
-        if (result && result.success) return result.data;
+        if (result?.animal_id) return result;
+        if (result && result.success && result.data) return result.data;
         const animals = await this.getAnimals();
         return animals.find(a => a.id == id);
     }
@@ -90,31 +118,40 @@ class APIService {
     // Locations endpoints
     async getLocations() {
         const result = await this.request('/locations');
-        if (result && result.success) return result.data;
+        if (result?.locations) return result.locations;
+        if (Array.isArray(result)) return result;
+        if (result && result.success && result.data) return result.data;
         return JSON.parse(localStorage.getItem('offline_locations') || '[]');
     }
 
     // Cultural stories endpoints
     async getCulturalStories() {
-        const result = await this.request('/cultural-stories');
-        if (result && result.success) return result.data;
+        const result = await this.request('/cultural');
+        if (result?.stories) return result.stories;
+        if (Array.isArray(result)) return result;
+        if (result && result.success && result.data) return result.data;
         return JSON.parse(localStorage.getItem('cultural_stories') || '[]');
     }
 
     // Tour endpoints
-    async getToursForGuide(guideId) {
-        const result = await this.request(`/tours/guide/${guideId}`);
-        if (result && result.success) return result.data;
+    async getToursForGuide() {
+        const result = await this.request('/tours/schedule');
+        if (Array.isArray(result)) return result;
+        if (result && result.success && result.data) return result.data;
         const tours = JSON.parse(localStorage.getItem('tour_sessions') || '[]');
+        const guideId = AppState.currentUser?.user_id;
         return tours.filter(t => t.guide_id === guideId);
     }
 
     async startTour(tourId, location) {
         const result = await this.request(`/tours/${tourId}/start`, {
-            method: 'POST',
-            body: JSON.stringify({ location, startTime: new Date().toISOString() })
+            method: 'PUT',
+            body: JSON.stringify({
+                current_lat: location?.lat ?? AppState.currentLocation?.lat,
+                current_lng: location?.lng ?? AppState.currentLocation?.lng
+            })
         });
-        if (result && result.success) return result.data;
+        if (result && result.success) return result;
         const tours = JSON.parse(localStorage.getItem('tour_sessions') || '[]');
         const tour = tours.find(t => t.tour_session_id === tourId);
         if (tour) {
@@ -127,10 +164,13 @@ class APIService {
 
     async endTour(tourId, endLocation) {
         const result = await this.request(`/tours/${tourId}/end`, {
-            method: 'POST',
-            body: JSON.stringify({ endLocation, endTime: new Date().toISOString() })
+            method: 'PUT',
+            body: JSON.stringify({
+                current_lat: endLocation?.lat ?? AppState.currentLocation?.lat,
+                current_lng: endLocation?.lng ?? AppState.currentLocation?.lng
+            })
         });
-        if (result && result.success) return result.data;
+        if (result && result.success) return result;
         const tours = JSON.parse(localStorage.getItem('tour_sessions') || '[]');
         const tour = tours.find(t => t.tour_session_id === tourId);
         if (tour) {
@@ -143,7 +183,7 @@ class APIService {
 
     // Sync queue
     async syncOfflineData(pendingItems) {
-        const result = await this.request('/sync', {
+        const result = await this.request('/sync/upload', {
             method: 'POST',
             body: JSON.stringify({ items: pendingItems })
         });

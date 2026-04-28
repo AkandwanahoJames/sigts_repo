@@ -83,6 +83,14 @@ function renderMainLayout(content) {
     return `<div class="app-container"><button class="sidebar-toggle" onclick="toggleSidebar()">${icon('menu', 'icon-sm')}</button><div class="sidebar"><div class="sidebar-header"><div class="sidebar-logo"><img src="/icons/icon-192.svg" alt="SIGTS logo"></div><div class="sidebar-title">Bwindi SIGTS</div></div><div class="sidebar-profile" onclick="navigateTo('profile')"><div class="sidebar-avatar">${icon('user', 'icon-md')}</div><div class="sidebar-user-info"><div class="sidebar-user-name">${escapeHtml(user.name)}</div><div class="sidebar-user-role">${user.role || 'tourist'}</div></div></div><div class="sidebar-nav">${navItems.map(item => `<div class="nav-item-vertical ${window.currentView === item.id ? 'active' : ''}" onclick="navigateTo('${item.id}')"><div class="nav-icon-vertical">${icon(item.icon, 'icon-md')}</div><div class="nav-label-vertical">${item.label}</div></div>`).join('')}</div><div class="sidebar-logout" onclick="Auth.logout()">${icon('logout', 'icon-md')} Logout</div></div><div class="main-content" onclick="closeSidebar()"><div class="content-header"><h1>${getPageTitle(window.currentView)}</h1><div class="header-right"><button class="icon-btn" onclick="renderView('notifications')">${icon('bell', 'icon-md')}</button></div></div><div class="main-container">${content}</div></div></div>`;
 }
 
+function getAnimalIconName(animalName = '') {
+    const value = animalName.toLowerCase();
+    if (value.includes('gorilla')) return 'gorilla';
+    if (value.includes('elephant')) return 'elephant';
+    if (value.includes('bird') || value.includes('turaco')) return 'bird';
+    return 'paw';
+}
+
 // =====================================================
 // CONTENT RENDER FUNCTIONS
 // =====================================================
@@ -93,20 +101,68 @@ async function renderDashboardContent() {
     return `<div class="quick-grid"><div class="quick-card animals" onclick="navigateTo('animals')"><div class="quick-icon">${icon('paw', 'icon-xl')}</div><div class="quick-label">Animals</div><div class="quick-count">${animals.length} species</div></div><div class="quick-card map" onclick="navigateTo('map')"><div class="quick-icon">${icon('map', 'icon-xl')}</div><div class="quick-label">Map</div></div><div class="quick-card culture" onclick="navigateTo('culture')"><div class="quick-icon">${icon('book', 'icon-xl')}</div><div class="quick-label">Culture</div></div><div class="quick-card info" onclick="navigateTo('info')"><div class="quick-icon">${icon('info', 'icon-xl')}</div><div class="quick-label">Info</div></div></div><div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} AI Recommendations</h3></div><div id="recList">${recommendations.map(r => `<div class="rec-card"><div class="rec-info"><div class="rec-title">${r.name}</div><div class="rec-match">${Math.round(r.score * 100)}% match</div><div class="rec-reason">${r.reason}</div></div></div>`).join('')}</div></div><div class="section-card"><div class="section-header"><h3>${icon('leaf', 'icon-sm')} Seasonal: ${seasonal.season === 'dry' ? `${icon('sun', 'icon-sm')} Dry Season` : `${icon('rain', 'icon-sm')} Wet Season`}</h3></div><div class="seasonal-list">${seasonal.recommendations.map(a => `<div class="seasonal-item">• ${a}</div>`).join('')}</div></div>`;
 }
 
-function renderAnimalsContent() {
-    return `<div class="animals-list"><div class="animal-card"><div class="animal-icon">${icon('gorilla', 'icon-xl')}</div><div class="animal-info"><div class="animal-name">Mountain Gorilla</div><div class="animal-scientific">Gorilla beringei</div><span class="animal-status status-endangered">Endangered</span></div></div><div class="animal-card"><div class="animal-icon">${icon('elephant', 'icon-xl')}</div><div class="animal-info"><div class="animal-name">African Elephant</div><div class="animal-scientific">Loxodonta africana</div><span class="animal-status status-vulnerable">Vulnerable</span></div></div><div class="animal-card"><div class="animal-icon">${icon('bird', 'icon-xl')}</div><div class="animal-info"><div class="animal-name">Great Blue Turaco</div><div class="animal-scientific">Corythaeola cristata</div><span class="animal-status status-least-concern">Least Concern</span></div></div></div>`;
+async function renderAnimalsContent() {
+    const animals = await Content.getAnimals();
+    if (!animals.length) {
+        return `<div class="section-card"><div class="empty-state">No animal records available yet.</div></div>`;
+    }
+
+    return `<div class="animals-list">${animals.map(animal => `
+        <div class="animal-card">
+            <div class="animal-icon">${icon(getAnimalIconName(animal.name), 'icon-xl')}</div>
+            <div class="animal-info">
+                <div class="animal-name">${escapeHtml(animal.name)}</div>
+                <div class="animal-scientific">${escapeHtml(animal.scientific_name || 'Scientific name unavailable')}</div>
+                <span class="animal-status status-${escapeHtml((animal.conservation_status || 'least_concern').replace(/_/g, '-'))}">
+                    ${escapeHtml((animal.conservation_status || 'least_concern').replace(/_/g, ' '))}
+                </span>
+            </div>
+        </div>`).join('')}</div>`;
 }
 
 function renderMapContent() {
     return `<div class="map-container"><div class="map-placeholder">${icon('map', 'icon-lg')} Interactive Map<br>${icon('pin', 'icon-sm')} Your location: Buhoma Gate<br>${icon('gorilla', 'icon-sm')} Gorilla sightings nearby</div><div class="map-controls"><div class="map-control">+</div><div class="map-control">-</div><div class="map-control">${icon('pin', 'icon-sm')}</div></div></div>`;
 }
 
-function renderCultureContent() {
-    return `<div class="story-card featured"><div class="story-image" style="background: linear-gradient(135deg, #795548, #5D4037);"></div><div class="story-content"><span class="story-community">Batwa</span><div class="story-title">The Legend of the Misty Mountain</div><div class="story-storyteller">Elder Mukasa • 15 min</div></div></div><div class="story-card"><div class="story-content"><span class="story-community">Batwa</span><div class="story-title">How the Gorilla Learned to be Gentle</div><div class="story-storyteller">Elder Grace • 12 min</div></div></div>`;
+async function renderCultureContent() {
+    const stories = await API.getCulturalStories();
+    if (!stories.length) {
+        return `<div class="section-card"><div class="empty-state">Cultural stories will appear here once they are published.</div></div>`;
+    }
+
+    const [featured, ...rest] = stories;
+    const secondary = rest.slice(0, 3);
+
+    return `
+        <div class="story-card featured">
+            <div class="story-image" style="background: linear-gradient(135deg, #795548, #5D4037);"></div>
+            <div class="story-content">
+                <span class="story-community">${escapeHtml(featured.community || 'Community story')}</span>
+                <div class="story-title">${escapeHtml(featured.title_en || featured.title_local || 'Untitled story')}</div>
+                <div class="story-storyteller">${escapeHtml(featured.storyteller_name || 'Unknown storyteller')}${featured.duration ? ` • ${featured.duration} min` : ''}</div>
+            </div>
+        </div>
+        ${secondary.map(story => `
+            <div class="story-card">
+                <div class="story-content">
+                    <span class="story-community">${escapeHtml(story.community || 'Community story')}</span>
+                    <div class="story-title">${escapeHtml(story.title_en || story.title_local || 'Untitled story')}</div>
+                    <div class="story-storyteller">${escapeHtml(story.storyteller_name || 'Unknown storyteller')}${story.duration ? ` • ${story.duration} min` : ''}</div>
+                </div>
+            </div>`).join('')}`;
 }
 
-function renderSightingsContent() {
-    return `<div class="section-card"><div class="section-header"><h3>${icon('camera', 'icon-sm')} Recent Sightings</h3><button class="add-btn" onclick="addSighting()">${icon('plus', 'icon-sm')} Report</button></div><div class="sighting-list"><div class="sighting-item"><div class="sighting-icon">${icon('gorilla', 'icon-lg')}</div><div><div class="sighting-name">Gorilla Family</div><div class="sighting-meta">Buhoma • 10 min ago</div></div><span class="sighting-badge">${icon('paw', 'icon-sm')} 5</span></div></div></div>`;
+async function renderSightingsContent() {
+    const sightings = await API.getRecentSightings(10);
+    return `<div class="section-card"><div class="section-header"><h3>${icon('camera', 'icon-sm')} Recent Sightings</h3><button class="add-btn" onclick="addSighting()">${icon('plus', 'icon-sm')} Report</button></div><div class="sighting-list">${sightings.length ? sightings.map(sighting => `
+        <div class="sighting-item">
+            <div class="sighting-icon">${icon(getAnimalIconName(sighting.animal_name), 'icon-lg')}</div>
+            <div>
+                <div class="sighting-name">${escapeHtml(sighting.animal_name || 'Wildlife sighting')}</div>
+                <div class="sighting-meta">${escapeHtml(sighting.location_name || 'Unknown location')} • ${new Date(sighting.timestamp).toLocaleString()}</div>
+            </div>
+            <span class="sighting-badge">${icon('paw', 'icon-sm')} ${sighting.number_observed || 1}</span>
+        </div>`).join('') : '<div class="empty-state">No verified sightings available yet.</div>'}</div></div>`;
 }
 
 function renderProfileContent() {
@@ -463,10 +519,10 @@ async function renderView(view) {
         case 'login': app.innerHTML = renderLoginScreen(); return;
         case 'register': app.innerHTML = renderRegisterScreen(); return;
         case 'dashboard': content = await renderDashboardContent(); break;
-        case 'animals': content = renderAnimalsContent(); break;
+        case 'animals': content = await renderAnimalsContent(); break;
         case 'map': content = renderMapContent(); break;
-        case 'culture': content = renderCultureContent(); break;
-        case 'sightings': content = renderSightingsContent(); break;
+        case 'culture': content = await renderCultureContent(); break;
+        case 'sightings': content = await renderSightingsContent(); break;
         case 'profile': content = renderProfileContent(); break;
         case 'info': content = renderInfoContent(); break;
         case 'ai_chat': content = renderAIChatContent(); break;
