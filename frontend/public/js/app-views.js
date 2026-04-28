@@ -60,7 +60,17 @@ function icon(name, className = '') {
 
 function getPageTitle(view) {
     const titles = { dashboard: 'Dashboard', animals: 'Animals', map: 'Map', culture: 'Culture', sightings: 'Sightings', profile: 'Profile', info: 'Info', ai_chat: 'AI Assistant', guide_dashboard: 'Guide Dashboard', it_dashboard: 'Admin Dashboard', intranet: 'Intranet Hub' };
-    return titles[view] || 'Bwindi Tour Guide';
+    return titles[view] || 'SIGTS Platform';
+}
+
+function getPageSubtitle(view) {
+    const subtitles = {
+        dashboard: "Welcome back, explore today's recommendations.",
+        guide_dashboard: 'Track tours, guests, and active shifts.',
+        it_dashboard: 'Monitor users, sync status, and platform health.',
+        intranet: 'Manage staff communication and operations.'
+    };
+    return subtitles[view] || 'Role-based access with secure operational controls.';
 }
 
 const PUBLIC_VIEWS = new Set(['login', 'register']);
@@ -132,7 +142,7 @@ function renderMainLayout(content) {
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-logo"><img src="/icons/icon-192.svg" alt="SIGTS logo"></div>
-                <div class="sidebar-title"><span class="sidebar-title-script">Bwindi</span><span>SIGTS</span></div>
+                <div class="sidebar-title"><span class="sidebar-title-script">SIGTS</span><span>Platform</span></div>
             </div>
             <div class="sidebar-profile" onclick="navigateTo('profile')">
                 <div class="sidebar-avatar sidebar-avatar-photo" aria-hidden="true"></div>
@@ -148,8 +158,12 @@ function renderMainLayout(content) {
         </aside>
         <main class="main-content" onclick="closeSidebar()">
             <div class="content-header">
-                <h1>${getPageTitle(window.currentView)}</h1>
+                <div class="header-left">
+                    <h1>${getPageTitle(window.currentView)}</h1>
+                    <p>${getPageSubtitle(window.currentView)}</p>
+                </div>
                 <div class="header-right">
+                    <span class="header-status-badge">${icon('shield', 'icon-sm')} Secure Session</span>
                     <button class="icon-btn notification-btn" onclick="renderView('notifications')" aria-label="Notifications">${icon('bell', 'icon-md')}<span class="notification-dot">3</span></button>
                     <button class="header-profile" onclick="navigateTo('profile')" aria-label="Open profile">
                         <span class="header-avatar" aria-hidden="true"></span>
@@ -185,6 +199,7 @@ async function renderDashboardContent() {
         { id: 'info', iconName: 'info', label: 'Info', className: 'info' }
     ];
     const seasonalTitle = seasonal.season === 'dry' ? `${icon('sun', 'icon-sm')} Dry Season` : `${icon('rain', 'icon-sm')} Wet Season`;
+    const recommendationCategories = ['Wildlife', 'Nature', 'Culture'];
     const seasonalDetails = {
         'Gorilla Trekking': 'Clearer trails and better long-distance views.',
         'Bird Watching': 'Active forest birds and strong photography light.',
@@ -194,39 +209,58 @@ async function renderDashboardContent() {
 
     return `<div class="dashboard-screen">
         <div class="quick-grid">
-            ${quickCards.map(card => `<button class="quick-card quick-photo ${card.className}" onclick="navigateTo('${card.id}')">
+            ${quickCards.map(card => `<button class="quick-card feature-card quick-photo ${card.className}" onclick="navigateTo('${card.id}')">
                 <span class="quick-icon">${icon(card.iconName, 'icon-xl')}</span>
                 <span class="quick-label">${card.label}</span>
                 ${card.count ? `<span class="quick-count">${card.count}</span>` : ''}
             </button>`).join('')}
         </div>
-        <div class="dashboard-feature-grid">
-            <section class="section-card recommendations-card">
-                <div class="section-header"><h3>${icon('sparkles', 'icon-sm')} AI Recommendations</h3></div>
-                <div id="recList">
-                    ${recommendations.map((r, index) => `<button class="rec-card" onclick="navigateTo('${index === 2 ? 'culture' : 'animals'}')">
-                        <span class="rec-avatar" aria-hidden="true"></span>
-                        <span class="rec-info">
-                            <span class="rec-title">${escapeHtml(r.name)}</span>
-                            <span class="rec-match">${Math.round(r.score * 100)}% match</span>
-                            <span class="rec-reason">${escapeHtml(r.reason)}</span>
-                        </span>
-                        <span class="rec-arrow">${icon('arrowRight', 'icon-sm')}</span>
-                    </button>`).join('')}
-                </div>
-            </section>
-            <aside class="dashboard-quote-card"><blockquote>"The best view comes after the hardest climb."</blockquote></aside>
-        </div>
-        <section class="section-card seasonal-card">
-            <div class="seasonal-copy">
-                <h3>${icon('leaf', 'icon-sm')} Seasonal: ${seasonalTitle}</h3>
-                <ul class="seasonal-list">
-                    ${seasonal.recommendations.map(a => `<li><strong>${escapeHtml(a)}</strong><span>${escapeHtml(seasonalDetails[a] || 'Recommended for current park conditions.')}</span></li>`).join('')}
-                </ul>
+        <div class="dashboard-main-grid">
+            <div class="dashboard-left-column">
+                <section class="section-card recommendations-card card">
+                    <div class="section-header"><h3>${icon('sparkles', 'icon-sm')} AI Recommendations</h3></div>
+                    <div id="recList">
+                        ${recommendations.map((r, index) => `<button class="rec-card recommendation-row" onclick="navigateTo('${index === 2 ? 'culture' : 'animals'}')">
+                            <span class="rec-avatar" aria-hidden="true"></span>
+                            <span class="rec-info">
+                                <span class="rec-title">${escapeHtml(r.name)}</span>
+                                <span class="rec-category-badge">${recommendationCategories[index] || 'Insight'}</span>
+                                <span class="rec-reason">${escapeHtml(r.reason)}</span>
+                            </span>
+                            <span class="rec-arrow">${icon('arrowRight', 'icon-sm')}</span>
+                        </button>`).join('')}
+                    </div>
+                </section>
+
+                <section class="section-card seasonal-card seasonal-insight-card card">
+                    <div class="seasonal-copy">
+                        <h3>${icon('leaf', 'icon-sm')} Seasonal Insight</h3>
+                        <p class="seasonal-phase">${seasonalTitle}</p>
+                        <ul class="seasonal-list">
+                            ${seasonal.recommendations.map(a => `<li><strong>${escapeHtml(a)}</strong><span>${escapeHtml(seasonalDetails[a] || 'Recommended for current park conditions.')}</span></li>`).join('')}
+                        </ul>
+                        <button class="seasonal-action" onclick="navigateTo('culture')">View Suggestions</button>
+                    </div>
+                    <div class="seasonal-thumb" aria-hidden="true"></div>
+                </section>
             </div>
-            <div class="seasonal-thumb" aria-hidden="true"></div>
-            <button class="seasonal-action" onclick="navigateTo('culture')">View Suggestions</button>
-        </section>
+
+            <aside class="dashboard-right-column">
+                <aside class="dashboard-quote-card card"><blockquote>"The best view comes after the hardest climb."</blockquote></aside>
+                <section class="section-card quick-actions-card card">
+                    <div class="section-header"><h3>${icon('target', 'icon-sm')} Quick Actions</h3></div>
+                    <div class="quick-actions-list">
+                        <button class="small-btn btn-secondary" onclick="navigateTo('map')">Open Map</button>
+                        <button class="small-btn btn-secondary" onclick="navigateTo('sightings')">Log Sighting</button>
+                        <button class="small-btn btn-secondary" onclick="navigateTo('info')">Safety Info</button>
+                    </div>
+                </section>
+                <section class="section-card safety-notice-card card">
+                    <div class="section-header"><h3>${icon('shield', 'icon-sm')} Safety Notice</h3></div>
+                    <div class="safety-copy">Maintain guide instructions, wildlife distance rules, and route check-ins throughout active sessions.</div>
+                </section>
+            </aside>
+        </div>
     </div>`;
 }
 
@@ -283,7 +317,7 @@ async function renderCultureContent() {
 
 async function renderSightingsContent() {
     const sightings = await API.getRecentSightings(10);
-    return `<div class="section-card"><div class="section-header"><h3>${icon('camera', 'icon-sm')} Recent Sightings</h3><button class="add-btn" onclick="addSighting()">${icon('plus', 'icon-sm')} Report</button></div><div class="sighting-list">${sightings.length ? sightings.map(sighting => `
+    return `<div class="section-card"><div class="section-header"><h3>${icon('camera', 'icon-sm')} Recent Sightings</h3><button class="add-btn btn-primary" onclick="addSighting()">${icon('plus', 'icon-sm')} Report</button></div><div class="sighting-list">${sightings.length ? sightings.map(sighting => `
         <div class="sighting-item">
             <div class="sighting-icon">${icon(getAnimalIconName(sighting.animal_name), 'icon-lg')}</div>
             <div>
@@ -311,7 +345,7 @@ function renderAIChatContent() {
             <div class="rec-card">
                 <div class="rec-info">
                     <div class="rec-title">Assistant</div>
-                    <div class="rec-reason">Ask about wildlife, safety, culture, routes, or weather in Bwindi.</div>
+                    <div class="rec-reason">Ask about wildlife, safety, culture, routes, or local weather insights.</div>
                 </div>
             </div>
         </div>
@@ -325,14 +359,14 @@ function renderAIChatContent() {
 async function renderGuideDashboard() {
     const guideManager = new TourGuideManager();
     const dashboard = await guideManager.getGuideDashboard();
-    return `<div class="guide-dashboard"><div class="metrics-grid"><div class="metric-card"><div class="metric-value">${dashboard.stats.totalTours}</div><div class="metric-label">Total Tours</div></div><div class="metric-card"><div class="metric-value">${dashboard.stats.totalGuests}</div><div class="metric-label">Guests Served</div></div><div class="metric-card"><div class="metric-value">${dashboard.stats.averageRating}</div><div class="metric-label">Rating</div></div></div><div class="section-card"><div class="section-header"><h3>${icon('clock', 'icon-sm')} Today's Tours</h3></div>${dashboard.today.map(t => `<div class="tour-item"><div class="tour-name">${t.route_name || 'Gorilla Trek'}</div><div class="tour-time">${new Date(t.scheduled_start).toLocaleTimeString()}</div><button class="small-btn" onclick="startTour('${t.tour_session_id}')">Start Tour</button></div>`).join('') || '<div class="empty-state">No tours today</div>'}</div><div class="shift-controls"><button class="login-btn" onclick="clockInOut()">${dashboard.activeShift ? 'Clock Out' : 'Clock In'}</button></div><div id="activeTourPanel" style="display:none"><div id="tourTimerDisplay" class="tour-timer">00:00:00</div><button onclick="quickSighting()">Log Sighting</button><button onclick="endActiveTour()">End Tour</button></div></div>`;
+    return `<div class="guide-dashboard"><div class="metrics-grid"><div class="metric-card"><div class="metric-value">${dashboard.stats.totalTours}</div><div class="metric-label">Total Tours</div></div><div class="metric-card"><div class="metric-value">${dashboard.stats.totalGuests}</div><div class="metric-label">Guests Served</div></div><div class="metric-card"><div class="metric-value">${dashboard.stats.averageRating}</div><div class="metric-label">Rating</div></div></div><div class="section-card"><div class="section-header"><h3>${icon('clock', 'icon-sm')} Today's Tours</h3></div>${dashboard.today.map(t => `<div class="tour-item"><div class="tour-name">${t.route_name || 'Gorilla Trek'}</div><div class="tour-time">${new Date(t.scheduled_start).toLocaleTimeString()}</div><button class="small-btn btn-secondary" onclick="startTour('${t.tour_session_id}')">Start Tour</button></div>`).join('') || '<div class="empty-state">No tours today</div>'}</div><div class="shift-controls"><button class="login-btn btn-primary" onclick="clockInOut()">${dashboard.activeShift ? 'Clock Out' : 'Clock In'}</button></div><div id="activeTourPanel" style="display:none"><div id="tourTimerDisplay" class="tour-timer">00:00:00</div><button class="small-btn btn-secondary" onclick="quickSighting()">Log Sighting</button><button class="small-btn btn-danger" onclick="endActiveTour()">End Tour</button></div></div>`;
 }
 
 async function renderITManagerDashboard() {
     const metrics = await ITAPI.getSystemMetrics();
     const users = await ITAPI.getUserList();
     const schemaStatus = await ITAPI.getSchemaStatus();
-    return `<div class="it-dashboard"><div class="welcome-card"><h2>Welcome back, ${escapeHtml(Auth.getCurrentUser()?.name)}</h2></div><div class="metrics-grid"><div class="metric-card"><div class="metric-value">${metrics.activeUsers}</div><div class="metric-label">Active Users</div></div><div class="metric-card"><div class="metric-value">${metrics.syncQueueSize}</div><div class="metric-label">Pending Sync</div></div><div class="metric-card"><div class="metric-value">${metrics.totalSightings}</div><div class="metric-label">Sightings</div></div><div class="metric-card"><div class="metric-value">${metrics.totalStaff || 0}</div><div class="metric-label">Staff Total</div></div><div class="metric-card"><div class="metric-value">${metrics.guidesOnDuty || 0}</div><div class="metric-label">Guides Active</div></div><div class="metric-card"><div class="metric-value">${metrics.inventoryItems || 0}</div><div class="metric-label">Inventory Items</div></div></div><div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Users</h3></div>${users.map(u => `<div class="user-item">${u.full_name} (${u.user_type}) - ${u.department || ''}</div>`).join('')}</div><div class="section-card"><div class="section-header"><h3>${icon('database', 'icon-sm')} Database Schema (Extended)</h3></div><div class="schema-items">${Object.entries(schemaStatus).slice(0,12).map(([name, info]) => `<div class="schema-item">${icon('chart', 'icon-sm')} ${name}: ${info.count} records</div>`).join('')}</div></div><div class="admin-actions"><button class="admin-action-btn" onclick="handleMFASetup()">${icon('shield', 'icon-sm')} Configure MFA</button><button class="admin-action-btn" onclick="clearAllCache()">Clear Cache</button><button class="admin-action-btn" onclick="exportData()">Export Data</button><button class="admin-action-btn danger" onclick="resetApp()">Reset App</button></div></div>`;
+    return `<div class="it-dashboard"><div class="welcome-card"><h2>Welcome back, ${escapeHtml(Auth.getCurrentUser()?.name)}</h2></div><div class="metrics-grid"><div class="metric-card"><div class="metric-value">${metrics.activeUsers}</div><div class="metric-label">Active Users</div></div><div class="metric-card"><div class="metric-value">${metrics.syncQueueSize}</div><div class="metric-label">Pending Sync</div></div><div class="metric-card"><div class="metric-value">${metrics.totalSightings}</div><div class="metric-label">Sightings</div></div><div class="metric-card"><div class="metric-value">${metrics.totalStaff || 0}</div><div class="metric-label">Staff Total</div></div><div class="metric-card"><div class="metric-value">${metrics.guidesOnDuty || 0}</div><div class="metric-label">Guides Active</div></div><div class="metric-card"><div class="metric-value">${metrics.inventoryItems || 0}</div><div class="metric-label">Inventory Items</div></div></div><div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Users</h3></div>${users.map(u => `<div class="user-item">${u.full_name} (${u.user_type}) - ${u.department || ''}</div>`).join('')}</div><div class="section-card"><div class="section-header"><h3>${icon('database', 'icon-sm')} Database Schema (Extended)</h3></div><div class="schema-items">${Object.entries(schemaStatus).slice(0,12).map(([name, info]) => `<div class="schema-item">${icon('chart', 'icon-sm')} ${name}: ${info.count} records</div>`).join('')}</div></div><div class="admin-actions"><button class="admin-action-btn btn-primary" onclick="handleMFASetup()">${icon('shield', 'icon-sm')} Configure MFA</button><button class="admin-action-btn btn-secondary" onclick="clearAllCache()">Clear Cache</button><button class="admin-action-btn btn-secondary" onclick="exportData()">Export Data</button><button class="admin-action-btn danger btn-danger" onclick="resetApp()">Reset App</button></div></div>`;
 }
 
 // =====================================================
@@ -355,18 +389,18 @@ async function renderIntranetDashboard() {
         </div>
         
         <div class="section-card">
-            <div class="section-header"><h3>${icon('megaphone', 'icon-sm')} Internal Announcements</h3><button class="add-btn" onclick="showAddAnnouncementModal()">${icon('plus', 'icon-sm')} Post</button></div>
-            <div id="announcementsList">${announcements.map(a => `<div class="announcement-item ${a.priority}"><div class="announcement-title">${escapeHtml(a.title)}</div><div class="announcement-meta">${new Date(a.date).toLocaleDateString()} by ${a.author}</div><div class="announcement-content">${escapeHtml(a.content)}</div><button class="small-btn" onclick="deleteAnnouncement(${a.id})">Delete</button></div>`).join('') || '<div class="empty-state">No announcements</div>'}</div>
+            <div class="section-header"><h3>${icon('megaphone', 'icon-sm')} Internal Announcements</h3><button class="add-btn btn-primary" onclick="showAddAnnouncementModal()">${icon('plus', 'icon-sm')} Post</button></div>
+            <div id="announcementsList">${announcements.map(a => `<div class="announcement-item ${a.priority}"><div class="announcement-title">${escapeHtml(a.title)}</div><div class="announcement-meta">${new Date(a.date).toLocaleDateString()} by ${a.author}</div><div class="announcement-content">${escapeHtml(a.content)}</div><button class="small-btn btn-danger" onclick="deleteAnnouncement(${a.id})">Delete</button></div>`).join('') || '<div class="empty-state">No announcements</div>'}</div>
         </div>
         
         <div class="section-card">
-            <div class="section-header"><h3>${icon('box', 'icon-sm')} Inventory Management</h3><button class="add-btn" onclick="showAddInventoryModal()">${icon('plus', 'icon-sm')} Add Item</button></div>
-            <div class="inventory-list">${inventory.map(i => `<div class="inventory-item"><span><strong>${escapeHtml(i.name)}</strong> - ${i.quantity} units (${i.category})</span><button class="small-btn" onclick="updateInventoryQuantity(${i.id})">Update</button></div>`).join('') || '<div class="empty-state">No inventory items</div>'}</div>
+            <div class="section-header"><h3>${icon('box', 'icon-sm')} Inventory Management</h3><button class="add-btn btn-primary" onclick="showAddInventoryModal()">${icon('plus', 'icon-sm')} Add Item</button></div>
+            <div class="inventory-list">${inventory.map(i => `<div class="inventory-item"><span><strong>${escapeHtml(i.name)}</strong> - ${i.quantity} units (${i.category})</span><button class="small-btn btn-secondary" onclick="updateInventoryQuantity(${i.id})">Update</button></div>`).join('') || '<div class="empty-state">No inventory items</div>'}</div>
         </div>
         
         <div class="section-card">
-            <div class="section-header"><h3>${icon('users', 'icon-sm')} Employee Directory</h3><button class="add-btn" onclick="showAddEmployeeModal()">${icon('plus', 'icon-sm')} Add Employee</button></div>
-            <div class="employee-list">${employees.map(e => `<div class="employee-item"><div><strong>${escapeHtml(e.name)}</strong> - ${e.role}<br><small>${e.department} | Status: ${e.status}</small></div><button class="small-btn" onclick="toggleEmployeeStatus(${e.id}, '${e.status}')">${e.status === 'active' ? 'Deactivate' : 'Activate'}</button></div>`).join('') || '<div class="empty-state">No employees</div>'}</div>
+            <div class="section-header"><h3>${icon('users', 'icon-sm')} Employee Directory</h3><button class="add-btn btn-primary" onclick="showAddEmployeeModal()">${icon('plus', 'icon-sm')} Add Employee</button></div>
+            <div class="employee-list">${employees.map(e => `<div class="employee-item"><div><strong>${escapeHtml(e.name)}</strong> - ${e.role}<br><small>${e.department} | Status: ${e.status}</small></div><button class="small-btn ${e.status === 'active' ? 'btn-danger' : 'btn-secondary'}" onclick="toggleEmployeeStatus(${e.id}, '${e.status}')">${e.status === 'active' ? 'Deactivate' : 'Activate'}</button></div>`).join('') || '<div class="empty-state">No employees</div>'}</div>
         </div>
     </div>`;
 }
@@ -454,8 +488,22 @@ window.sendAIChatMessage = async function() {
 function showLoading() {
     const app = document.getElementById('app');
     if (app) {
-        app.innerHTML = `<div class="loading-container"><div class="spinner"></div><p>Loading Bwindi SIGTS...</p></div>`;
+        app.innerHTML = `<div class="loading-container"><div class="spinner"></div><p>Loading SIGTS Platform...</p></div>`;
     }
+}
+
+function setAuthFeedback(message, type = 'error') {
+    const node = document.getElementById('authFeedback');
+    if (!node) return;
+    if (!message) {
+        node.textContent = '';
+        node.className = 'auth-feedback';
+        node.hidden = true;
+        return;
+    }
+    node.textContent = String(message);
+    node.className = `auth-feedback ${type === 'success' ? 'success' : 'error'}`;
+    node.hidden = false;
 }
 
 function ensureFeedbackRoot() {
@@ -558,27 +606,89 @@ window.showPromptDialog = showPromptDialog;
 window.showConfirmDialog = showConfirmDialog;
 
 async function handleRegistration() {
+    setAuthFeedback('');
     const result = await Auth.register({
         fullName: document.getElementById('regFullName')?.value,
         email: document.getElementById('regEmail')?.value,
         username: document.getElementById('regUsername')?.value,
         password: document.getElementById('regPassword')?.value,
         confirmPassword: document.getElementById('regConfirmPassword')?.value,
-        userType: document.getElementById('regUserType')?.value
+        userType: 'tourist'
     });
-    showToast(result.message || (result.success ? 'Success! Please login.' : result.error), result.success ? 'success' : 'danger');
+    const message = result.message || (result.success ? 'Success! Please login.' : result.error);
+    showToast(message, result.success ? 'success' : 'danger');
+    setAuthFeedback(message, result.success ? 'success' : 'error');
     if (result.success) renderView('login');
-    else renderView('register');
 }
 
 async function handleLogin() {
+    setAuthFeedback('');
     const result = await Auth.login(
         document.getElementById('loginUsername')?.value,
         document.getElementById('loginPassword')?.value,
         document.getElementById('rememberMe')?.checked || false
     );
-    if (result.success) renderView('dashboard');
-    else showToast('Login failed: ' + result.error, 'danger');
+    if (result.success) {
+        renderView('dashboard');
+        return;
+    }
+    const message = 'Login failed: ' + result.error;
+    showToast(message, 'danger');
+    setAuthFeedback(message, 'error');
+}
+
+function quickLoginAs(role) {
+    const presets = {
+        tourist: {
+            user_id: 'demo-tourist',
+            name: 'Demo Tourist',
+            email: 'tourist@demo.local',
+            username: 'tourist',
+            role: 'tourist',
+            userType: 'tourist',
+            department: 'Visitor',
+            targetView: 'dashboard'
+        },
+        guide: {
+            user_id: 'demo-guide',
+            name: 'Demo Guide',
+            email: 'guide@demo.local',
+            username: 'guide',
+            role: 'guide',
+            userType: 'guide',
+            department: 'Tour Operations',
+            targetView: 'guide_dashboard'
+        },
+        it_manager: {
+            user_id: 'demo-admin',
+            name: 'IT Manager',
+            email: 'admin@demo.local',
+            username: 'admin',
+            role: 'it_manager',
+            userType: 'it_manager',
+            department: 'IT',
+            targetView: 'it_dashboard'
+        }
+    };
+
+    const selected = presets[role];
+    if (!selected) return;
+    const token = `demo.${role}.token`;
+    const { targetView, ...user } = selected;
+
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify(user));
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
+
+    Auth.token = token;
+    Auth.user = user;
+    AppState.currentUser = user;
+    AppState.authToken = token;
+    API.setToken(token);
+
+    showToast(`Quick access: ${formatRoleName(role)}`, 'success');
+    navigateTo(targetView);
 }
 
 function togglePasswordVisibility(inputId, button) {
@@ -587,19 +697,25 @@ function togglePasswordVisibility(inputId, button) {
     const shouldShow = input.type === 'password';
     input.type = shouldShow ? 'text' : 'password';
     button?.setAttribute('aria-label', shouldShow ? 'Hide password' : 'Show password');
+    button?.classList.toggle('active', shouldShow);
 }
 
 async function handleForgotPassword() {
+    setAuthFeedback('');
     const email = await showPromptDialog('Enter your account email to receive a password reset link');
     if (!email) return;
 
     const result = await Auth.requestPasswordReset(email);
     if (result.success) {
-        showToast(result.message || 'If the email exists, a reset link has been sent.', 'success');
+        const message = result.message || 'If the email exists, a reset link has been sent.';
+        showToast(message, 'success');
+        setAuthFeedback(message, 'success');
         return;
     }
 
-    showToast('Password reset request failed: ' + (result.error || 'Unknown error'), 'danger');
+    const message = 'Password reset request failed: ' + (result.error || 'Unknown error');
+    showToast(message, 'danger');
+    setAuthFeedback(message, 'error');
 }
 
 async function handleMFASetup() {
@@ -681,6 +797,11 @@ async function clockInOut() {
 
 function renderAuthPortal(activeTab = 'login') {
     const isLogin = activeTab === 'login';
+    const heading = isLogin ? 'Welcome Back' : 'Create Account';
+    const subheading = isLogin ? 'Access your SIGTS dashboard' : 'Register for secure park access';
+    const trustCopy = isLogin
+        ? 'Secure access for tourists, guides, park officials, and IT managers.'
+        : 'Your information is protected and reviewed according to park access rules.';
 
     return `<div class="auth-portal ${isLogin ? 'auth-mode-login' : 'auth-mode-register'}">
         <aside class="auth-portal-side">
@@ -694,8 +815,16 @@ function renderAuthPortal(activeTab = 'login') {
 
             <div class="auth-side-message">
                 <span class="auth-side-kicker">Welcome</span>
-                <h1>Explore Bwindi with confidence.</h1>
-                <p>Access wildlife insights, cultural stories, guide tools, sightings, and secure park information from one clean portal.</p>
+                <h1>Smart Park Access & Information Portal</h1>
+                <p>Manage wildlife insights, guide access, tourist profiles, sightings, and secure park information from one trusted platform.</p>
+                <p class="auth-side-roles">Tourists • Guides • Officials • IT Managers</p>
+            </div>
+
+            <div class="auth-side-stats" aria-label="System access highlights">
+                <div class="auth-side-stat">${icon('paw', 'icon-sm')} Wildlife Records</div>
+                <div class="auth-side-stat">${icon('ticket', 'icon-sm')} Guide Access</div>
+                <div class="auth-side-stat">${icon('megaphone', 'icon-sm')} Park Notices</div>
+                <div class="auth-side-stat">${icon('shield', 'icon-sm')} Secure Roles</div>
             </div>
 
             <div class="auth-side-footer">
@@ -723,12 +852,14 @@ function renderAuthPortal(activeTab = 'login') {
                 </div>
 
                 <div class="auth-form-head">
-                    <span class="auth-kicker">${isLogin ? 'Welcome back' : 'Registration'}</span>
-                    <h2>${isLogin ? 'Log in to your account' : 'Create your account'}</h2>
-                    <p>${isLogin ? 'Continue your wildlife guide experience.' : 'Build your profile and unlock tours, sightings, and park tools.'}</p>
+                    <span class="auth-kicker">${isLogin ? 'Secure Access Portal' : 'Role Enrollment'}</span>
+                    <div class="auth-role-badge">${icon('shield', 'icon-sm')} <span>Role-based login enabled</span></div>
+                    <h2>${heading}</h2>
+                    <p>${subheading}</p>
                 </div>
 
                 ${isLogin ? renderLoginFormOnly() : renderRegisterFormOnly()}
+                <div class="auth-trust-panel">${trustCopy}</div>
             </section>
         </main>
     </div>`;
@@ -783,8 +914,15 @@ function renderLoginFormOnly() {
         </div>
 
         <button type="submit" class="auth-primary-btn">
-            ${icon('leaf', 'icon-sm')} Log In
+            ${icon('leaf', 'icon-sm')} LOGIN TO DASHBOARD
         </button>
+
+        <div class="auth-divider-lite"><span></span><em>OR</em><span></span></div>
+        <button type="button" class="auth-social-btn" onclick="showToast('Google sign-in will be connected in production.', 'info')">
+            ${icon('user', 'icon-sm')} Continue with Google
+        </button>
+        <p class="auth-inline-cta">New here? <button type="button" class="auth-link-btn" onclick="renderView('register')">Create account</button></p>
+        <div id="authFeedback" class="auth-feedback" hidden></div>
     </form>`;
 }
 
@@ -875,21 +1013,10 @@ function renderRegisterFormOnly() {
             </label>
         </div>
 
-        <label class="auth-field">
-            <span class="auth-field-label">Role</span>
-            <span class="auth-input-shell">
-                ${icon('shield', 'icon-sm')}
-                <select id="regUserType" class="auth-select">
-                    <option value="tourist">Tourist</option>
-                    <option value="guide">Tour Guide</option>
-                    <option value="it_manager">IT Manager</option>
-                </select>
-            </span>
-        </label>
-
         <button type="submit" class="auth-primary-btn">
-            ${icon('leaf', 'icon-sm')} Create Account
+            ${icon('leaf', 'icon-sm')} CREATE SECURE ACCOUNT
         </button>
+        <div id="authFeedback" class="auth-feedback" hidden></div>
 
         <div class="auth-secure-note">
             ${icon('shield', 'icon-md')}
