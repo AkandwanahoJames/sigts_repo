@@ -5,7 +5,17 @@
 // APP STATE MANAGEMENT (Extended for Intranet)
 // =====================================================
 
-const API_BASE_URL = 'http://localhost:8000/api';
+function resolveApiBaseUrl() {
+    const explicit = window.localStorage?.getItem('sigts_api_base_url');
+    if (explicit) return explicit.replace(/\/$/, '');
+    const configured = window.__SIGTS_API_BASE_URL__;
+    if (configured) return String(configured).replace(/\/$/, '');
+    const protocol = window.location.protocol || 'http:';
+    const hostname = window.location.hostname || 'localhost';
+    return `${protocol}//${hostname}:8000/api`;
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 class APIService {
     getToken() {
@@ -181,6 +191,55 @@ class APIService {
         return tour;
     }
 
+    async getTourById(tourId) {
+        const result = await this.request(`/tours/${tourId}`);
+        if (result?.tour_session_id) return result;
+        return null;
+    }
+
+    async updateTourLocation(tourId, lat, lng) {
+        const result = await this.request(`/tours/${tourId}/location`, {
+            method: 'POST',
+            body: JSON.stringify({ lat, lng })
+        });
+        return !!result?.success;
+    }
+
+    async addTourNote(tourId, notes) {
+        const result = await this.request(`/tours/${tourId}/notes`, {
+            method: 'POST',
+            body: JSON.stringify({ notes })
+        });
+        return !!result?.success;
+    }
+
+    // Analytics endpoints (IT Manager)
+    async getVisitorFlowAnalytics(start, end, interval = 'day') {
+        const result = await this.request(`/analytics/visitor-flow?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&interval=${encodeURIComponent(interval)}`);
+        return result || null;
+    }
+
+    async getCongestionPredictions(date) {
+        const result = await this.request(`/analytics/predictions/congestion?date=${encodeURIComponent(date)}`);
+        return result || null;
+    }
+
+    async getPopularContent(limit = 10) {
+        const result = await this.request(`/analytics/popular-content?limit=${limit}`);
+        if (Array.isArray(result)) return result;
+        return [];
+    }
+
+    async getSatisfactionAnalytics() {
+        const result = await this.request('/analytics/satisfaction');
+        return result || null;
+    }
+
+    async getDemographicsAnalytics() {
+        const result = await this.request('/analytics/demographics');
+        return result || null;
+    }
+
     // Sync queue
     async syncOfflineData(pendingItems) {
         const result = await this.request('/sync/upload', {
@@ -198,6 +257,31 @@ class APIService {
         } catch {
             return false;
         }
+    }
+
+    // Feedback loop endpoints
+    async submitFeedback(payload) {
+        const result = await this.request('/feedback', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        if (result?.success) return result.feedback;
+        return null;
+    }
+
+    async getMyFeedback(limit = 20) {
+        const result = await this.request(`/feedback/mine?limit=${limit}`);
+        if (result?.success && Array.isArray(result.feedback)) return result.feedback;
+        return JSON.parse(localStorage.getItem('feedback') || '[]').slice(0, limit);
+    }
+
+    // User profile updates (language/preferences)
+    async updateUserProfile(payload) {
+        const result = await this.request('/users/profile', {
+            method: 'PUT',
+            body: JSON.stringify(payload)
+        });
+        return result;
     }
 }
 
@@ -241,4 +325,4 @@ const AppState = {
     hrStats: { totalStaff: 0, guidesOnDuty: 0, itStaff: 0 }
 };
 
-const API_URL = 'http://localhost:8000/api';
+const API_URL = API_BASE_URL;

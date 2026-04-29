@@ -45,9 +45,43 @@ function icon(name, className = '') {
         plus: '<path d="M12 5v14M5 12h14"/>',
         menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
         note: '<path d="M6 3h9l3 3v15H6z"/><path d="M15 3v4h4"/><path d="M9 11h6M9 15h6"/>'
+        ,
+        smile: '<circle cx="12" cy="12" r="9"/><path d="M8 10h.01M16 10h.01"/><path d="M8 15c1.2 1.2 2.3 1.8 4 1.8s2.8-.6 4-1.8"/>'
     };
     const content = icons[name] || icons.info;
     return `<svg class="${classes}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${content}</svg>`;
+}
+
+function getPhotoClassFromText(value = '') {
+    const text = String(value).toLowerCase();
+    if (text.includes('gorilla')) return 'photo-gorilla';
+    if (text.includes('bird')) return 'photo-bird';
+    if (text.includes('culture') || text.includes('batwa')) return 'photo-culture';
+    if (text.includes('info') || text.includes('leaf')) return 'photo-leaf';
+    if (text.includes('map') || text.includes('route') || text.includes('trail')) return 'photo-forest';
+    return 'photo-forest';
+}
+
+function getQuickCardPhotoClass(cardKey = '') {
+    const key = String(cardKey).toLowerCase();
+    if (key === 'animals') return 'photo-gorilla';
+    if (key === 'map') return 'photo-forest';
+    if (key === 'culture') return 'photo-culture';
+    if (key === 'info') return 'photo-leaf';
+    return 'photo-forest';
+}
+
+function getRecommendationPhotoClass(item = {}, index = 0) {
+    const text = `${item.title || ''} ${item.reason || ''}`.toLowerCase();
+    if (text.includes('forest walk')) return 'photo-forest-walk';
+    if (text.includes('gorilla')) return 'photo-gorilla';
+    if (text.includes('bird')) return 'photo-bird';
+    if (text.includes('culture') || text.includes('batwa')) return 'photo-culture';
+    if (text.includes('leaf') || text.includes('info')) return 'photo-leaf';
+    if (index === 0) return 'photo-gorilla';
+    if (index === 1) return 'photo-bird';
+    if (index === 2) return 'photo-culture';
+    return 'photo-forest';
 }
 
 function getPageTitle(view) {
@@ -60,10 +94,30 @@ function navigateTo(view) {
     renderView(view);
 }
 
+let liveMapInstance = null;
+let liveMapLayers = {
+    markers: [],
+    boundary: null,
+    route: null,
+    activeTourRoute: null
+};
+let liveMapRefreshTimer = null;
+let liveMapPOIs = [];
+let activeGuidanceTarget = null;
+
+function getGuideOpsManager() {
+    if (!window.__guideOpsManager) {
+        window.__guideOpsManager = new TourGuideManager();
+    }
+    return window.__guideOpsManager;
+}
+
 function renderMainLayout(content) {
     const user = Auth.getCurrentUser() || { name: 'Guest', role: 'tourist' };
     const isGuide = user?.role === 'guide' || user?.userType === 'guide';
     const isITManager = user?.role === 'it_manager' || user?.userType === 'it_manager';
+    const roleLabel = (user.role || user.userType || 'tourist').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    const avatarIcon = isITManager ? icon('chart', 'icon-md') : (isGuide ? icon('ticket', 'icon-md') : icon('user', 'icon-md'));
     
     let navItems = [
         { id: 'dashboard', icon: 'home', label: 'Home' },
@@ -80,7 +134,7 @@ function renderMainLayout(content) {
         navItems.push({ id: 'intranet', icon: 'building', label: 'Intranet' });
     }
     
-    return `<div class="app-container"><button class="sidebar-toggle" onclick="toggleSidebar()">${icon('menu', 'icon-sm')}</button><div class="sidebar"><div class="sidebar-header"><div class="sidebar-logo"><img src="/icons/icon-192.svg" alt="SIGTS logo"></div><div class="sidebar-title">Bwindi SIGTS</div></div><div class="sidebar-profile" onclick="navigateTo('profile')"><div class="sidebar-avatar">${icon('user', 'icon-md')}</div><div class="sidebar-user-info"><div class="sidebar-user-name">${escapeHtml(user.name)}</div><div class="sidebar-user-role">${user.role || 'tourist'}</div></div></div><div class="sidebar-nav">${navItems.map(item => `<div class="nav-item-vertical ${window.currentView === item.id ? 'active' : ''}" onclick="navigateTo('${item.id}')"><div class="nav-icon-vertical">${icon(item.icon, 'icon-md')}</div><div class="nav-label-vertical">${item.label}</div></div>`).join('')}</div><div class="sidebar-logout" onclick="Auth.logout()">${icon('logout', 'icon-md')} Logout</div></div><div class="main-content" onclick="closeSidebar()"><div class="content-header"><h1>${getPageTitle(window.currentView)}</h1><div class="header-right"><button class="icon-btn" onclick="renderView('notifications')">${icon('bell', 'icon-md')}</button></div></div><div class="main-container">${content}</div></div></div>`;
+    return `<div class="app-container"><button class="sidebar-toggle" onclick="toggleSidebar()">${icon('menu', 'icon-sm')}</button><div class="sidebar"><div class="sidebar-header"><div class="sidebar-brand"><div class="sidebar-logo"><img src="/icons/icon-192.svg" alt="SIGTS logo"></div><div class="sidebar-title">Bwindi SIGTS</div></div></div><div class="sidebar-nav">${navItems.map(item => `<div class="nav-item-vertical ${window.currentView === item.id ? 'active' : ''}" onclick="navigateTo('${item.id}')"><div class="nav-icon-vertical">${icon(item.icon, 'icon-md')}</div><div class="nav-label-vertical">${item.label}</div></div>`).join('')}</div><div class="sidebar-logout" onclick="Auth.logout()">${icon('logout', 'icon-md')} Logout</div></div><div class="main-content" onclick="closeSidebar()"><div class="content-header"><h1>${getPageTitle(window.currentView)}</h1><div class="header-right"><button class="icon-btn notif-btn" onclick="renderView('notifications')">${icon('bell', 'icon-md')}<span class="notif-badge">3</span></button><button class="header-profile" onclick="navigateTo('profile')"><div class="header-avatar ${isITManager ? 'role-it' : (isGuide ? 'role-guide' : 'role-tourist')}">${avatarIcon}</div><div class="header-user-info"><div class="header-user-name">${escapeHtml(user.name)}</div><div class="header-user-role">${escapeHtml(roleLabel)}</div></div></button></div></div><div class="main-container">${content}</div></div></div>`;
 }
 
 function getAnimalIconName(animalName = '') {
@@ -98,7 +152,44 @@ async function renderDashboardContent() {
     const animals = await Content.getAnimals();
     const recommendations = await AI.getRecommendations(3);
     const seasonal = await AI.getSeasonalRecommendations();
-    return `<div class="quick-grid"><div class="quick-card quick-photo animals" onclick="navigateTo('animals')"><div class="quick-icon">${icon('paw', 'icon-xl')}</div><div class="quick-label">Animals</div><div class="quick-count">${animals.length} species</div></div><div class="quick-card quick-photo map" onclick="navigateTo('map')"><div class="quick-icon">${icon('map', 'icon-xl')}</div><div class="quick-label">Map</div></div><div class="quick-card quick-photo culture" onclick="navigateTo('culture')"><div class="quick-icon">${icon('book', 'icon-xl')}</div><div class="quick-label">Culture</div></div><div class="quick-card quick-photo info" onclick="navigateTo('info')"><div class="quick-icon">${icon('info', 'icon-xl')}</div><div class="quick-label">Info</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} AI Recommendations</h3></div><div id="recList">${recommendations.map(r => `<div class="rec-card"><div class="rec-avatar" aria-hidden="true"></div><div class="rec-info"><div class="rec-title">${r.name}</div><div class="rec-match">${Math.round(r.score * 100)}% match</div><div class="rec-reason">${r.reason}</div></div></div>`).join('')}</div></div><div class="dashboard-quote-card"><blockquote>"The best view comes after the hardest climb."</blockquote></div></div><div class="section-card"><div class="section-header"><h3>${icon('leaf', 'icon-sm')} Seasonal: ${seasonal.season === 'dry' ? `${icon('sun', 'icon-sm')} Dry Season` : `${icon('rain', 'icon-sm')} Wet Season`}</h3></div><div class="seasonal-list">${seasonal.recommendations.map(a => `<div class="seasonal-item">• ${a}</div>`).join('')}</div></div>`;
+    return renderDashboardShell({
+        primaryTitle: 'AI Recommendations',
+        primaryIcon: 'target',
+        primaryItems: recommendations.map((r) => ({
+            title: r.name,
+            match: `${Math.round(r.score * 100)}% match`,
+            reason: r.reason
+        })),
+        quote: '"The best view comes after the hardest climb."',
+        seasonalTitle: seasonal.season === 'dry' ? `${icon('sun', 'icon-sm')} Dry Season` : `${icon('rain', 'icon-sm')} Wet Season`,
+        seasonalItems: seasonal.recommendations,
+        seasonalActionLabel: 'View Suggestions',
+        animalCount: animals.length
+    });
+}
+
+function renderDashboardQuickGrid(animalCount = 0) {
+    return `<div class="quick-grid"><div class="quick-card quick-photo ${getQuickCardPhotoClass('animals')}" onclick="navigateTo('animals')"><div class="quick-icon">${icon('paw', 'icon-xl')}</div><div class="quick-label">Animals</div><div class="quick-count">${animalCount} species</div></div><div class="quick-card quick-photo ${getQuickCardPhotoClass('map')}" onclick="navigateTo('map')"><div class="quick-icon">${icon('map', 'icon-xl')}</div><div class="quick-label">Map</div></div><div class="quick-card quick-photo ${getQuickCardPhotoClass('culture')}" onclick="navigateTo('culture')"><div class="quick-icon">${icon('book', 'icon-xl')}</div><div class="quick-label">Culture</div></div><div class="quick-card quick-photo ${getQuickCardPhotoClass('info')}" onclick="navigateTo('info')"><div class="quick-icon">${icon('info', 'icon-xl')}</div><div class="quick-label">Info</div></div></div>`;
+}
+
+function renderDashboardShell({
+    primaryTitle,
+    primaryIcon,
+    primaryItems,
+    quote,
+    seasonalTitle,
+    seasonalItems,
+    seasonalActionLabel,
+    animalCount
+}) {
+    return `${renderDashboardQuickGrid(animalCount)}<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon(primaryIcon, 'icon-sm')} ${primaryTitle}</h3></div><div id="recList">${primaryItems.map((item, index) => `<div class="rec-card"><div class="rec-avatar ${getRecommendationPhotoClass(item, index)}" aria-hidden="true"></div><div class="rec-info"><div class="rec-title">${escapeHtml(item.title)}</div>${item.match ? `<div class="rec-match">${escapeHtml(item.match)}</div>` : ''}<div class="rec-reason">${escapeHtml(item.reason)}</div></div><button class="rec-go" aria-label="Open">${icon('map', 'icon-sm')}</button></div>`).join('') || '<div class="empty-state">No items available.</div>'}</div></div><div class="dashboard-quote-card"><blockquote>${escapeHtml(quote)}</blockquote></div></div><div class="section-card seasonal-card"><div class="section-header"><h3>${icon('leaf', 'icon-sm')} Seasonal: ${seasonalTitle}</h3></div><div class="seasonal-list">${seasonalItems.map((a) => `<div class="seasonal-item">• ${escapeHtml(a)}</div>`).join('') || '<div class="seasonal-item">• No seasonal updates available</div>'}</div><div class="seasonal-bottom"><div class="seasonal-image-strip photo-leaf" aria-hidden="true"></div><button class="seasonal-action-btn">${escapeHtml(seasonalActionLabel || 'View Suggestions')}</button></div></div>`;
+    return `${renderDashboardQuickGrid(animalCount)}<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon(primaryIcon, 'icon-sm')} ${primaryTitle}</h3></div><div id="recList">${primaryItems.map((item, index) => {
+        const recClass = item.avatarType === 'icon' ? 'rec-card system-rec' : 'rec-card';
+        const iconOnlyAvatar = item.avatarType === 'icon'
+            ? `<div class="rec-avatar metric-avatar metric-avatar-${escapeHtml(item.metricColor || 'default')}" aria-hidden="true"><span class="metric-avatar-icon">${icon(item.iconName || 'info', 'icon-md')}</span></div>`
+            : `<div class="rec-avatar ${item.avatarClass || getRecommendationPhotoClass(item, index)}" aria-hidden="true">${item.iconName ? `<span class="rec-symbol">${icon(item.iconName, 'icon-md')}</span>` : ''}</div>`;
+        return `<div class="${recClass}">${iconOnlyAvatar}<div class="rec-info"><div class="rec-title">${escapeHtml(item.title)}</div>${item.match ? `<div class="rec-match">${escapeHtml(item.match)}</div>` : ''}<div class="rec-reason">${escapeHtml(item.reason)}</div></div><button class="rec-go" aria-label="Open">${icon(item.goIcon || 'map', 'icon-sm')}</button></div>`;
+    }).join('') || '<div class="empty-state">No items available.</div>'}</div></div><div class="dashboard-quote-card"><blockquote>${escapeHtml(quote)}</blockquote></div></div><div class="section-card seasonal-card"><div class="section-header"><h3>${icon('leaf', 'icon-sm')} Seasonal: ${seasonalTitle}</h3></div><div class="seasonal-list">${seasonalItems.map((a) => `<div class="seasonal-item">• ${escapeHtml(a)}</div>`).join('') || '<div class="seasonal-item">• No seasonal updates available</div>'}</div><div class="seasonal-bottom"><div class="seasonal-image-strip photo-leaf" aria-hidden="true"></div><button class="seasonal-action-btn">${escapeHtml(seasonalActionLabel || 'View Suggestions')}</button></div></div>`;
 }
 
 async function renderAnimalsContent() {
@@ -121,7 +212,353 @@ async function renderAnimalsContent() {
 }
 
 function renderMapContent() {
-    return `<div class="map-container"><div class="map-placeholder">${icon('map', 'icon-lg')} Interactive Map<br>${icon('pin', 'icon-sm')} Your location: Buhoma Gate<br>${icon('gorilla', 'icon-sm')} Gorilla sightings nearby</div><div class="map-controls"><div class="map-control">+</div><div class="map-control">-</div><div class="map-control">${icon('pin', 'icon-sm')}</div></div></div>`;
+    return `<div class="map-container"><div id="bwindiLiveMap" class="map-canvas"></div><div class="map-overlay"><div class="map-status" id="mapStatus">Loading Bwindi live map...</div><div class="map-coords" id="mapCoords">Lat: --, Lng: --</div><div class="map-guidance"><select id="mapDestination" class="map-destination"><option value="">Select destination...</option></select><button class="small-btn" onclick="openMapGuidance()">Guide Me</button></div><div class="map-guidance-text" id="mapGuidanceText">Select a destination to get turn-by-turn guidance.</div></div></div>`;
+}
+
+function normalizeCoordinatePair(point) {
+    if (!Array.isArray(point) || point.length < 2) return null;
+    const a = Number(point[0]);
+    const b = Number(point[1]);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+    // GeoJSON commonly stores [lng, lat]. Heuristic keeps coordinates in valid lat/lng ranges.
+    if (Math.abs(a) <= 90 && Math.abs(b) <= 180) return [a, b];
+    return [b, a];
+}
+
+function getBoundaryLatLngs(boundary) {
+    if (!boundary) return [];
+    if (boundary.type === 'Polygon' && Array.isArray(boundary.coordinates?.[0])) {
+        return boundary.coordinates[0]
+            .map(normalizeCoordinatePair)
+            .filter(Boolean);
+    }
+    if (
+        Number.isFinite(Number(boundary.minLat)) &&
+        Number.isFinite(Number(boundary.maxLat)) &&
+        Number.isFinite(Number(boundary.minLng)) &&
+        Number.isFinite(Number(boundary.maxLng))
+    ) {
+        const minLat = Number(boundary.minLat);
+        const maxLat = Number(boundary.maxLat);
+        const minLng = Number(boundary.minLng);
+        const maxLng = Number(boundary.maxLng);
+        return [
+            [minLat, minLng],
+            [minLat, maxLng],
+            [maxLat, maxLng],
+            [maxLat, minLng]
+        ];
+    }
+    return [];
+}
+
+function clearLiveMapLayers() {
+    if (!liveMapInstance) return;
+    (liveMapLayers.markers || []).forEach((m) => {
+        try { liveMapInstance.removeLayer(m); } catch (_) {}
+    });
+    liveMapLayers.markers = [];
+    if (liveMapLayers.boundary) {
+        try { liveMapInstance.removeLayer(liveMapLayers.boundary); } catch (_) {}
+    }
+    liveMapLayers.boundary = null;
+    if (liveMapLayers.route) {
+        try { liveMapInstance.removeLayer(liveMapLayers.route); } catch (_) {}
+    }
+    liveMapLayers.route = null;
+    if (liveMapLayers.activeTourRoute) {
+        try { liveMapInstance.removeLayer(liveMapLayers.activeTourRoute); } catch (_) {}
+    }
+    liveMapLayers.activeTourRoute = null;
+}
+
+function setMapStatus(text) {
+    const node = document.getElementById('mapStatus');
+    if (node) node.textContent = text;
+}
+
+function setMapCoords(lat, lng) {
+    const node = document.getElementById('mapCoords');
+    if (node) {
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+            node.textContent = `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}`;
+        } else {
+            node.textContent = 'Lat: --, Lng: --';
+        }
+    }
+}
+
+function stopLiveMapRefresh() {
+    if (liveMapRefreshTimer) {
+        clearInterval(liveMapRefreshTimer);
+        liveMapRefreshTimer = null;
+    }
+}
+
+function buildTurnByTurnGuidance(from, to, destinationName) {
+    const latDiff = to.lat - from.lat;
+    const lngDiff = to.lng - from.lng;
+    const ns = latDiff >= 0 ? 'north' : 'south';
+    const ew = lngDiff >= 0 ? 'east' : 'west';
+    const distanceMeters = Geofence.calculateDistance(from.lat, from.lng, to.lat, to.lng);
+    const distanceKm = (distanceMeters / 1000).toFixed(2);
+    const minutes = Math.max(3, Math.round((distanceMeters / 1000) / 4.2 * 60)); // ~4.2 km/h trekking speed
+    const phaseOne = Math.max(1, Math.round(minutes * 0.45));
+    const phaseTwo = Math.max(1, Math.round(minutes * 0.35));
+    const phaseThree = Math.max(1, minutes - phaseOne - phaseTwo);
+    return `Head ${ns} for ~${phaseOne} min, continue ${ew} for ~${phaseTwo} min, then follow park trail signs to ${destinationName} for ~${phaseThree} min. Total distance: ${distanceKm} km (${minutes} min walk).`;
+}
+
+window.openMapGuidance = function () {
+    const selector = document.getElementById('mapDestination');
+    const guidanceNode = document.getElementById('mapGuidanceText');
+    if (!selector || !guidanceNode) return;
+    const selected = liveMapPOIs.find((p) => String(p.id) === selector.value);
+    if (!selected) {
+        guidanceNode.textContent = 'Select a destination to get turn-by-turn guidance.';
+        return;
+    }
+
+    const current = Geofence?.currentLocation || AppState?.currentLocation;
+    if (!current || !Number.isFinite(current.lat) || !Number.isFinite(current.lng)) {
+        guidanceNode.textContent = 'Live location unavailable. Allow location access to generate guidance.';
+        return;
+    }
+
+    const destination = coerceLatLng(selected);
+    if (!destination) {
+        guidanceNode.textContent = 'Destination coordinates unavailable.';
+        return;
+    }
+
+    const guidance = buildTurnByTurnGuidance(current, destination, selected.name || 'destination');
+    guidanceNode.textContent = guidance;
+    activeGuidanceTarget = {
+        name: selected.name || 'destination',
+        lat: destination.lat,
+        lng: destination.lng
+    };
+
+    if (liveMapInstance) {
+        if (liveMapLayers.activeTourRoute) {
+            try { liveMapInstance.removeLayer(liveMapLayers.activeTourRoute); } catch (_) {}
+        }
+        liveMapLayers.activeTourRoute = window.L.polyline(
+            [[current.lat, current.lng], [destination.lat, destination.lng]],
+            { color: '#D62828', weight: 3, dashArray: '10,6', opacity: 0.9 }
+        ).addTo(liveMapInstance);
+        liveMapInstance.fitBounds(liveMapLayers.activeTourRoute.getBounds().pad(0.28));
+    }
+};
+
+function teardownLiveMap() {
+    stopLiveMapRefresh();
+    if (liveMapInstance) {
+        clearLiveMapLayers();
+        try { liveMapInstance.remove(); } catch (_) {}
+        liveMapInstance = null;
+    }
+}
+
+function markerClassForLocation(location = {}) {
+    const type = String(location.type || '').toLowerCase();
+    const name = String(location.name || '').toLowerCase();
+    if (type.includes('gate')) return 'map-marker-gate';
+    if (type.includes('ranger') || name.includes('ranger')) return 'map-marker-ranger';
+    if (type.includes('camp') || type.includes('station')) return 'map-marker-station';
+    return 'map-marker-poi';
+}
+
+function createDivMarker(lat, lng, className, label) {
+    const marker = window.L.marker([lat, lng], {
+        icon: window.L.divIcon({
+            className: `map-marker ${className}`,
+            iconSize: [14, 14],
+            iconAnchor: [7, 7]
+        })
+    }).addTo(liveMapInstance);
+    if (label) marker.bindPopup(label);
+    return marker;
+}
+
+function coerceLatLng(record = {}) {
+    const latKeys = ['lat', 'latitude', 'location_lat', 'current_lat'];
+    const lngKeys = ['lng', 'longitude', 'location_lng', 'current_lng'];
+    let lat;
+    let lng;
+    for (const key of latKeys) {
+        const v = Number(record[key]);
+        if (Number.isFinite(v)) { lat = v; break; }
+    }
+    for (const key of lngKeys) {
+        const v = Number(record[key]);
+        if (Number.isFinite(v)) { lng = v; break; }
+    }
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    return { lat, lng };
+}
+
+async function refreshLiveMapData() {
+    if (!liveMapInstance) return;
+    clearLiveMapLayers();
+
+    const defaultCenter = [-1.05, 29.7];
+
+    try {
+        const [locations, boundary, sightings, tours] = await Promise.all([
+            API.getLocations(),
+            API.getRecentSightings(50),
+            API.getToursForGuide(),
+            (async () => {
+                try {
+                    const response = await fetch(`${API_URL}/geofence/boundary`, {
+                        headers: Auth?.token ? { Authorization: `Bearer ${Auth.token}` } : {}
+                    });
+                    if (response.ok) return await response.json();
+                } catch (_) {}
+                return Geofence?.parkBoundary || null;
+            })()
+        ]);
+
+        const boundaryLatLngs = getBoundaryLatLngs(boundary);
+        if (boundaryLatLngs.length >= 3) {
+            liveMapLayers.boundary = window.L.polygon(boundaryLatLngs, {
+                color: '#1B5E20',
+                weight: 2,
+                fillColor: '#2E7D32',
+                fillOpacity: 0.12
+            }).addTo(liveMapInstance);
+        }
+
+        const pois = (Array.isArray(locations) ? locations : []);
+        liveMapPOIs = pois.filter((loc) => coerceLatLng(loc));
+        const destinationSelect = document.getElementById('mapDestination');
+        if (destinationSelect) {
+            const currentValue = destinationSelect.value;
+            destinationSelect.innerHTML = '<option value="">Select destination...</option>' +
+                liveMapPOIs.map((loc, idx) => `<option value="${escapeHtml(String(loc.location_id || loc.id || idx))}">${escapeHtml(loc.name || 'POI')}</option>`).join('');
+            if (currentValue && liveMapPOIs.some((loc, idx) => String(loc.location_id || loc.id || idx) === currentValue)) {
+                destinationSelect.value = currentValue;
+            }
+            liveMapPOIs = liveMapPOIs.map((loc, idx) => ({ ...loc, id: String(loc.location_id || loc.id || idx) }));
+        }
+
+        const poiMarkers = pois
+            .map((loc) => {
+                const coords = coerceLatLng(loc);
+                if (!coords) return null;
+                return createDivMarker(
+                    coords.lat,
+                    coords.lng,
+                    markerClassForLocation(loc),
+                    `<strong>${escapeHtml(loc.name || 'POI')}</strong><br>${escapeHtml(loc.type || 'location')}`
+                );
+            })
+            .filter(Boolean);
+        liveMapLayers.markers.push(...poiMarkers);
+
+        const sightingMarkers = (Array.isArray(sightings) ? sightings : [])
+            .map((sighting) => {
+                const coords = coerceLatLng(sighting);
+                if (!coords) return null;
+                return createDivMarker(
+                    coords.lat,
+                    coords.lng,
+                    'map-marker-sighting',
+                    `<strong>${escapeHtml(sighting.animal_name || 'Sighting')}</strong><br>${escapeHtml(sighting.location_name || 'Observed point')}`
+                );
+            })
+            .filter(Boolean);
+        liveMapLayers.markers.push(...sightingMarkers);
+
+        const current = Geofence?.currentLocation || AppState?.currentLocation;
+        if (current && Number.isFinite(current.lat) && Number.isFinite(current.lng)) {
+            const userMarker = createDivMarker(current.lat, current.lng, 'map-marker-user', 'Your current location');
+            userMarker.bindPopup('Your current location');
+            liveMapLayers.markers.push(userMarker);
+            setMapCoords(current.lat, current.lng);
+            if (activeGuidanceTarget) {
+                const remaining = Geofence.calculateDistance(current.lat, current.lng, activeGuidanceTarget.lat, activeGuidanceTarget.lng);
+                const node = document.getElementById('mapGuidanceText');
+                if (node) {
+                    if (remaining <= 50) {
+                        node.textContent = `You have reached ${activeGuidanceTarget.name}. Route complete. Please add feedback from your profile.`;
+                    } else {
+                        node.textContent = `Navigating to ${activeGuidanceTarget.name}. Remaining distance: ${(remaining / 1000).toFixed(2)} km.`;
+                    }
+                }
+            }
+        } else {
+            setMapCoords(null, null);
+        }
+
+        const historyPoints = (Geofence?.locationHistory || [])
+            .slice(-120)
+            .map((p) => [Number(p.lat), Number(p.lng)])
+            .filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]));
+        if (historyPoints.length > 1) {
+            liveMapLayers.route = window.L.polyline(historyPoints, {
+                color: '#2A9D8F',
+                weight: 3,
+                opacity: 0.85
+            }).addTo(liveMapInstance);
+        }
+
+        const activeTourPoints = (Array.isArray(tours) ? tours : [])
+            .filter((t) => String(t.status || '').toLowerCase() === 'ongoing')
+            .map((t) => coerceLatLng(t))
+            .filter(Boolean)
+            .map((p) => [p.lat, p.lng]);
+        if (activeTourPoints.length > 1) {
+            liveMapLayers.activeTourRoute = window.L.polyline(activeTourPoints, {
+                color: '#D62828',
+                weight: 3,
+                opacity: 0.9,
+                dashArray: '8,6'
+            }).addTo(liveMapInstance);
+        }
+
+        const layers = [];
+        if (liveMapLayers.boundary) layers.push(liveMapLayers.boundary);
+        if (liveMapLayers.route) layers.push(liveMapLayers.route);
+        if (liveMapLayers.activeTourRoute) layers.push(liveMapLayers.activeTourRoute);
+        layers.push(...liveMapLayers.markers);
+        if (layers.length) {
+            const group = window.L.featureGroup(layers);
+            liveMapInstance.fitBounds(group.getBounds().pad(0.18));
+        } else {
+            liveMapInstance.setView(defaultCenter, 11);
+        }
+
+        setMapStatus(`Bwindi live: ${poiMarkers.length} POIs, ${sightingMarkers.length} sightings`);
+    } catch (error) {
+        setMapStatus('Map loaded with limited data. Check API connectivity.');
+    }
+}
+
+async function initializeLiveMap() {
+    const mapNode = document.getElementById('bwindiLiveMap');
+    if (!mapNode) return;
+
+    if (!window.L || !window.L.map) {
+        setMapStatus('Map library unavailable. Check internet/CDN access.');
+        return;
+    }
+
+    teardownLiveMap();
+
+    const defaultCenter = [-1.05, 29.7];
+    liveMapInstance = window.L.map('bwindiLiveMap', { zoomControl: true }).setView(defaultCenter, 11);
+
+    window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(liveMapInstance);
+
+    await refreshLiveMapData();
+    liveMapRefreshTimer = setInterval(() => {
+        refreshLiveMapData();
+    }, 15000);
 }
 
 async function renderCultureContent() {
@@ -168,7 +605,8 @@ async function renderSightingsContent() {
 function renderProfileContent() {
     const user = Auth.getCurrentUser() || { name: 'Tourist' };
     const isITManager = user?.role === 'it_manager' || user?.userType === 'it_manager';
-    return `<div class="profile-header"><div class="profile-avatar">${icon('user', 'icon-xl')}</div><div class="profile-name">${escapeHtml(user.name)}</div><div class="profile-role">${user.role || 'tourist'}</div><div class="profile-dept">${user.department || ''}</div></div><div class="profile-menu"><div class="menu-item" onclick="downloadOfflineContent()"><div class="menu-icon">${icon('download', 'icon-md')}</div><div class="menu-text">Download Offline Content</div></div>${isITManager ? `<div class="menu-item" onclick="handleMFASetup()"><div class="menu-icon">${icon('shield', 'icon-md')}</div><div class="menu-text">Configure MFA</div></div>` : ''}<div class="menu-item" onclick="Auth.logout()"><div class="menu-icon">${icon('logout', 'icon-md')}</div><div class="menu-text">Logout</div></div></div>`;
+    const currentLanguage = AppState.userPreferences?.language || 'en';
+    return `<div class="profile-header"><div class="profile-avatar">${icon('user', 'icon-xl')}</div><div class="profile-name">${escapeHtml(user.name)}</div><div class="profile-role">${user.role || 'tourist'}</div><div class="profile-dept">${user.department || ''}</div></div><div class="section-card"><div class="section-header"><h3>${icon('note', 'icon-sm')} Experience Settings</h3></div><div style="padding:16px; display:grid; gap:12px;"><label class="auth-field"><span class="auth-field-label">Language</span><select id="profileLanguage" class="auth-select"><option value="en" ${currentLanguage === 'en' ? 'selected' : ''}>English</option><option value="fr" ${currentLanguage === 'fr' ? 'selected' : ''}>French</option><option value="sw" ${currentLanguage === 'sw' ? 'selected' : ''}>Swahili</option><option value="ruk" ${currentLanguage === 'ruk' ? 'selected' : ''}>Rukiga</option></select></label><button class="small-btn" onclick="saveLanguagePreference()">Save Language</button></div></div><div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Feedback Loop</h3></div><div style="padding:16px; display:grid; gap:12px;"><label class="auth-field"><span class="auth-field-label">Rate your recent experience</span><select id="feedbackRating" class="auth-select"><option value="5">5 - Excellent</option><option value="4">4 - Good</option><option value="3">3 - Average</option><option value="2">2 - Poor</option><option value="1">1 - Very Poor</option></select></label><label class="auth-field"><span class="auth-field-label">Category</span><select id="feedbackCategory" class="auth-select"><option value="tour">Tour</option><option value="guide">Guide</option><option value="content">Content</option><option value="app">App</option><option value="general">General</option></select></label><label class="auth-field"><span class="auth-field-label">Comment</span><textarea id="feedbackComment" class="auth-input" style="min-height:80px; padding-top:10px;" placeholder="Share what worked and what can improve..."></textarea></label><button class="small-btn" onclick="submitUserFeedback()">Submit Feedback</button><div id="feedbackList" class="seasonal-list"><div class="seasonal-item">Loading your recent feedback...</div></div></div></div><div class="profile-menu"><div class="menu-item" onclick="downloadOfflineContent()"><div class="menu-icon">${icon('download', 'icon-md')}</div><div class="menu-text">Download Offline Content</div></div>${isITManager ? `<div class="menu-item" onclick="handleMFASetup()"><div class="menu-icon">${icon('shield', 'icon-md')}</div><div class="menu-text">Configure MFA</div></div>` : ''}<div class="menu-item" onclick="Auth.logout()"><div class="menu-icon">${icon('logout', 'icon-md')}</div><div class="menu-text">Logout</div></div></div>`;
 }
 
 function renderInfoContent() {
@@ -194,16 +632,102 @@ function renderAIChatContent() {
 }
 
 async function renderGuideDashboard() {
-    const guideManager = new TourGuideManager();
+    const guideManager = getGuideOpsManager();
     const dashboard = await guideManager.getGuideDashboard();
-    return `<div class="guide-dashboard"><div class="metrics-grid"><div class="metric-card"><div class="metric-value">${dashboard.stats.totalTours}</div><div class="metric-label">Total Tours</div></div><div class="metric-card"><div class="metric-value">${dashboard.stats.totalGuests}</div><div class="metric-label">Guests Served</div></div><div class="metric-card"><div class="metric-value">${dashboard.stats.averageRating}</div><div class="metric-label">Rating</div></div></div><div class="section-card"><div class="section-header"><h3>${icon('clock', 'icon-sm')} Today's Tours</h3></div>${dashboard.today.map(t => `<div class="tour-item"><div class="tour-name">${t.route_name || 'Gorilla Trek'}</div><div class="tour-time">${new Date(t.scheduled_start).toLocaleTimeString()}</div><button class="small-btn" onclick="startTour('${t.tour_session_id}')">Start Tour</button></div>`).join('') || '<div class="empty-state">No tours today</div>'}</div><div class="shift-controls"><button class="login-btn" onclick="clockInOut()">${dashboard.activeShift ? 'Clock Out' : 'Clock In'}</button></div><div id="activeTourPanel" style="display:none"><div id="tourTimerDisplay" class="tour-timer">00:00:00</div><button onclick="quickSighting()">Log Sighting</button><button onclick="endActiveTour()">End Tour</button></div></div>`;
+    const animals = await Content.getAnimals();
+    const guideItems = (dashboard.today || []).slice(0, 3).map((t) => ({
+        title: t.route_name || 'Gorilla Trek',
+        match: `${new Date(t.scheduled_start).toLocaleTimeString()}`,
+        reason: `Guests: ${t.current_participants || 0} • Tap Guide tab actions to start this tour`
+    }));
+    if (!guideItems.length) {
+        guideItems.push({
+            title: 'No tours scheduled',
+            match: 'Today',
+            reason: 'Your next tours will appear here once assigned.'
+        });
+    }
+    const todaysTour = (dashboard.today || [])[0];
+    const tourDetails = todaysTour?.tour_session_id ? await API.getTourById(todaysTour.tour_session_id) : null;
+    const participants = Array.isArray(tourDetails?.participants) ? tourDetails.participants : [];
+    return `<div class="guide-dashboard">${renderDashboardShell({
+        primaryTitle: "Today's Tours",
+        primaryIcon: 'clock',
+        primaryItems: guideItems,
+        quote: '"Great guiding turns every trek into a story."',
+        seasonalTitle: `${icon('target', 'icon-sm')} Live Guide Status`,
+        seasonalItems: [
+            `Total tours: ${dashboard.stats.totalTours}`,
+            `Guests served: ${dashboard.stats.totalGuests}`,
+            `Average rating: ${dashboard.stats.averageRating}`,
+            `Shift: ${dashboard.activeShift ? 'On duty' : 'Off duty'}`
+        ],
+        seasonalActionLabel: dashboard.activeShift ? 'Clock Out' : 'Clock In',
+        animalCount: animals.length
+    })}<div class="section-card"><div class="section-header"><h3>${icon('clock', 'icon-sm')} Schedule Controls</h3></div><div class="seasonal-list">${(dashboard.today || []).length ? dashboard.today.map((t) => `<div class="seasonal-item"><strong>${escapeHtml(t.route_name || 'Tour Route')}</strong> - ${new Date(t.scheduled_start).toLocaleTimeString()} (${t.confirmed_guests || t.group_size || 0} guests) <button class="small-btn" onclick="startTour('${t.tour_session_id}')">Start</button></div>`).join('') : '<div class="seasonal-item">No tours today.</div>'}</div></div><div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Live Participants</h3></div><div class="seasonal-list">${participants.length ? participants.map((p) => `<div class="seasonal-item">${escapeHtml(p.first_name || p.username || 'Tourist')} ${escapeHtml(p.last_name || '')} - ${escapeHtml(p.pickup_location || 'In-session')}</div>`).join('') : '<div class="seasonal-item">No participants assigned yet.</div>'}</div></div><div class="shift-controls"><button class="login-btn" onclick="clockInOut()">${dashboard.activeShift ? 'Clock Out' : 'Clock In'}</button><button class="small-btn" onclick="addTourNotePrompt()">Add Tour Note</button></div><div id="activeTourPanel" style="${guideManager.activeTour ? 'display:block' : 'display:none'}"><div id="tourTimerDisplay" class="tour-timer">00:00:00</div><button onclick="quickSighting()">Log Sighting</button><button onclick="endActiveTour()">End Tour</button></div></div>`;
 }
 
 async function renderITManagerDashboard() {
     const metrics = await ITAPI.getSystemMetrics();
     const users = await ITAPI.getUserList();
-    const schemaStatus = await ITAPI.getSchemaStatus();
-    return `<div class="it-dashboard"><div class="welcome-card"><h2>Welcome back, ${escapeHtml(Auth.getCurrentUser()?.name)}</h2></div><div class="metrics-grid"><div class="metric-card"><div class="metric-value">${metrics.activeUsers}</div><div class="metric-label">Active Users</div></div><div class="metric-card"><div class="metric-value">${metrics.syncQueueSize}</div><div class="metric-label">Pending Sync</div></div><div class="metric-card"><div class="metric-value">${metrics.totalSightings}</div><div class="metric-label">Sightings</div></div><div class="metric-card"><div class="metric-value">${metrics.totalStaff || 0}</div><div class="metric-label">Staff Total</div></div><div class="metric-card"><div class="metric-value">${metrics.guidesOnDuty || 0}</div><div class="metric-label">Guides Active</div></div><div class="metric-card"><div class="metric-value">${metrics.inventoryItems || 0}</div><div class="metric-label">Inventory Items</div></div></div><div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Users</h3></div>${users.map(u => `<div class="user-item">${u.full_name} (${u.user_type}) - ${u.department || ''}</div>`).join('')}</div><div class="section-card"><div class="section-header"><h3>${icon('database', 'icon-sm')} Database Schema (Extended)</h3></div><div class="schema-items">${Object.entries(schemaStatus).slice(0,12).map(([name, info]) => `<div class="schema-item">${icon('chart', 'icon-sm')} ${name}: ${info.count} records</div>`).join('')}</div></div><div class="admin-actions"><button class="admin-action-btn" onclick="handleMFASetup()">${icon('shield', 'icon-sm')} Configure MFA</button><button class="admin-action-btn" onclick="clearAllCache()">Clear Cache</button><button class="admin-action-btn" onclick="exportData()">Export Data</button><button class="admin-action-btn danger" onclick="resetApp()">Reset App</button></div></div>`;
+    const interactive = await ITAPI.getInteractiveAnalytics();
+    const liveOps = await ITAPI.getLiveOperations();
+    const flowBars = (interactive.visitorFlow || []).slice(-7).map((point) => {
+        const value = Number(point.visitor_count || 0);
+        const width = Math.min(100, value === 0 ? 6 : value);
+        return `<div class="analytics-row"><span>${new Date(point.time_period).toLocaleDateString()}</span><div class="analytics-bar"><div style="width:${width}%;"></div></div><strong>${value}</strong></div>`;
+    }).join('') || '<div class="empty-state">No visitor flow data yet.</div>';
+
+    const popularRows = (interactive.popularContent || []).slice(0, 6).map((item) =>
+        `<div class="analytics-row"><span>${escapeHtml(item.name || 'Item')}</span><span>${escapeHtml(item.type || 'content')}</span><strong>${item.view_count || 0}</strong></div>`
+    ).join('') || '<div class="empty-state">No popular content data yet.</div>';
+    const demographicRows = (interactive.demographics?.user_types || []).map((row) =>
+        `<div class="analytics-row"><span>${escapeHtml(row.user_type || 'user')}</span><div class="analytics-bar"><div style="width:${Math.min(100, Number(row.count || 0) * 10)}%;"></div></div><strong>${row.count || 0}</strong></div>`
+    ).join('') || '<div class="empty-state">No demographics data yet.</div>';
+    const animals = await Content.getAnimals();
+    return `<div class="it-dashboard">${renderDashboardShell({
+        primaryTitle: 'System Recommendations',
+        primaryIcon: 'database',
+        primaryItems: [
+            {
+                title: 'Active Users',
+                match: `${metrics.activeUsers || 0} online`,
+                reason: 'Current authenticated sessions in the system.',
+                iconName: 'users',
+                goIcon: 'users',
+                avatarType: 'icon',
+                metricColor: 'users'
+            },
+            {
+                title: 'Pending Sync',
+                match: `${metrics.syncQueueSize || 0} queued`,
+                reason: 'Offline records waiting for server reconciliation.',
+                iconName: 'database',
+                goIcon: 'download',
+                avatarType: 'icon',
+                metricColor: 'sync'
+            },
+            {
+                title: 'Visitor Satisfaction',
+                match: `${Number(interactive.satisfaction?.overall || 0).toFixed(1)} / 5`,
+                reason: `${interactive.satisfaction?.satisfaction_rate || 0}% positive ratings`,
+                iconName: 'smile',
+                goIcon: 'chart',
+                avatarType: 'icon',
+                metricColor: 'satisfaction'
+            }
+        ],
+        quote: '"Reliable systems make better field decisions."',
+        seasonalTitle: `${icon('chart', 'icon-sm')} Admin Snapshot`,
+        seasonalItems: [
+            `Total sightings: ${metrics.totalSightings || 0}`,
+            `Total staff: ${metrics.totalStaff || 0}`,
+            `Guides on duty: ${metrics.guidesOnDuty || 0}`,
+            `Inventory items: ${metrics.inventoryItems || 0}`
+        ],
+        seasonalActionLabel: 'View Suggestions',
+        animalCount: animals.length
+    })}<div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Users</h3></div>${users.map(u => `<div class="user-item">${u.full_name} (${u.user_type}) - ${u.department || ''}</div>`).join('')}</div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('chart', 'icon-sm')} Visitor Flow (7 days)</h3></div><div class="analytics-list">${flowBars}</div></div><div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Popular Content</h3></div><div class="analytics-list">${popularRows}</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} User Type Demographics</h3></div><div class="analytics-list">${demographicRows}</div></div><div class="section-card"><div class="section-header"><h3>${icon('map', 'icon-sm')} Congestion Guidance</h3></div><div class="seasonal-list">${(interactive.congestionRecommendations || []).map((r) => `<div class="seasonal-item">• ${escapeHtml(r)}</div>`).join('') || '<div class="seasonal-item">• No congestion recommendations available</div>'}</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('building', 'icon-sm')} Intranet Connectivity</h3></div><div class="analytics-list"><div class="analytics-row"><span>Intranet</span><div class="analytics-bar"><div style="width:${liveOps.intranetStatus?.isIntranet ? 100 : 35}%;"></div></div><strong>${liveOps.intranetStatus?.isIntranet ? 'Connected' : 'External'}</strong></div><div class="analytics-row"><span>Device IP</span><span></span><strong>${escapeHtml(liveOps.intranetStatus?.ip || 'Unknown')}</strong></div><div class="analytics-row"><span>Pending Sync</span><span></span><strong>${liveOps.syncStatus?.pending || liveOps.syncStatus?.pending_items || 0}</strong></div></div></div><div class="section-card"><div class="section-header"><h3>${icon('user', 'icon-sm')} Live Peers / Guests</h3></div><div class="seasonal-list">${(liveOps.peers || []).length ? liveOps.peers.slice(0, 8).map((p) => `<div class="seasonal-item">• ${escapeHtml(p.name || 'Peer')} (${escapeHtml(p.type || 'user')})${p.location ? ` @ ${Number(p.location.lat).toFixed(4)}, ${Number(p.location.lng).toFixed(4)}` : ''}</div>`).join('') : '<div class="seasonal-item">• No live peers detected in last 5 minutes.</div>'}</div></div></div><div class="admin-actions"><button class="admin-action-btn" onclick="handleMFASetup()">${icon('shield', 'icon-sm')} Configure MFA</button><button class="admin-action-btn" onclick="clearAllCache()">Clear Cache</button><button class="admin-action-btn" onclick="exportData()">Export Data</button><button class="admin-action-btn danger" onclick="resetApp()">Reset App</button></div></div>`;
 }
 
 // =====================================================
@@ -217,14 +741,27 @@ async function renderIntranetDashboard() {
         Intranet.getHRStats()
     ]);
     
+    const animals = await Content.getAnimals();
     return `<div class="intranet-dashboard">
-        <div class="metrics-grid">
-            <div class="metric-card"><div class="metric-value">${hrStats.totalStaff}</div><div class="metric-label">Total Staff</div></div>
-            <div class="metric-card"><div class="metric-value">${hrStats.guidesOnDuty}</div><div class="metric-label">Guides on Duty</div></div>
-            <div class="metric-card"><div class="metric-value">${hrStats.itStaff}</div><div class="metric-label">IT Team</div></div>
-            <div class="metric-card"><div class="metric-value">${inventory.length}</div><div class="metric-label">Inventory Items</div></div>
-        </div>
-        
+        ${renderDashboardShell({
+            primaryTitle: 'Intranet Highlights',
+            primaryIcon: 'megaphone',
+            primaryItems: (announcements || []).slice(0, 3).map((a) => ({
+                title: a.title,
+                match: `${a.priority || 'normal'} priority`,
+                reason: a.content
+            })),
+            quote: '"Clear internal communication powers smooth operations."',
+            seasonalTitle: `${icon('users', 'icon-sm')} HR Snapshot`,
+            seasonalItems: [
+                `Total staff: ${hrStats.totalStaff}`,
+                `Guides on duty: ${hrStats.guidesOnDuty}`,
+                `IT team: ${hrStats.itStaff}`,
+                `Inventory records: ${inventory.length}`
+            ],
+            seasonalActionLabel: 'View Suggestions',
+            animalCount: animals.length
+        })}
         <div class="section-card">
             <div class="section-header"><h3>${icon('megaphone', 'icon-sm')} Internal Announcements</h3><button class="add-btn" onclick="showAddAnnouncementModal()">${icon('plus', 'icon-sm')} Post</button></div>
             <div id="announcementsList">${announcements.map(a => `<div class="announcement-item ${a.priority}"><div class="announcement-title">${escapeHtml(a.title)}</div><div class="announcement-meta">${new Date(a.date).toLocaleDateString()} by ${a.author}</div><div class="announcement-content">${escapeHtml(a.content)}</div><button class="small-btn" onclick="deleteAnnouncement(${a.id})">Delete</button></div>`).join('') || '<div class="empty-state">No announcements</div>'}</div>
@@ -310,6 +847,59 @@ window.sendAIChatMessage = async function() {
     messages.innerHTML += `<div class="rec-card"><div class="rec-info"><div class="rec-title">Assistant</div><div class="rec-reason">${escapeHtml(answer)}</div></div></div>`;
     messages.scrollTop = messages.scrollHeight;
 };
+
+window.saveLanguagePreference = async function () {
+    const language = document.getElementById('profileLanguage')?.value || 'en';
+    const result = await API.updateUserProfile({ language_pref: language });
+    if (result?.error) {
+        alert(`Failed to save language: ${result.error}`);
+        return;
+    }
+    AppState.userPreferences.language = language;
+    localStorage.setItem('language', language);
+    alert('Language preference saved.');
+};
+
+window.submitUserFeedback = async function () {
+    const rating = Number(document.getElementById('feedbackRating')?.value || 5);
+    const category = document.getElementById('feedbackCategory')?.value || 'general';
+    const comment = (document.getElementById('feedbackComment')?.value || '').trim();
+    const payload = { rating, category, comment };
+    const result = await API.submitFeedback(payload);
+
+    if (!result) {
+        // offline fallback to keep feedback loop interactive
+        const feedback = JSON.parse(localStorage.getItem('feedback') || '[]');
+        feedback.unshift({
+            feedback_id: `local_${Date.now()}`,
+            rating,
+            category,
+            comment,
+            created_at: new Date().toISOString()
+        });
+        localStorage.setItem('feedback', JSON.stringify(feedback));
+        alert('Feedback saved locally and will sync when online.');
+    } else {
+        alert('Thanks! Your feedback was submitted.');
+    }
+    const commentNode = document.getElementById('feedbackComment');
+    if (commentNode) commentNode.value = '';
+    await loadRecentFeedback();
+};
+
+async function loadRecentFeedback() {
+    const list = document.getElementById('feedbackList');
+    if (!list) return;
+    const feedback = await API.getMyFeedback(5);
+    if (!feedback.length) {
+        list.innerHTML = '<div class="seasonal-item">No feedback submitted yet.</div>';
+        return;
+    }
+    list.innerHTML = feedback.map((item) => {
+        const date = new Date(item.created_at || Date.now()).toLocaleDateString();
+        return `<div class="seasonal-item"><strong>${'★'.repeat(Number(item.rating || 0))}</strong> ${escapeHtml(item.category || 'general')} - ${escapeHtml(item.comment || 'No comment')} <span style="color:#6B705C;">(${date})</span></div>`;
+    }).join('');
+}
 
 // =====================================================
 // HELPER FUNCTIONS
@@ -397,8 +987,26 @@ function clearAllCache() {
     location.reload();
 }
 
-function exportData() {
-    alert('Data exported (demo)');
+async function exportData() {
+    const [animals, locations, sightings, feedback] = await Promise.all([
+        API.getAnimals(),
+        API.getLocations(),
+        API.getRecentSightings(200),
+        API.getMyFeedback(100)
+    ]);
+    const payload = {
+        generated_at: new Date().toISOString(),
+        user: Auth.getCurrentUser(),
+        data: { animals, locations, sightings, feedback }
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sigts-export-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    alert('Data exported successfully.');
 }
 
 function resetApp() {
@@ -408,31 +1016,83 @@ function resetApp() {
     }
 }
 
-function addSighting() {
-    alert('Report sighting feature coming soon');
+async function addSighting() {
+    const [animals, locations] = await Promise.all([API.getAnimals(), API.getLocations()]);
+    if (!animals.length || !locations.length) {
+        alert('No animals or locations available. Run seed data first.');
+        return;
+    }
+
+    const animalName = prompt(`Animal name (${animals.slice(0, 6).map((a) => a.name).join(', ')})`);
+    if (!animalName) return;
+    const locationName = prompt(`Location name (${locations.slice(0, 6).map((l) => l.name).join(', ')})`);
+    if (!locationName) return;
+    const count = Number(prompt('Number observed', '1') || '1');
+
+    const animal = animals.find((a) => String(a.name).toLowerCase().includes(animalName.toLowerCase()));
+    const location = locations.find((l) => String(l.name).toLowerCase().includes(locationName.toLowerCase()));
+
+    if (!animal || !location) {
+        alert('Could not match animal/location. Please try with listed names.');
+        return;
+    }
+
+    const result = await API.reportSighting({
+        animal_id: animal.animal_id || animal.id,
+        location_id: location.location_id || location.id,
+        number_observed: Math.max(1, Number.isFinite(count) ? count : 1),
+        behavior: 'Observed during field session',
+        notes: 'Submitted from quick report'
+    });
+
+    if (result?.sighting_id || result?.success) {
+        alert('Sighting reported successfully.');
+        if (window.currentView === 'sightings') renderView('sightings');
+    } else {
+        alert('Failed to report sighting.');
+    }
 }
 
 async function startTour(tourId) {
-    const m = new TourGuideManager();
+    const m = getGuideOpsManager();
     await m.startTour(tourId);
     document.getElementById('activeTourPanel').style.display = 'block';
     alert('Tour started!');
 }
 
 async function endActiveTour() {
-    const m = new TourGuideManager();
-    await m.endTour(m.activeTour?.tour_session_id);
+    const m = getGuideOpsManager();
+    const result = await m.endTour(m.activeTour?.tour_session_id);
     document.getElementById('activeTourPanel').style.display = 'none';
     alert('Tour ended');
+    const askFeedback = confirm('Would you like to submit completion feedback now?');
+    if (askFeedback) {
+        renderView('profile');
+    }
 }
 
 async function quickSighting() {
-    const animal = prompt('Animal seen?');
-    if (animal) {
-        const m = new TourGuideManager();
-        await m.quickSighting(animal, 1);
-        alert('Sighting recorded!');
+    const [animals, locations] = await Promise.all([API.getAnimals(), API.getLocations()]);
+    const animalText = prompt(`Animal seen? (${animals.slice(0, 5).map((a) => a.name).join(', ')})`);
+    if (!animalText) return;
+    const count = Number(prompt('How many observed?', '1') || '1');
+    const animal = animals.find((a) => String(a.name).toLowerCase().includes(animalText.toLowerCase())) || animals[0];
+    const nearest = locations[0];
+    if (!animal || !nearest) {
+        alert('Missing seeded animal/location data.');
+        return;
     }
+    const manager = getGuideOpsManager();
+    const result = await API.reportSighting({
+        animal_id: animal.animal_id || animal.id,
+        location_id: nearest.location_id || nearest.id,
+        number_observed: Math.max(1, Number.isFinite(count) ? count : 1),
+        behavior: 'Quick guide report',
+        notes: 'Quick sighting from guide dashboard',
+        tour_session_id: manager.activeTour?.tour_session_id || null
+    });
+    if (result?.sighting_id || result?.success) alert('Sighting recorded!');
+    else alert('Sighting submit failed.');
 }
 
 async function clockInOut() {
@@ -441,6 +1101,24 @@ async function clockInOut() {
     if (!s.success) await m.clockOut();
     renderView('guide_dashboard');
 }
+
+window.addTourNotePrompt = async function () {
+    const note = prompt('Add a guide note for current/next tour:');
+    if (!note) return;
+    const m = getGuideOpsManager();
+    if (!m.activeTour?.tour_session_id) {
+        const schedule = await API.getToursForGuide();
+        const active = (schedule || []).find((t) => t.status === 'ongoing') || (schedule || [])[0];
+        if (!active?.tour_session_id) {
+            alert('No tour available for notes right now.');
+            return;
+        }
+        m.activeTour = { tour_session_id: active.tour_session_id };
+    }
+    const saved = await m.addLiveNote(note);
+    if (saved.success) alert('Tour note saved.');
+    else alert(saved.error || 'Failed to save note.');
+};
 
 function renderLoginScreen() {
     return `<div class="login-container auth-screen auth-screen-login">
@@ -554,6 +1232,10 @@ async function renderView(view) {
         renderView('login');
         return;
     }
+
+    if (view !== 'map') {
+        teardownLiveMap();
+    }
     
     let content = '';
     switch(view) {
@@ -573,4 +1255,9 @@ async function renderView(view) {
         default: content = await renderDashboardContent();
     }
     app.innerHTML = renderMainLayout(content);
+    if (view === 'map') {
+        await initializeLiveMap();
+    } else if (view === 'profile') {
+        await loadRecentFeedback();
+    }
 }
