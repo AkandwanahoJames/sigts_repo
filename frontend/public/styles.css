@@ -43,20 +43,12 @@
     --radius-sm: 8px;
     --radius-md: 12px;
     --radius-lg: 16px;
-<<<<<<< HEAD
     --radius-xl: 22px;
     --radius-2xl: 30px;
 
     --sidebar-width: 260px;
     --header-height: 72px;
     --container-width: 1040px;
-=======
-    --radius-xl: 24px;
-    --radius-2xl: 32px;
-    
-    /* Sidebar dimensions */
-    --sidebar-width: 190px;
->>>>>>> upstream/master
 }
 
 * {
@@ -65,17 +57,8 @@
     box-sizing: border-box;
 }
 
-<<<<<<< HEAD
 html {
     scroll-behavior: smooth;
-=======
-body {
-    font-family: 'Segoe UI', 'Montserrat', system-ui, -apple-system, sans-serif;
-    background: #F6F4EC;
-    color: var(--stone-900);
-    line-height: 1.5;
-    overflow-x: hidden;
->>>>>>> upstream/master
 }
 
 html,
@@ -139,12 +122,7 @@ svg {
     inset: 0 auto 0 0;
     width: var(--sidebar-width);
     height: 100vh;
-<<<<<<< HEAD
     z-index: 1000;
-=======
-    background: linear-gradient(180deg, #103B21 0%, #0F3A1F 42%, #124827 100%);
-    color: white;
->>>>>>> upstream/master
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -181,7 +159,6 @@ svg {
 }
 
 .sidebar-header {
-<<<<<<< HEAD
     min-height: auto;
     padding: 0 0 18px;
     margin-bottom: 8px;
@@ -190,18 +167,6 @@ svg {
     gap: 10px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.10);
     background: rgba(0, 0, 0, 0.08);
-=======
-    padding: 18px 14px 14px;
-    border-bottom: 1px solid rgba(233, 196, 106, 0.2);
-    margin-bottom: 12px;
-    background: rgba(0,0,0,0.08);
-}
-
-.sidebar-brand {
-    display: flex;
-    align-items: center;
-    gap: 10px;
->>>>>>> upstream/master
 }
 
 .sidebar-logo {
@@ -210,21 +175,14 @@ svg {
 }
 
 .sidebar-logo img {
-<<<<<<< HEAD
     width: 46px;
     height: 46px;
     border-radius: 50%;
-=======
-    width: 44px;
-    height: 44px;
-    border-radius: 12px;
->>>>>>> upstream/master
     object-fit: cover;
     background: #fff;
 }
 
 .sidebar-title {
-<<<<<<< HEAD
     display: flex;
     align-items: baseline;
     gap: 4px;
@@ -238,15 +196,6 @@ svg {
     font-family: "Brush Script MT", "Segoe Script", cursive;
     font-size: 19px;
     font-weight: 500;
-=======
-    font-size: 19px;
-    font-weight: 700;
-    margin-bottom: 0;
-    background: linear-gradient(135deg, #E9C46A, #D4A843);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
->>>>>>> upstream/master
 }
 
 .sidebar-subtitle {
@@ -310,7 +259,6 @@ svg {
     position: relative;
     z-index: 1;
     flex: 1;
-<<<<<<< HEAD
     padding: 0;
 }
 
@@ -363,61 +311,6 @@ svg {
     background: rgba(255, 255, 255, 0.05);
     font-weight: 850;
     transition: background 0.2s ease;
-=======
-    padding: 0 10px;
-}
-
-.nav-item-vertical {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 9px 10px;
-    margin-bottom: 4px;
-    border-radius: 14px;
-    cursor: pointer;
-    transition: all 0.25s ease;
-    color: rgba(255,255,255,0.85);
-    position: relative;
-    overflow: hidden;
-}
-
-.nav-item-vertical:hover {
-    color: white;
-    transform: translateX(4px);
-    background: rgba(233, 196, 106, 0.2);
-}
-
-.nav-item-vertical.active {
-    background: #FDFCDC;
-    color: #153E24;
-    box-shadow: var(--shadow-md);
-}
-
-.nav-icon-vertical {
-    font-size: 0;
-    min-width: 26px;
-    text-align: center;
-}
-
-.nav-label-vertical {
-    font-size: 13px;
-    font-weight: 500;
-    flex: 1;
-}
-
-.sidebar-logout {
-    margin: 10px 8px 14px;
-    padding: 10px 12px;
-    background: rgba(214, 40, 40, 0.15);
-    border-radius: var(--radius-md);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    transition: all 0.2s;
-    color: rgba(255,255,255,0.85);
-    border: 1px solid rgba(214, 40, 40, 0.3);
->>>>>>> upstream/master
 }
 
 .sidebar-logout:hover {
@@ -443,13 +336,8 @@ svg {
 .main-content {
     flex: 1;
     min-height: 100vh;
-<<<<<<< HEAD
     margin-left: var(--sidebar-width);
     background: #F7F4EC;
-=======
-    background: #F8F6EF;
-    transition: margin-left 0.3s ease;
->>>>>>> upstream/master
 }
 
 /* =====================================================
@@ -457,16 +345,6 @@ svg {
    ===================================================== */
 
 .content-header {
-<<<<<<< HEAD
-=======
-    background: #FFFFFF;
-    backdrop-filter: blur(10px);
-    padding: 16px 26px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid #ECE7D9;
->>>>>>> upstream/master
     position: sticky;
     top: 0;
     z-index: 99;
@@ -481,7 +359,6 @@ svg {
 }
 
 .content-header h1 {
-<<<<<<< HEAD
     color: var(--text-900);
     font-size: 23px;
     line-height: 1;
@@ -497,22 +374,10 @@ svg {
 .header-left p {
     color: var(--text-500);
     font-size: 12px;
-=======
-    font-size: 34px;
-    font-weight: 700;
-    background: linear-gradient(135deg, #2D6A4F, #1B5E20);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
->>>>>>> upstream/master
 }
 
 .header-right {
     display: flex;
-<<<<<<< HEAD
-=======
-    gap: 14px;
->>>>>>> upstream/master
     align-items: center;
     gap: 14px;
 }
@@ -547,7 +412,6 @@ svg {
 }
 
 .icon-btn {
-<<<<<<< HEAD
     position: relative;
     width: 38px;
     height: 38px;
@@ -597,66 +461,12 @@ svg {
 
 .header-profile:hover {
     background: rgba(31, 47, 36, 0.05);
-=======
-    background: #FFFFFF;
-    border: 1px solid #E7E2D2;
-    width: 40px;
-    height: 40px;
-    font-size: 0;
-    cursor: pointer;
-    padding: 0;
-    border-radius: 999px;
-    transition: background 0.2s;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: #1E412D;
-}
-
-.icon-btn:hover {
-    background: #F9F8F4;
-}
-
-.notif-btn {
-    position: relative;
-}
-
-.notif-badge {
-    position: absolute;
-    top: -4px;
-    right: -1px;
-    min-width: 15px;
-    height: 15px;
-    border-radius: 999px;
-    background: #0D3B0F;
-    color: #fff;
-    font-size: 9px;
-    font-weight: 700;
-    display: grid;
-    place-items: center;
-    border: 2px solid #fff;
-}
-
-.notif-badge.hidden {
-    display: none;
-}
-
-.header-profile {
-    border: none;
-    background: transparent;
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    cursor: pointer;
-    padding: 0;
->>>>>>> upstream/master
 }
 
 .header-avatar {
     width: 42px;
     height: 42px;
     border-radius: 50%;
-<<<<<<< HEAD
 }
 
 .header-profile-copy {
@@ -678,49 +488,6 @@ svg {
 
 .main-container {
     width: 100%;
-=======
-    background-image: url('/images/dashboard-reference.png');
-    background-size: cover;
-    background-position: 8% 18%;
-    border: 2px solid #F0EBDC;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #143A23;
-}
-
-.header-avatar.role-it {
-    background-image: linear-gradient(135deg, #E9C46A, #D4A843);
-}
-
-.header-avatar.role-guide {
-    background-image: linear-gradient(135deg, #2A9D8F, #1F7E73);
-    color: #fff;
-}
-
-.header-avatar.role-tourist {
-    background-position: 8% 18%;
-}
-
-.header-user-info {
-    text-align: left;
-    line-height: 1.05;
-}
-
-.header-user-name {
-    font-size: 15px;
-    font-weight: 700;
-    color: #1A3E29;
-}
-
-.header-user-role {
-    font-size: 12px;
-    color: #6B705C;
-}
-
-.main-container {
-    padding: 18px 24px 24px;
->>>>>>> upstream/master
     max-width: 1280px;
     margin: 0 auto;
     padding: 24px;
@@ -738,26 +505,11 @@ svg {
 
 .quick-grid {
     display: grid;
-<<<<<<< HEAD
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 14px;
 }
 
 .quick-card {
-=======
-    grid-template-columns: repeat(4, 1fr);
-    gap: 14px;
-    margin-bottom: 18px;
-}
-
-.quick-card {
-    border-radius: var(--radius-xl);
-    padding: 20px 18px;
-    min-height: 152px;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.3s ease;
->>>>>>> upstream/master
     position: relative;
     min-height: 180px;
     aspect-ratio: 1.2 / 1;
@@ -785,21 +537,17 @@ svg {
     position: absolute;
     inset: 0;
     z-index: 0;
-    background-image: url('/images/dashboard-reference.png');
-    background-size: 540% auto;
+    background-size: cover;
     background-repeat: no-repeat;
+    background-position: center;
     opacity: 1;
-<<<<<<< HEAD
     filter: saturate(1.08) brightness(0.82);
-=======
->>>>>>> upstream/master
 }
 
 .quick-photo::after {
     content: "";
     position: absolute;
     inset: 0;
-<<<<<<< HEAD
     z-index: 0;
     background: linear-gradient(to bottom, rgba(0,0,0,0.25), rgba(0,0,0,0.58));
 }
@@ -808,91 +556,15 @@ svg {
     height: 180px;
 }
 
-.quick-photo.animals::before { background-position: 24% 17%; }
-.quick-photo.map::before { background-position: 49% 17%; }
-.quick-photo.culture::before { background-position: 74% 17%; }
-.quick-photo.info::before { background-position: 98% 17%; }
-=======
-    background: linear-gradient(180deg, rgba(7, 23, 11, 0.28), rgba(7, 23, 11, 0.56));
-}
-
-.quick-photo.photo-gorilla::before { background-position: 9% 18%; }
-.quick-photo.photo-forest::before { background-position: 46% 20%; }
-.quick-photo.photo-culture::before { background-position: 68% 20%; }
-.quick-photo.photo-leaf::before { background-position: 93% 22%; }
-
-.quick-photo.photo-gorilla::before,
-.rec-avatar.photo-gorilla {
-    background-image: url('/images/gorilla-card.png');
-    background-position: center;
-}
-
-.quick-photo.photo-forest::before,
-.rec-avatar.photo-forest {
-    background-image: url('/images/map-mist-card.png');
-    background-position: center;
-}
-
-.quick-photo.photo-culture::before,
-.rec-avatar.photo-culture {
-    background-image: url('/images/culture-card.png');
-    background-position: center;
-}
-
-.rec-avatar.photo-bird {
-    background-image: url('/images/bird-card.png');
-    background-position: center;
-}
-
-.rec-avatar.photo-forest-walk {
-    background-image: url('/images/forest-walk-card.png');
-    background-position: center;
-}
-
-.photo-gorilla { background-position: 9% 18% !important; }
-.photo-forest { background-position: 46% 20% !important; }
-.photo-culture { background-position: 68% 20% !important; }
-.photo-leaf { background-position: 93% 22% !important; }
-.photo-bird { background-position: 31% 52% !important; }
->>>>>>> upstream/master
-
+.quick-photo.animals::before { background-image: url('/images/gorilla-card.png'); }
+.quick-photo.map::before { background-image: url('/images/map-mist-card.png'); }
+.quick-photo.culture::before { background-image: url('/images/culture-card.png'); }
+.quick-photo.info::before { background-image: url('/images/forest-walk-card.png'); }
 .quick-photo > * {
     position: relative;
     z-index: 1;
 }
 
-<<<<<<< HEAD
-=======
-.quick-photo {
-    color: #fff;
-}
-
-.quick-card:hover {
-    transform: translateY(-6px) scale(1.02);
-    box-shadow: var(--shadow-lg);
-}
-
-.quick-card.animals {
-    background: linear-gradient(135deg, #2D6A4F, #1B5E20);
-    color: white;
-}
-
-.quick-card.map {
-    background: linear-gradient(135deg, #2A9D8F, #21867A);
-    color: white;
-}
-
-.quick-card.culture {
-    background: linear-gradient(135deg, #BC6C25, #9A5520);
-    color: white;
-}
-
-.quick-card.info {
-    background: linear-gradient(135deg, #6B705C, #5A5E4A);
-    color: white;
-}
-
->>>>>>> upstream/master
 .quick-icon {
     margin-bottom: 10px;
     display: grid;
@@ -907,7 +579,6 @@ svg {
 }
 
 .quick-label {
-<<<<<<< HEAD
     display: block;
     margin-bottom: 3px;
     color: #fff;
@@ -922,39 +593,12 @@ svg {
     color: rgba(255, 255, 255, 0.78);
     font-size: 12px;
     font-weight: 750;
-=======
-    font-size: 28px;
-    font-weight: 600;
-    margin-bottom: 6px;
-}
-
-.quick-count {
-    font-size: 18px;
-    opacity: 0.9;
-}
-
-/* Section Cards */
-.section-card {
-    background: #FDFCDC;
-    border-radius: var(--radius-lg);
-    margin-bottom: 24px;
-    overflow: hidden;
-    box-shadow: var(--shadow-sm);
-    border: 1px solid rgba(212, 163, 115, 0.2);
-    transition: box-shadow 0.2s;
->>>>>>> upstream/master
 }
 
 .dashboard-feature-grid {
     display: grid;
-<<<<<<< HEAD
     grid-template-columns: minmax(0, 1fr) 320px;
     gap: 14px;
-=======
-    grid-template-columns: 1.5fr 1fr;
-    gap: 14px;
-    margin-bottom: 14px;
->>>>>>> upstream/master
 }
 
 .dashboard-main-grid {
@@ -972,7 +616,6 @@ svg {
 
 .section-card,
 .dashboard-quote-card {
-<<<<<<< HEAD
     overflow: hidden;
     border-radius: var(--radius-lg);
     background: var(--cream-50);
@@ -985,26 +628,6 @@ svg {
     border: 1px solid #E5E1D8;
     background: #FFFFFF;
     box-shadow: 0 12px 30px rgba(15, 61, 37, 0.08);
-=======
-    min-height: 286px;
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
-    border: 1px solid rgba(212, 163, 115, 0.2);
-    padding: 24px;
-    display: flex;
-    align-items: flex-end;
-    color: #fff;
-    background-image: linear-gradient(160deg, rgba(7, 33, 16, 0.18), rgba(0, 0, 0, 0.38)), url('/images/quote-balcony-mountain.png');
-    background-size: cover;
-    background-position: center;
-}
-
-.dashboard-quote-card blockquote {
-    margin: 0;
-    font-size: 32px;
-    line-height: 1.15;
-    max-width: 280px;
->>>>>>> upstream/master
 }
 
 .section-card:hover {
@@ -1012,13 +635,8 @@ svg {
 }
 
 .section-header {
-<<<<<<< HEAD
     min-height: 48px;
     padding: 13px 16px;
-=======
-    padding: 14px 18px;
-    border-bottom: 2px solid #E9C46A;
->>>>>>> upstream/master
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1026,12 +644,6 @@ svg {
 }
 
 .section-header h3 {
-<<<<<<< HEAD
-=======
-    font-size: 22px;
-    font-weight: 600;
-    color: #2D6A4F;
->>>>>>> upstream/master
     display: flex;
     align-items: center;
     gap: 8px;
@@ -1046,10 +658,11 @@ svg {
 
 .rec-card {
     width: 100%;
-    min-height: 76px;
+    min-height: 92px;
     padding: 10px 14px;
-    display: flex;
-    align-items: center;
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr) 36px;
+    align-items: start;
     gap: 14px;
     border: 0;
     border-bottom: 1px solid var(--line);
@@ -1057,14 +670,15 @@ svg {
     color: inherit;
     text-align: left;
     transition: background 0.18s ease;
+    overflow: hidden;
 }
 
 .recommendation-row {
     display: grid;
     grid-template-columns: 72px 1fr 44px;
-    align-items: center;
-    gap: 16px;
-    padding: 16px 18px;
+    align-items: start;
+    gap: 12px;
+    padding: 12px 14px;
 }
 
 .rec-card:last-child {
@@ -1076,24 +690,44 @@ svg {
 }
 
 .rec-avatar {
+    position: relative;
+    display: block;
     width: 72px;
     height: 72px;
     flex: 0 0 auto;
+    overflow: hidden;
     border-radius: 10px;
     background-image: url('/images/dashboard-reference.png');
+    background-repeat: no-repeat;
     background-size: 1024px 640px;
     background-position: -218px -303px;
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+
+/* System recommendation rows use icon avatars, never photo sprites */
+.system-rec .rec-avatar,
+.metric-avatar {
+    background-image: none !important;
+    background: #eef3ea !important;
+    box-shadow: inset 0 0 0 1px rgba(22, 101, 52, 0.12);
+    display: grid;
+    place-items: center;
+}
+
+.metric-avatar-icon {
+    color: #1f5f35;
+    display: grid;
+    place-items: center;
 }
 
 .rec-card:nth-child(2) .rec-avatar { background-position: -218px -379px; }
 .rec-card:nth-child(3) .rec-avatar { background-position: -218px -456px; }
 
 .rec-info {
-    flex: 1;
     min-width: 0;
     display: grid;
-    gap: 3px;
+    gap: 4px;
+    align-content: start;
 }
 
 .rec-title {
@@ -1118,6 +752,13 @@ svg {
 .rec-reason {
     color: var(--text-500);
     font-size: 11px;
+    line-height: 1.35;
+}
+
+.rec-go,
+.rec-arrow {
+    align-self: center;
+    justify-self: end;
 }
 
 .rec-category-badge {
@@ -1147,20 +788,21 @@ svg {
     display: flex;
     align-items: flex-end;
     background-image:
-        linear-gradient(180deg, rgba(31, 47, 36, 0.05), rgba(0, 0, 0, 0.52)),
-        url('/images/dashboard-reference.png');
-    background-size: 320% auto;
-    background-position: 97% 73%;
+        linear-gradient(180deg, rgba(12, 28, 17, 0.1), rgba(8, 24, 14, 0.62)),
+        url('/images/auth-merged-forest.png');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
     color: #fff;
 }
 
 .dashboard-quote-card blockquote {
-    max-width: 230px;
-    color: rgba(255, 255, 255, 0.92);
-    font-size: 17px;
-    line-height: 1.35;
-    font-weight: 500;
-    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.24);
+    max-width: 100%;
+    color: rgba(255, 255, 255, 0.96);
+    font-size: 20px;
+    line-height: 1.4;
+    font-weight: 700;
+    text-shadow: none;
 }
 
 .seasonal-card {
@@ -1402,39 +1044,8 @@ svg {
 .menu-item,
 .tour-item {
     display: flex;
-<<<<<<< HEAD
     align-items: center;
     gap: 14px;
-=======
-    align-items: flex-start;
-    padding: 14px 20px;
-    gap: 16px;
-    border-bottom: 1px solid #E8EDDF;
-    transition: background 0.2s;
-}
-
-.sighting-item:hover {
-    background: rgba(45, 106, 79, 0.03);
-}
-
-.sighting-icon {
-    font-size: 0;
-}
-
-.sighting-name {
-    font-weight: 600;
-    color: #2D6A4F;
-    margin-bottom: 4px;
-}
-
-.sighting-main {
-    flex: 1;
-}
-
-.sighting-meta {
-    font-size: 11px;
-    color: #6B705C;
->>>>>>> upstream/master
 }
 
 .sighting-badge {
@@ -1482,233 +1093,8 @@ svg {
 }
 
 .add-btn:hover {
-<<<<<<< HEAD
     background: var(--green-800);
     box-shadow: var(--shadow-xs);
-=======
-    transform: scale(1.02);
-}
-
-/* Rec Cards (Recommendations) */
-.rec-card {
-    display: flex;
-    align-items: center;
-    padding: 13px 16px;
-    border-bottom: 1px solid #E8EDDF;
-    gap: 16px;
-}
-
-.rec-card:last-child {
-    border-bottom: none;
-}
-
-.rec-avatar {
-    width: 74px;
-    height: 74px;
-    border-radius: 12px;
-    flex-shrink: 0;
-    background-image: url('/images/dashboard-reference.png');
-    background-size: cover;
-    background-position: 14% 28%;
-    border: 1px solid rgba(27, 94, 32, 0.15);
-    position: relative;
-}
-
-.rec-symbol {
-    position: absolute;
-    right: 6px;
-    bottom: 6px;
-    width: 22px;
-    height: 22px;
-    border-radius: 999px;
-    background: rgba(10, 35, 17, 0.78);
-    color: #fff;
-    display: grid;
-    place-items: center;
-    border: 1px solid rgba(255, 255, 255, 0.65);
-}
-
-.rec-avatar.metric-avatar {
-    background-image: none !important;
-    border: 1px solid rgba(27, 94, 32, 0.24);
-}
-
-.rec-avatar.metric-avatar-users { background: linear-gradient(145deg, #e6f2ff, #d5e7ff); }
-.rec-avatar.metric-avatar-sync { background: linear-gradient(145deg, #fff5dc, #ffebbf); }
-.rec-avatar.metric-avatar-satisfaction { background: linear-gradient(145deg, #e4f8eb, #d0f1dc); }
-
-.metric-avatar-icon {
-    position: absolute;
-    inset: 0;
-    margin: auto;
-    width: 44px;
-    height: 44px;
-    border-radius: 999px;
-    display: grid;
-    place-items: center;
-    color: #fff;
-    border: 1px solid rgba(255, 255, 255, 0.9);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
-}
-
-.rec-avatar.metric-avatar-users .metric-avatar-icon {
-    background: linear-gradient(145deg, #2f80ed, #1b5ec9);
-}
-
-.rec-avatar.metric-avatar-sync .metric-avatar-icon {
-    background: linear-gradient(145deg, #f2994a, #d87d1d);
-}
-
-.rec-avatar.metric-avatar-satisfaction .metric-avatar-icon {
-    background: linear-gradient(145deg, #27ae60, #1f8b4d);
-}
-
-.system-rec .rec-go {
-    background: #eef3eb;
-    color: #204f2f;
-}
-
-.rec-info {
-    flex: 1;
-}
-
-.rec-title {
-    font-weight: 600;
-    color: #2D6A4F;
-    margin-bottom: 4px;
-    font-size: 20px;
-}
-
-.rec-match {
-    background: rgba(45, 106, 79, 0.1);
-    color: #2D6A4F;
-    font-size: 14px;
-    padding: 3px 9px;
-    border-radius: 20px;
-    display: inline-block;
-    margin-top: 4px;
-}
-
-.rec-reason {
-    font-size: 16px;
-    color: #6B705C;
-}
-
-.rec-go {
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    border: none;
-    background: #F4F1DE;
-    color: #1B5E20;
-    display: grid;
-    place-items: center;
-    cursor: pointer;
-}
-
-.rec-go:hover {
-    background: #E9C46A;
-}
-
-/* Seasonal List */
-.seasonal-list {
-    padding: 14px 16px 8px;
-}
-
-.seasonal-item {
-    padding: 10px 0;
-    border-bottom: 1px solid #E8EDDF;
-    font-size: 16px;
-}
-
-.seasonal-item:last-child {
-    border-bottom: none;
-}
-
-.seasonal-card {
-    overflow: hidden;
-}
-
-.seasonal-bottom {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 0 16px 14px;
-}
-
-.seasonal-image-strip {
-    flex: 1;
-    min-height: 70px;
-    border-radius: 12px;
-    background-image: linear-gradient(135deg, rgba(27, 94, 32, 0.08), rgba(27, 94, 32, 0.22)), url('/images/dashboard-reference.png');
-    background-size: cover;
-    background-position: 93% 22%;
-}
-
-.seasonal-action-btn {
-    border: none;
-    background: linear-gradient(135deg, #2D6A4F, #1B5E20);
-    color: #fff;
-    border-radius: 14px;
-    padding: 12px 22px;
-    font-weight: 600;
-    cursor: pointer;
-    white-space: nowrap;
-    font-size: 15px;
-}
-
-/* Guide Dashboard */
-.guide-dashboard {
-    animation: fadeIn 0.3s ease-out;
-}
-
-.shift-controls {
-    display: flex;
-    gap: 12px;
-    padding: 16px;
-}
-
-.login-btn {
-    background: linear-gradient(135deg, #2D6A4F, #1B5E20);
-    color: white;
-    border: none;
-    padding: 12px 24px;
-    border-radius: var(--radius-md);
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    margin-bottom: 16px;
-    transition: all 0.2s;
-}
-
-.login-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
-}
-
-.login-btn.secondary {
-    background: #6B705C;
-}
-
-.tour-timer {
-    font-size: 32px;
-    font-weight: 700;
-    text-align: center;
-    padding: 16px;
-    background: #2D6A4F;
-    color: #fff;
-    border-radius: 12px;
-    margin-bottom: 16px;
-}
-
-.tour-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 16px;
-    border-bottom: 1px solid #E8EDDF;
->>>>>>> upstream/master
 }
 
 .small-btn {
@@ -1776,24 +1162,13 @@ svg {
 }
 
 .map-container {
-<<<<<<< HEAD
-=======
-    height: 65vh;
-    background: #DCE6D7;
-    border-radius: var(--radius-lg);
->>>>>>> upstream/master
     position: relative;
     height: 65vh;
     min-height: 420px;
     overflow: hidden;
-<<<<<<< HEAD
     border-radius: var(--radius-lg);
     background: linear-gradient(135deg, #A7C957, #506B47);
     box-shadow: var(--shadow-sm);
-=======
-    box-shadow: var(--shadow-md);
-    border: 1px solid rgba(27, 94, 32, 0.2);
->>>>>>> upstream/master
 }
 
 .map-canvas {
@@ -1803,292 +1178,12 @@ svg {
 
 .map-overlay {
     position: absolute;
-<<<<<<< HEAD
     inset: 50% auto auto 50%;
     transform: translate(-50%, -50%);
     color: #fff;
     text-align: center;
     font-weight: 800;
     text-shadow: 0 2px 10px rgba(0, 0, 0, 0.24);
-=======
-    left: 14px;
-    bottom: 14px;
-    z-index: 450;
-    background: rgba(255, 255, 255, 0.9);
-    border-radius: 12px;
-    border: 1px solid rgba(27, 94, 32, 0.2);
-    padding: 10px 12px;
-    box-shadow: var(--shadow-sm);
-    min-width: 220px;
-}
-
-.map-status {
-    font-size: 13px;
-    font-weight: 600;
-    color: #1B5E20;
-    margin-bottom: 4px;
-}
-
-.map-coords {
-    font-size: 12px;
-    color: #4E5D51;
-}
-
-.map-guidance {
-    margin-top: 8px;
-    display: flex;
-    gap: 8px;
-}
-
-.map-destination {
-    flex: 1;
-    border: 1px solid #DAD5C6;
-    border-radius: 8px;
-    padding: 6px 8px;
-    font-size: 12px;
-    background: #fff;
-}
-
-.map-guidance-text {
-    margin-top: 8px;
-    font-size: 11px;
-    color: #455A64;
-    line-height: 1.35;
-}
-
-.map-nearby {
-    margin-top: 8px;
-    font-size: 11px;
-    line-height: 1.45;
-    color: #294233;
-    border-top: 1px dashed rgba(27, 94, 32, 0.22);
-    padding-top: 6px;
-}
-
-@media (max-width: 900px) {
-    .net-status {
-        display: none;
-    }
-}
-
-.analytics-list {
-    padding: 12px 14px;
-    display: grid;
-    gap: 10px;
-}
-
-.analytics-row {
-    display: grid;
-    grid-template-columns: 1.4fr 1.8fr auto;
-    align-items: center;
-    gap: 10px;
-    font-size: 12px;
-    color: #2F4737;
-}
-
-.analytics-bar {
-    background: #ECE7D9;
-    border-radius: 999px;
-    height: 8px;
-    overflow: hidden;
-}
-
-.analytics-bar > div {
-    height: 100%;
-    background: linear-gradient(135deg, #2A9D8F, #1B5E20);
-    border-radius: inherit;
-}
-
-.map-marker {
-    border-radius: 50%;
-    border: 2px solid #fff;
-    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.35);
-}
-
-.map-marker-poi {
-    background: #2A9D8F;
-}
-
-.map-marker-gate {
-    background: #1B5E20;
-}
-
-.map-marker-ranger {
-    background: #6D4C41;
-}
-
-.map-marker-station {
-    background: #455A64;
-}
-
-.map-marker-sighting {
-    background: #D62828;
-}
-
-.map-marker-user {
-    background: #E9C46A;
-    border-color: #0D3B0F;
-}
-
-/* Merged auth layout (login + register in one screen) */
-.auth-merged-screen {
-    padding: 18px;
-    background:
-        linear-gradient(130deg, rgba(8, 30, 16, 0.68), rgba(10, 39, 20, 0.58)),
-        url('/images/auth-merged-forest.png');
-    background-size: cover;
-    background-position: center;
-}
-
-.auth-merged-wrap {
-    max-width: 1660px;
-    margin: 0 auto;
-    min-height: calc(100vh - 36px);
-    border-radius: 24px;
-    border: 1px solid rgba(27, 94, 32, 0.12);
-    box-shadow: 0 18px 36px rgba(20, 55, 28, 0.12);
-    background: rgba(255, 255, 255, 0.9);
-    display: grid;
-    grid-template-columns: 1fr 0.78fr 1fr;
-    overflow: hidden;
-}
-
-.auth-merged-pane {
-    padding: 30px 34px 28px;
-    display: flex;
-    flex-direction: column;
-}
-
-.auth-merged-pane.active .auth-title {
-    color: #174b2c;
-}
-
-.auth-merged-login {
-    background:
-        radial-gradient(circle at 0% 100%, rgba(27, 94, 32, 0.08), rgba(255, 255, 255, 0)),
-        rgba(255, 253, 247, 0.96);
-}
-
-.auth-merged-register {
-    background:
-        radial-gradient(circle at 100% 0%, rgba(27, 94, 32, 0.08), rgba(255, 255, 255, 0)),
-        rgba(255, 253, 247, 0.96);
-}
-
-.auth-merged-brand {
-    display: inline-flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 20px;
-}
-
-.auth-merged-visual {
-    position: relative;
-    background-image:
-        linear-gradient(180deg, rgba(255,255,255,0.08), rgba(12, 39, 21, 0.52)),
-        url('/images/auth-merged-forest.png');
-    background-size: cover;
-    background-position: 56% center;
-}
-
-.auth-merged-visual::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(165deg, rgba(255,255,255,0.45) 0 24%, rgba(255,255,255,0) 26%);
-}
-
-.auth-merged-actions {
-    display: grid;
-    gap: 10px;
-    margin-top: 10px;
-}
-
-.auth-merged-link {
-    background: transparent;
-    border: none;
-    color: #1b5e20;
-    font-weight: 600;
-    cursor: pointer;
-    text-align: right;
-}
-
-.auth-merged-link:hover {
-    text-decoration: underline;
-}
-
-@media (max-width: 1180px) {
-    .auth-merged-wrap {
-        grid-template-columns: 1fr;
-        border-radius: 18px;
-        min-height: auto;
-    }
-
-    .auth-merged-visual {
-        min-height: 180px;
-        order: -1;
-    }
-
-    .auth-merged-pane {
-        padding: 20px 18px;
-    }
-
-    .auth-merged-brand {
-        margin-bottom: 14px;
-    }
-
-    .auth-title {
-        font-size: 38px;
-    }
-
-    .auth-subtitle {
-        font-size: 15px;
-    }
-}
-
-@media (max-width: 640px) {
-    .auth-merged-screen {
-        padding: 10px;
-    }
-
-    .auth-merged-wrap {
-        border-radius: 14px;
-    }
-
-    .auth-merged-visual {
-        min-height: 140px;
-        background-position: center;
-    }
-
-    .auth-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .auth-title {
-        font-size: 32px;
-        line-height: 1.08;
-    }
-
-    .auth-kicker {
-        font-size: 11px;
-        letter-spacing: 0.18em;
-    }
-
-    .auth-form-card {
-        padding: 14px;
-        border-radius: 14px;
-    }
-
-    .auth-input,
-    .auth-select {
-        height: 44px;
-        font-size: 15px;
-    }
-
-    .auth-primary-btn {
-        width: 100%;
-    }
->>>>>>> upstream/master
 }
 
 .map-controls {
@@ -3411,6 +2506,149 @@ body.auth-page {
     display: flex !important;
 }
 
+/* =====================================================
+   LAYOUT STABILITY + MAP ALIGNMENT PATCH
+   ===================================================== */
+
+.app-container,
+.main-content,
+.main-container {
+    box-sizing: border-box;
+}
+
+.main-content {
+    overflow-x: hidden;
+}
+
+.main-container {
+    width: min(100%, 1240px);
+    margin-inline: auto;
+    padding: 20px clamp(12px, 2vw, 24px) 28px;
+}
+
+.section-card {
+    width: 100%;
+}
+
+.dashboard-feature-grid,
+.dashboard-main-grid,
+.metrics-grid,
+.animals-list,
+.story-grid,
+.intranet-grid,
+.schema-items,
+.admin-actions {
+    align-items: start;
+}
+
+/* Prevent cards/buttons from crashing into each other */
+.section-header {
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.section-header .small-btn,
+.section-header .add-btn {
+    flex: 0 0 auto;
+}
+
+/* ---- Map layout ---- */
+.map-container {
+    position: relative;
+    display: block;
+    height: min(72vh, 780px);
+    min-height: 520px;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid rgba(16, 42, 28, 0.14);
+    box-shadow: 0 12px 28px rgba(16, 42, 28, 0.18);
+}
+
+.map-canvas {
+    position: absolute;
+    inset: 0;
+}
+
+.map-overlay {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    left: auto;
+    bottom: auto;
+    transform: none;
+    width: min(360px, calc(100% - 28px));
+    max-height: calc(100% - 28px);
+    overflow: auto;
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+    text-align: left;
+    color: #102a1c;
+    background: rgba(255, 255, 255, 0.93);
+    border: 1px solid rgba(16, 42, 28, 0.14);
+    border-radius: 12px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+    z-index: 450;
+}
+
+.map-status,
+.map-coords,
+.map-guidance-text,
+.map-nearby {
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: #f5f8f2;
+    border: 1px solid #dde5dc;
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.map-guidance {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    align-items: center;
+}
+
+.map-guidance .small-btn {
+    min-height: 38px;
+    white-space: nowrap;
+}
+
+.map-destination {
+    width: 100%;
+    min-height: 38px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid #cfd9cf;
+    background: #fff;
+}
+
+.map-nearby {
+    max-height: 150px;
+    overflow: auto;
+}
+
+@media (max-width: 900px) {
+    .main-container {
+        padding: 14px 12px 20px;
+    }
+
+    .map-container {
+        min-height: 460px;
+        height: 68vh;
+    }
+
+    .map-overlay {
+        left: 10px;
+        right: 10px;
+        top: auto;
+        bottom: 10px;
+        width: auto;
+        max-height: 52%;
+    }
+}
+
 /* RESPONSIVE */
 @media (max-width: 900px) {
     .auth-portal {
@@ -3669,6 +2907,347 @@ body.auth-page {
 .ui-btn-danger {
     color: #fff;
     background: var(--danger);
+}
+
+/* =====================================================
+   FINAL COLLISION / TEXT FLOW HOTFIX
+   ===================================================== */
+
+.main-container {
+    display: grid !important;
+    gap: 16px !important;
+}
+
+.main-container > * {
+    min-width: 0 !important;
+}
+
+.section-card,
+.dashboard-quote-card,
+.profile-header,
+.map-container {
+    margin: 0 !important;
+    min-width: 0 !important;
+}
+
+.section-header h3,
+.rec-title,
+.rec-reason,
+.announcement-title,
+.announcement-content,
+.inventory-item,
+.user-item,
+.seasonal-item,
+.sighting-meta,
+.sighting-comment,
+.map-status,
+.map-guidance-text,
+.map-nearby {
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
+}
+
+.user-item,
+.announcement-item,
+.inventory-item,
+.employee-item,
+.tour-item,
+.sighting-item {
+    align-items: flex-start !important;
+    gap: 10px !important;
+}
+
+.dashboard-feature-grid,
+.dashboard-main-grid {
+    gap: 16px !important;
+}
+
+.map-overlay {
+    pointer-events: auto;
+}
+
+.map-guidance {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+}
+
+.map-guidance .small-btn {
+    align-self: stretch;
+}
+
+@media (max-width: 760px) {
+    .main-container {
+        gap: 12px !important;
+    }
+
+    .map-overlay {
+        max-height: 58% !important;
+        padding: 10px !important;
+    }
+
+    .map-guidance {
+        grid-template-columns: 1fr !important;
+    }
+
+    .map-guidance .small-btn {
+        width: 100%;
+    }
+}
+
+/* =====================================================
+   TYPOGRAPHY POLISH
+   ===================================================== */
+
+:root {
+    --font-ui: "Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif;
+    --font-display: "Inter", "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif;
+}
+
+html,
+body,
+button,
+input,
+select,
+textarea {
+    font-family: var(--font-ui) !important;
+    font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+}
+
+body {
+    font-size: 15px !important;
+    line-height: 1.55 !important;
+    letter-spacing: 0.01em;
+}
+
+.content-header h1,
+.auth-title,
+.section-header h3,
+.rec-title,
+.profile-name {
+    font-family: var(--font-display) !important;
+    letter-spacing: -0.01em !important;
+}
+
+.content-header h1 {
+    font-size: clamp(1.25rem, 1.7vw, 1.6rem) !important;
+    font-weight: 800 !important;
+}
+
+.section-header h3 {
+    font-size: 0.95rem !important;
+    font-weight: 700 !important;
+}
+
+.rec-title,
+.animal-name,
+.announcement-title,
+.user-item strong {
+    font-weight: 700 !important;
+}
+
+.rec-reason,
+.sighting-meta,
+.announcement-meta,
+.sidebar-user-role,
+.header-user-role {
+    font-size: 0.84rem !important;
+    line-height: 1.4 !important;
+}
+
+.small-btn,
+.login-btn,
+.auth-primary-btn,
+.auth-link-btn,
+.admin-action-btn {
+    font-weight: 600 !important;
+    letter-spacing: 0.01em !important;
+}
+
+.auth-input,
+.auth-select,
+.map-destination {
+    font-size: 0.95rem !important;
+}
+
+/* =====================================================
+   SYSTEM-WIDE TYPOGRAPHY SCALE
+   ===================================================== */
+
+:root {
+    --text-xs: 0.74rem;
+    --text-sm: 0.84rem;
+    --text-md: 0.95rem;
+    --text-lg: 1.05rem;
+    --text-xl: 1.24rem;
+    --text-2xl: 1.48rem;
+}
+
+body {
+    font-size: var(--text-md) !important;
+    line-height: 1.58 !important;
+}
+
+.sidebar-title,
+.sidebar-user-name,
+.nav-label-vertical,
+.profile-name,
+.animal-name,
+.story-title,
+.sighting-name,
+.announcement-title {
+    font-size: var(--text-lg) !important;
+    font-weight: 700 !important;
+    line-height: 1.28 !important;
+}
+
+.content-header h1 {
+    font-size: var(--text-2xl) !important;
+    line-height: 1.2 !important;
+}
+
+.section-header h3 {
+    font-size: var(--text-lg) !important;
+    font-weight: 700 !important;
+    line-height: 1.3 !important;
+}
+
+.rec-match,
+.quick-count,
+.profile-role,
+.profile-dept,
+.announcement-meta,
+.sighting-meta,
+.sidebar-user-role,
+.header-user-role,
+.auth-field-label {
+    font-size: var(--text-sm) !important;
+    line-height: 1.42 !important;
+    letter-spacing: 0.01em !important;
+}
+
+.rec-reason,
+.seasonal-item,
+.sighting-comment,
+.announcement-content,
+.empty-state,
+.map-status,
+.map-coords,
+.map-guidance-text,
+.map-nearby {
+    font-size: var(--text-md) !important;
+    line-height: 1.5 !important;
+}
+
+.small-btn,
+.add-btn,
+.login-btn,
+.auth-primary-btn,
+.auth-link-btn,
+.admin-action-btn {
+    font-size: var(--text-sm) !important;
+    font-weight: 600 !important;
+    line-height: 1.2 !important;
+}
+
+.auth-input,
+.auth-select,
+.map-destination,
+#mapSearchInput,
+.ui-modal-input {
+    font-size: var(--text-md) !important;
+    line-height: 1.35 !important;
+}
+
+.analytics-row,
+.user-item,
+.inventory-item,
+.employee-item,
+.tour-item {
+    font-size: var(--text-sm) !important;
+    line-height: 1.45 !important;
+}
+
+/* =====================================================
+   TAB SPACING HOTFIX (ADMIN + SHARED)
+   ===================================================== */
+
+.it-dashboard,
+.guide-dashboard,
+.intranet-dashboard {
+    display: grid !important;
+    gap: 16px !important;
+    align-content: start;
+}
+
+.it-dashboard > .section-card,
+.guide-dashboard > .section-card,
+.intranet-dashboard > .section-card,
+.it-dashboard > .dashboard-feature-grid,
+.guide-dashboard > .dashboard-feature-grid,
+.intranet-dashboard > .dashboard-feature-grid,
+.it-dashboard > .admin-actions,
+.guide-dashboard > .admin-actions,
+.intranet-dashboard > .admin-actions {
+    margin: 0 !important;
+}
+
+.analytics-list,
+.seasonal-list,
+.sighting-list,
+#announcementsList,
+.inventory-list,
+.employees-list {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+}
+
+.analytics-row,
+.user-item,
+.announcement-item,
+.inventory-item,
+.employee-item,
+.tour-item,
+.seasonal-item {
+    border: 1px solid rgba(16, 42, 28, 0.1) !important;
+    border-radius: 10px;
+    background: #fff;
+    padding: 10px 12px !important;
+    margin: 0 !important;
+}
+
+.analytics-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+}
+
+.section-card > .analytics-list,
+.section-card > .seasonal-list,
+.section-card > .sighting-list {
+    border-top: 0;
+}
+
+@media (max-width: 900px) {
+    .it-dashboard,
+    .guide-dashboard,
+    .intranet-dashboard {
+        gap: 12px !important;
+    }
+
+    .analytics-row {
+        grid-template-columns: 1fr;
+        align-items: start;
+    }
+
+    .analytics-list,
+    .seasonal-list,
+    .sighting-list,
+    #announcementsList,
+    .inventory-list,
+    .employees-list {
+        padding: 10px;
+    }
 }
 
 /* UI CLEANUP OVERRIDES */

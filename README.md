@@ -17,7 +17,7 @@ It combines tourism guidance, field tools, geofencing, offline support, AI-assis
 - `frontend/` - static web client (HTML/CSS/JS)
 - `backend/` - Node.js API server
 - `database/` - database artifacts
-- `infra/` and `nginx/` - deployment/support files
+- `infra/` and `nginx/` - deployment/support files (`infra/nginx` is the canonical source)
 - `DOCS/` - supporting documentation
 
 ## Local Development
@@ -64,3 +64,4 @@ You can inject `window.__SIGTS_API_BASE__` before app scripts in `frontend/publi
 
 - This project currently contains demo-friendly behaviors and fallbacks for some flows.
 - For production hardening, consider strict environment configuration, complete dialog unification, and expanded E2E coverage.
+- For architecture/flow/ops walkthrough details, see `DOCS/repo-walkthrough.md`.

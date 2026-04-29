@@ -215,13 +215,8 @@ app.post('/api/auth/login-direct', async (req, res) => {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
-        // Generate token
-        const jwt = require('jsonwebtoken');
-        const token = jwt.sign(
-            { userId: user.user_id, userType: user.user_type },
-            process.env.JWT_SECRET || 'bwindi-super-secret-key',
-            { expiresIn: REQUIREMENTS.security.jwtAccessTtl }
-        );
+        // Generate token with the shared auth config path.
+        const token = generateToken(user.user_id, user.user_type);
 
         console.log('Login successful for:', username);
         console.log('========================================');
@@ -303,20 +298,20 @@ app.post('/api/auth/create-test-user', async (req, res) => {
 // Public routes
 app.use('/api/auth', authRoutes);
 
-// Protected routes - CRITICAL: Don't silently fail
-app.use('/api/users', authenticateJWT, userRoutes);
-app.use('/api/animals', authenticateJWT, animalRoutes);
-app.use('/api/locations', authenticateJWT, locationRoutes);
+// Protected routes - route modules already enforce auth/roles.
+app.use('/api/users', userRoutes);
+app.use('/api/animals', animalRoutes);
+app.use('/api/locations', locationRoutes);
 app.use('/api/sightings', authenticateJWT, requireInsidePark({ bypassRoles: ['it_manager'] }), sightingRoutes);
 app.use('/api/tours', authenticateJWT, requireInsidePark({ bypassRoles: ['it_manager'] }), tourRoutes);
-app.use('/api/cultural', authenticateJWT, culturalRoutes);
-app.use('/api/geofence', authenticateJWT, geofenceRoutes);
+app.use('/api/cultural', culturalRoutes);
+app.use('/api/geofence', geofenceRoutes);
 app.use('/api/sync', authenticateJWT, requireInsidePark({ bypassRoles: ['it_manager'] }), syncRoutes);
-app.use('/api/admin', authenticateJWT, adminRoutes);
-app.use('/api/analytics', authenticateJWT, analyticsRoutes);
-app.use('/api/ai', authenticateJWT, aiRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/ai', aiRoutes);
 app.use('/api/intranet', intranetRoutes);
-app.use('/api/feedback', authenticateJWT, feedbackRoutes);
+app.use('/api/feedback', feedbackRoutes);
 
 // =====================================================
 // WEBSOCKET SETUP (Optional)
@@ -340,10 +335,8 @@ try {
         }
 
         try {
-            const jwt = require('jsonwebtoken');
-            // Use same JWT_SECRET as main app for consistency
-            const jwtSecret = process.env.JWT_SECRET || 'bwindi-dev-key-change-in-production';
-            const decoded = jwt.verify(token, jwtSecret);
+            // Reuse shared token verification logic for consistency.
+            const decoded = verifyToken(token);
             const result = await pool.query(
                 'SELECT user_id, username, user_type FROM users WHERE user_id = $1 AND is_active = true',
                 [decoded.userId]

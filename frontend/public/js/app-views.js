@@ -141,6 +141,27 @@ function formatRoleName(role = 'tourist') {
         .replace(/\b\w/g, letter => letter.toUpperCase());
 }
 
+function renderStatusBadge(value = 'info') {
+    const normalized = String(value || '').trim().toLowerCase();
+    const style =
+        normalized === 'active' || normalized === 'success' ? 'success'
+        : normalized === 'pending' || normalized === 'warning' ? 'warning'
+        : normalized === 'rejected' || normalized === 'error' || normalized === 'danger' ? 'danger'
+        : 'neutral';
+    return `<span class="status-badge ${style}">${escapeHtml(formatRoleName(value || 'unknown'))}</span>`;
+}
+
+function renderKpiStrip(items = []) {
+    if (!Array.isArray(items) || !items.length) return '';
+    return `<div class="kpi-strip">${items.map((item) => `
+        <div class="kpi-card">
+            <div class="kpi-label">${escapeHtml(item.label || 'Metric')}</div>
+            <div class="kpi-value">${escapeHtml(String(item.value ?? 0))}</div>
+            ${item.hint ? `<div class="kpi-hint">${escapeHtml(item.hint)}</div>` : ''}
+        </div>
+    `).join('')}</div>`;
+}
+
 let liveMapInstance = null;
 let liveMapLayers = {
     markers: [],
@@ -824,7 +845,13 @@ async function renderITManagerDashboard() {
     ).join('') || '<div class="empty-state">No demographics data yet.</div>';
     const rareAlertsHtml = `<div class="section-card"><div class="section-header"><h3>${icon('bell', 'icon-sm')} Rare Sighting Alerts</h3></div><div class="seasonal-list">${(rareAlerts || []).length ? rareAlerts.map((a) => `<div class="seasonal-item rare-alert-item"><strong>${escapeHtml((a.risk_level || 'high').toUpperCase())}</strong> • ${escapeHtml(a.animal_name || 'Wildlife')} @ ${escapeHtml(a.location_name || 'Unknown')} (${a.number_observed || 0}) ${a.acknowledged ? '<span style="color:#2E7D32;">(Acknowledged)</span>' : `<button class=\"small-btn\" onclick=\"ackRareAlertPrompt('${a.alert_id}')\">Acknowledge</button>`}<br><span style="color:#6B705C;">${escapeHtml(a.reason || '')}</span></div>`).join('') : '<div class="seasonal-item">• No rare alerts in recent reports.</div>'}</div></div>`;
     const animals = await Content.getAnimals();
-    return `<div class="it-dashboard">${renderDashboardShell({
+    const itKpis = [
+        { label: 'Active Users', value: metrics.activeUsers || 0, hint: 'Current sessions' },
+        { label: 'Pending Sync', value: metrics.syncQueueSize || 0, hint: 'Waiting uploads' },
+        { label: 'Sightings', value: metrics.totalSightings || 0, hint: 'Recorded entries' },
+        { label: 'Avg Rating', value: Number(interactive.satisfaction?.overall || 0).toFixed(1), hint: '/ 5' }
+    ];
+    return `<div class="it-dashboard">${renderKpiStrip(itKpis)}${renderDashboardShell({
         primaryTitle: 'System Recommendations',
         primaryIcon: 'database',
         primaryItems: [
@@ -912,7 +939,7 @@ async function renderIntranetDashboard() {
         
         <div class="section-card">
             <div class="section-header"><h3>${icon('users', 'icon-sm')} Employee Directory</h3><button class="add-btn btn-primary" onclick="showAddEmployeeModal()">${icon('plus', 'icon-sm')} Add Employee</button></div>
-            <div class="employee-list">${employees.map(e => `<div class="employee-item"><div><strong>${escapeHtml(e.name)}</strong> - ${e.role}<br><small>${e.department} | Status: ${e.status}</small></div><button class="small-btn ${e.status === 'active' ? 'btn-danger' : 'btn-secondary'}" onclick="toggleEmployeeStatus(${e.id}, '${e.status}')">${e.status === 'active' ? 'Deactivate' : 'Activate'}</button></div>`).join('') || '<div class="empty-state">No employees</div>'}</div>
+            <div class="employee-list">${employees.map(e => `<div class="employee-item"><div><strong>${escapeHtml(e.name)}</strong> - ${escapeHtml(e.role)}<br><small>${escapeHtml(e.department)}</small> ${renderStatusBadge(e.status)}</div><button class="small-btn ${e.status === 'active' ? 'btn-danger' : 'btn-secondary'}" onclick="toggleEmployeeStatus(${e.id}, '${e.status}')">${e.status === 'active' ? 'Deactivate' : 'Activate'}</button></div>`).join('') || '<div class="empty-state">No employees</div>'}</div>
         </div>
     </div>`;
 }
@@ -1512,85 +1539,55 @@ window.addTourNotePrompt = async function () {
 };
 
 function renderAuthMergedScreen(activePanel = 'login') {
-    return `<div class="login-container auth-merged-screen">
-        <div class="auth-merged-wrap">
-            <section class="auth-merged-pane auth-merged-login ${activePanel === 'login' ? 'active' : ''}">
-                <div class="auth-merged-brand">
-                    <div class="auth-brand-mark">${icon('map', 'icon-md')}</div>
-                    <div>
-                        <div class="auth-brand-name">Bwindi SIGTS</div>
-                        <div class="auth-brand-meta">Smart Information Guide Tour System</div>
-                    </div>
+    const isLogin = activePanel === 'login';
+    return `<div class="auth-portal ${isLogin ? 'auth-mode-login' : 'auth-mode-register'}">
+        <aside class="auth-portal-side">
+            <div class="auth-side-brand">
+                <div class="auth-side-logo">${icon('map', 'icon-lg')}</div>
+                <div>
+                    <div class="auth-side-title">Bwindi SIGTS</div>
+                    <div class="auth-side-subtitle">Smart Information Guide Tour System</div>
                 </div>
-                <div class="auth-kicker">Welcome Back</div>
-                <h1 class="auth-title">Sign In</h1>
-                <p class="auth-subtitle">Continue your wildlife guide experience with your account.</p>
-                <p class="auth-switch">Don't have an account? <button class="auth-link-btn" onclick="renderView('register')">Create account</button></p>
-                <form class="auth-form-card" onsubmit="event.preventDefault(); handleLogin();">
-                    <label class="auth-field">
-                        <span class="auth-field-label">Email or Username</span>
-                        <input type="text" id="loginUsername" class="auth-input" placeholder="Enter your email or username">
-                    </label>
-                    <label class="auth-field">
-                        <span class="auth-field-label">Password</span>
-                        <input type="password" id="loginPassword" class="auth-input" placeholder="Enter your password">
-                    </label>
-                    <label class="auth-check">
-                        <input type="checkbox" id="rememberMe" checked>
-                        <span>Remember me</span>
-                    </label>
-                    <div class="auth-merged-actions">
-                        <button type="submit" class="auth-primary-btn">Sign In</button>
-                        <button type="button" onclick="handleForgotPassword()" class="auth-merged-link">Forgot password?</button>
-                    </div>
+            </div>
+            <div class="auth-side-message">
+                <span class="auth-side-kicker">Welcome</span>
+                <h1>Smart Park Access Portal</h1>
+                <p>Manage wildlife insights, tours, and park operations from one secure platform.</p>
+            </div>
+        </aside>
+        <main class="auth-portal-main">
+            <section class="auth-card">
+                <div class="auth-tabs">
+                    <button type="button" class="auth-tab ${isLogin ? 'active' : ''}" onclick="renderView('login')">Log In</button>
+                    <button type="button" class="auth-tab ${!isLogin ? 'active' : ''}" onclick="renderView('register')">Create Account</button>
+                </div>
+                ${isLogin ? `
+                <form class="auth-form" onsubmit="event.preventDefault(); handleLogin();">
+                    <label class="auth-field"><span class="auth-field-label">Email or Username</span><span class="auth-input-shell"><input type="text" id="loginUsername" class="auth-input" placeholder="Enter your email or username"></span></label>
+                    <label class="auth-field"><span class="auth-field-label">Password</span><span class="auth-input-shell"><input type="password" id="loginPassword" class="auth-input" placeholder="Enter your password"></span></label>
+                    <label class="auth-check"><input type="checkbox" id="rememberMe" checked><span>Remember me</span></label>
+                    <button type="submit" class="auth-primary-btn">Sign In</button>
+                    <button type="button" class="auth-link-btn" onclick="handleForgotPassword()">Forgot password?</button>
                     <div id="authFeedback" class="auth-feedback" hidden></div>
                 </form>
-            </section>
-            <section class="auth-merged-visual" aria-hidden="true"></section>
-            <section class="auth-merged-pane auth-merged-register ${activePanel === 'register' ? 'active' : ''}">
-                <div class="auth-kicker">Registration</div>
-                <h1 class="auth-title">Create Account</h1>
-                <p class="auth-subtitle">Build your profile and unlock tours, sightings, and park tools.</p>
-                <p class="auth-switch">Already a member? <button class="auth-link-btn" onclick="renderView('login')">Log in</button></p>
-                <form class="auth-form-card" onsubmit="event.preventDefault(); handleRegistration();">
+                ` : `
+                <form class="auth-form" onsubmit="event.preventDefault(); handleRegistration();">
                     <div class="auth-grid">
-                        <label class="auth-field">
-                            <span class="auth-field-label">Full Name</span>
-                            <input type="text" id="regFullName" class="auth-input" placeholder="Your full name">
-                        </label>
-                        <label class="auth-field">
-                            <span class="auth-field-label">Username</span>
-                            <input type="text" id="regUsername" class="auth-input" placeholder="Choose a username">
-                        </label>
+                        <label class="auth-field"><span class="auth-field-label">Full Name</span><span class="auth-input-shell"><input type="text" id="regFullName" class="auth-input" placeholder="Your full name"></span></label>
+                        <label class="auth-field"><span class="auth-field-label">Username</span><span class="auth-input-shell"><input type="text" id="regUsername" class="auth-input" placeholder="Choose a username"></span></label>
                     </div>
-                    <label class="auth-field">
-                        <span class="auth-field-label">Email</span>
-                        <input type="email" id="regEmail" class="auth-input" placeholder="name@example.com">
-                    </label>
-                    <label class="auth-field">
-                        <span class="auth-field-label">Password</span>
-                        <input type="password" id="regPassword" class="auth-input" placeholder="Create a password">
-                    </label>
-                    <label class="auth-field">
-                        <span class="auth-field-label">Confirm Password</span>
-                        <input type="password" id="regConfirmPassword" class="auth-input" placeholder="Repeat your password">
-                    </label>
-                    <label class="auth-field">
-                        <span class="auth-field-label">Role</span>
-                        <select id="regUserType" class="auth-select">
-                            <option value="tourist">Tourist</option>
-                            <option value="guide">Tour Guide</option>
-                            <option value="it_manager">IT Manager</option>
-                        </select>
-                    </label>
-                    <div class="auth-merged-actions">
-                        <button type="submit" class="auth-primary-btn">Create Account</button>
-                    </div>
+                    <label class="auth-field"><span class="auth-field-label">Email</span><span class="auth-input-shell"><input type="email" id="regEmail" class="auth-input" placeholder="name@example.com"></span></label>
+                    <label class="auth-field"><span class="auth-field-label">Password</span><span class="auth-input-shell"><input type="password" id="regPassword" class="auth-input" placeholder="Create a password"></span></label>
+                    <label class="auth-field"><span class="auth-field-label">Confirm Password</span><span class="auth-input-shell"><input type="password" id="regConfirmPassword" class="auth-input" placeholder="Repeat your password"></span></label>
+                    <label class="auth-field"><span class="auth-field-label">Role</span><select id="regUserType" class="auth-select"><option value="tourist">Tourist</option><option value="guide">Tour Guide</option><option value="it_manager">IT Manager</option></select></label>
+                    <button type="submit" class="auth-primary-btn">Create Account</button>
                     <div id="authFeedback" class="auth-feedback" hidden></div>
                 </form>
+                `}
             </section>
-        </div>
-    </div>`;}
+        </main>
+    </div>`;
+}
 function renderLoginScreen() {
     return renderAuthMergedScreen('login');
 }
