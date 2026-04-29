@@ -582,6 +582,7 @@ class TourGuideManager {
         this.tourTimer = null;
         this.elapsedSeconds = 0;
         this.guestLocations = new Map();
+        this.locationSyncTimer = null;
     }
 
     async getGuideDashboard() {
@@ -614,7 +615,7 @@ class TourGuideManager {
     async startTour(tourId) {
         const result = await API.startTour(tourId, AppState.currentLocation);
         if (!result?.success) return { success: false, error: result?.error || 'Tour not found' };
-        const tour = { tour_session_id: tourId };
+        const tour = await API.getTourById(tourId) || { tour_session_id: tourId };
         
         this.activeTour = tour;
         this.elapsedSeconds = 0;
@@ -623,8 +624,19 @@ class TourGuideManager {
             this.elapsedSeconds++;
             this.updateTimerDisplay();
         }, 1000);
+        this.startLocationSync();
         
         return { success: true, tour: this.activeTour };
+    }
+
+    startLocationSync() {
+        if (this.locationSyncTimer) clearInterval(this.locationSyncTimer);
+        this.locationSyncTimer = setInterval(async () => {
+            if (!this.activeTour?.tour_session_id) return;
+            const current = Geofence?.currentLocation || AppState?.currentLocation;
+            if (!current || !Number.isFinite(current.lat) || !Number.isFinite(current.lng)) return;
+            await API.updateTourLocation(this.activeTour.tour_session_id, current.lat, current.lng);
+        }, 15000);
     }
 
     updateTimerDisplay() {
@@ -639,6 +651,7 @@ class TourGuideManager {
 
     async endTour(tourId) {
         if (this.tourTimer) clearInterval(this.tourTimer);
+        if (this.locationSyncTimer) clearInterval(this.locationSyncTimer);
         const result = await API.endTour(tourId, AppState.currentLocation);
         this.activeTour = null;
         if (!result?.success) {
@@ -693,6 +706,12 @@ class TourGuideManager {
         localStorage.setItem('guide_shifts', JSON.stringify(shifts));
         const hoursWorked = (new Date(shifts[shiftIndex].end_time) - new Date(shifts[shiftIndex].start_time)) / (1000 * 60 * 60);
         return { success: true, hoursWorked: hoursWorked.toFixed(2) };
+    }
+
+    async addLiveNote(noteText) {
+        if (!this.activeTour?.tour_session_id) return { success: false, error: 'No active tour' };
+        const ok = await API.addTourNote(this.activeTour.tour_session_id, noteText);
+        return ok ? { success: true } : { success: false, error: 'Failed to save note' };
     }
 }
 
@@ -799,6 +818,7 @@ class OfflineSyncManager {
     async addToQueue(action, data) {
         this.pendingItems.push({ id: Date.now(), action, data, attempts: 0 });
         localStorage.setItem('sync_queue', JSON.stringify(this.pendingItems));
+        window.refreshNetworkStatusBadge?.();
         if (navigator.onLine) await this.processQueue();
     }
 
@@ -818,6 +838,7 @@ class OfflineSyncManager {
         }
         localStorage.setItem('sync_queue', JSON.stringify(this.pendingItems));
         this.isSyncing = false;
+        window.refreshNetworkStatusBadge?.();
     }
 
     async syncSighting(data) { return true; }
@@ -967,6 +988,17 @@ class IntranetManager {
         const itStaff = employees.filter(e => e.department === 'IT' && e.status === 'active').length;
         return { totalStaff, guidesOnDuty, itStaff };
     }
+
+    async getPeers() {
+        const result = await API.request('/intranet/peers');
+        if (result?.peers) return result.peers;
+        return [];
+    }
+
+    async getIntranetStatus() {
+        const result = await API.request('/intranet/status');
+        return result || { isIntranet: false, ip: null };
+    }
 }
 
 // =====================================================
@@ -1039,6 +1071,78 @@ class ITManagerAPI {
         const status = {};
         tables.forEach(t => { status[t] = { count: 5, status: 'active' }; });
         return status;
+    }
+
+    async getInteractiveAnalytics() {
+        const end = new Date();
+        const start = new Date(Date.now() - 1000 * 60 * 60 * 24 * 14);
+        const startIso = start.toISOString();
+        const endIso = end.toISOString();
+        const today = end.toISOString().split('T')[0];
+
+        const [visitorFlow, congestion, popular, satisfaction, demographics] = await Promise.all([
+            API.getVisitorFlowAnalytics(startIso, endIso, 'day'),
+            API.getCongestionPredictions(today),
+            API.getPopularContent(6),
+            API.getSatisfactionAnalytics(),
+            API.getDemographicsAnalytics()
+        ]);
+
+        return {
+            visitorFlow: visitorFlow?.timeline || [],
+            topLocations: visitorFlow?.top_locations || [],
+            congestionPredictions: congestion?.predictions || [],
+            congestionRecommendations: congestion?.recommendations || [],
+            popularContent: popular || [],
+            satisfaction: satisfaction || {},
+            demographics: demographics || {}
+        };
+    }
+
+    async getLiveOperations() {
+        const [peers, intranetStatus, syncStatus] = await Promise.all([
+            Intranet.getPeers(),
+            Intranet.getIntranetStatus(),
+            API.request('/sync/status')
+        ]);
+        return {
+            peers: peers || [],
+            intranetStatus: intranetStatus || {},
+            syncStatus: syncStatus || {}
+        };
+    }
+
+    async getFeedbackInsights(days = 30) {
+        const dashboard = await API.getFeedbackDashboard(days);
+        if (!dashboard) {
+            return {
+                summary: {
+                    total_feedback: 0,
+                    avg_rating: 0,
+                    bug_reports: 0,
+                    feature_requests: 0,
+                    responded_count: 0
+                },
+                recent: []
+            };
+        }
+        return dashboard;
+    }
+
+    async getRareAlerts(limit = 10) {
+        return API.getRareSightingAlerts(limit);
+    }
+
+    async getUnackedRareAlerts(limit = 10) {
+        return API.getUnackedRareSightingAlerts(limit);
+    }
+
+    async acknowledgeRareAlert(alertId) {
+        return API.acknowledgeRareSightingAlert(alertId);
+    }
+
+    async respondToFeedback(feedbackId, responseText) {
+        return API.respondToFeedback(feedbackId, responseText);
     }
 }
 

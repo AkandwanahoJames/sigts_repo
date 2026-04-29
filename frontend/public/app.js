@@ -6,6 +6,19 @@ var AI = new AIRecommendationEngine();
 var OfflineSync = new OfflineSyncManager();
 var ITAPI = new ITManagerAPI();
 var Intranet = new IntranetManager();
+var rareAlertPollTimer = null;
+
+// Prevent stale UI during rapid development updates on desktop/mobile browsers.
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+        registrations.forEach((reg) => reg.unregister());
+    }).catch(() => {});
+    if (window.caches && window.caches.keys) {
+        window.caches.keys().then((keys) => {
+            keys.filter((k) => k.startsWith('bwindi-')).forEach((k) => caches.delete(k));
+        }).catch(() => {});
+    }
+}
 
 window.renderView = renderView;
 window.handleLogin = handleLogin;
@@ -89,6 +102,7 @@ async function init() {
         localStorage.setItem('registeredUsers', JSON.stringify(users));
     }
 
+<<<<<<< HEAD
     const requestedView = window.location.hash.replace('#', '');
 
     if (Auth.isAuthenticated()) {
@@ -97,6 +111,15 @@ async function init() {
     }
 
     navigateTo(requestedView === 'register' ? 'register' : 'login');
+=======
+    if (Auth.isAuthenticated()) renderView('dashboard');
+    else renderView('login');
+
+    window.addEventListener('online', () => window.refreshNetworkStatusBadge?.());
+    window.addEventListener('offline', () => window.refreshNetworkStatusBadge?.());
+    if (rareAlertPollTimer) clearInterval(rareAlertPollTimer);
+    rareAlertPollTimer = setInterval(() => window.refreshRareAlertBadge?.(), 20000);
+>>>>>>> upstream/master
 }
 
 init();

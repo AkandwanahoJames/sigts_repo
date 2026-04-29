@@ -46,6 +46,7 @@ const analyticsRoutes = require('./routes/analytics');
 const syncRoutes = require('./routes/sync');
 const aiRoutes = require('./routes/ai');
 const intranetRoutes = require('./routes/intranet');
+const feedbackRoutes = require('./routes/feedback');
 
 // Initialize Express app
 const app = express();
@@ -315,6 +316,7 @@ app.use('/api/admin', authenticateJWT, adminRoutes);
 app.use('/api/analytics', authenticateJWT, analyticsRoutes);
 app.use('/api/ai', authenticateJWT, aiRoutes);
 app.use('/api/intranet', intranetRoutes);
+app.use('/api/feedback', authenticateJWT, feedbackRoutes);
 
 // =====================================================
 // WEBSOCKET SETUP (Optional)
