@@ -114,13 +114,19 @@ const generalLimiter = rateLimit({
 });
 app.use('/api/', generalLimiter);
 
-const authLimiter = rateLimit({
-    windowMs: REQUIREMENTS.performance.authRateLimitWindowMs,
-    max: REQUIREMENTS.performance.authRateLimitMax,
-    message: { error: 'Too many authentication attempts, please try again later.' }
-});
-app.use('/api/auth/login', authLimiter);
-app.use('/api/auth/login-direct', authLimiter);
+// Auth rate limiter — disabled by default. Set ENABLE_AUTH_RATE_LIMIT=true to turn back on.
+if (String(process.env.ENABLE_AUTH_RATE_LIMIT).toLowerCase() === 'true') {
+    const authLimiter = rateLimit({
+        windowMs: REQUIREMENTS.performance.authRateLimitWindowMs,
+        max: REQUIREMENTS.performance.authRateLimitMax,
+        message: { error: 'Too many authentication attempts, please try again later.' }
+    });
+    app.use('/api/auth/login', authLimiter);
+    app.use('/api/auth/login-direct', authLimiter);
+    logger.info('Auth rate limiter ENABLED');
+} else {
+    logger.info('Auth rate limiter DISABLED (set ENABLE_AUTH_RATE_LIMIT=true to enable)');
+}
 
 // =====================================================
 // HEALTH CHECK ENDPOINTS

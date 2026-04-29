@@ -23,16 +23,11 @@ router.get('/visitor-flow', [
     const { start, end, interval = 'day' } = req.query;
 
     try {
-        let timeBucket;
-        switch (interval) {
-            case 'hour': timeBucket = '1 hour'; break;
-            case 'day': timeBucket = '1 day'; break;
-            case 'week': timeBucket = '1 week'; break;
-            default: timeBucket = '1 day';
-        }
+        // Vanilla Postgres equivalent of TimescaleDB's time_bucket().
+        const truncUnit = ['hour', 'day', 'week'].includes(interval) ? interval : 'day';
 
         const result = await pool.query(
-            `SELECT time_bucket($1, arrival_time) as time_period,
+            `SELECT date_trunc($1, arrival_time) as time_period,
                     COUNT(*) as visitor_count,
                     COUNT(DISTINCT tourist_id) as unique_visitors,
                     AVG(duration_minutes) as avg_duration
@@ -40,7 +35,7 @@ router.get('/visitor-flow', [
              WHERE arrival_time BETWEEN $2 AND $3
              GROUP BY time_period
              ORDER BY time_period`,
-            [timeBucket, start, end]
+            [truncUnit, start, end]
         );
 
         const topLocations = await pool.query(
@@ -119,29 +114,45 @@ router.get('/predictions/congestion', [
 // Get most viewed content
 // =====================================================
 router.get('/popular-content', async (req, res) => {
-    const { limit = 10 } = req.query;
+    const limitRaw = parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 50) : 10;
 
     try {
+        // No explicit view_count columns yet — derive a "popularity" signal
+        // from existing tables so the IT dashboard renders meaningful data.
+        // animals: number of sightings observed
+        // locations: number of visitor_flow rows
+        // cultural narratives: recency (newest first) until we add view tracking
         const animals = await pool.query(
-            `SELECT name, 'animal' as type, view_count
-             FROM animals
-             ORDER BY view_count DESC
+            `SELECT a.name,
+                    'animal' AS type,
+                    COALESCE(COUNT(s.sighting_id), 0)::int AS view_count
+             FROM animals a
+             LEFT JOIN sightings s ON s.animal_id = a.animal_id
+             GROUP BY a.animal_id, a.name
+             ORDER BY view_count DESC, a.name
              LIMIT $1`,
             [limit]
         );
 
         const locations = await pool.query(
-            `SELECT name, 'location' as type, view_count
-             FROM locations
-             ORDER BY view_count DESC
+            `SELECT l.name,
+                    'location' AS type,
+                    COALESCE(COUNT(vf.flow_id), 0)::int AS view_count
+             FROM locations l
+             LEFT JOIN visitor_flow vf ON vf.location_id = l.location_id
+             GROUP BY l.location_id, l.name
+             ORDER BY view_count DESC, l.name
              LIMIT $1`,
             [limit]
         );
 
         const stories = await pool.query(
-            `SELECT title_en as name, 'story' as type, view_count
+            `SELECT title_en AS name,
+                    'story' AS type,
+                    0::int AS view_count
              FROM cultural_narratives
-             ORDER BY view_count DESC
+             ORDER BY created_at DESC NULLS LAST, title_en
              LIMIT $1`,
             [limit]
         );

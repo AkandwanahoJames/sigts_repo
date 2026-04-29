@@ -120,6 +120,31 @@ function normalizeView(view) {
     return APP_VIEWS.has(candidate) ? candidate : 'dashboard';
 }
 
+/** Normalized role string from stored user object. */
+function getEffectiveRole(user) {
+    return String(user?.userType || user?.role || user?.user_type || 'tourist').trim();
+}
+
+const SHARED_APP_VIEWS = new Set([
+    'dashboard', 'animals', 'map', 'culture', 'sightings', 'profile', 'info', 'ai_chat'
+]);
+
+/** Whether the given role may open `view` (excludes login/register). */
+function canUserAccessView(role, view) {
+    if (PUBLIC_VIEWS.has(view)) return true;
+    if (view === 'it_dashboard' || view === 'intranet') return role === 'it_manager';
+    if (view === 'guide_dashboard') return role === 'guide';
+    return SHARED_APP_VIEWS.has(view);
+}
+
+/** Default home screen after login / app open when no deep link hash is set. */
+function getLandingViewForUser(user) {
+    const role = String(user?.userType || user?.role || user?.user_type || 'tourist').trim();
+    if (role === 'guide') return 'guide_dashboard';
+    if (role === 'it_manager') return 'it_dashboard';
+    return 'dashboard';
+}
+
 function navigateTo(view, options = {}) {
     const targetView = normalizeView(view);
     const shouldUpdateHash = options.updateHash !== false;
@@ -182,6 +207,18 @@ function getGuideOpsManager() {
     return window.__guideOpsManager;
 }
 
+function renderNotificationBell(user) {
+    const isGuide = user?.role === 'guide' || user?.userType === 'guide';
+    const isITManager = user?.role === 'it_manager' || user?.userType === 'it_manager';
+    if (isITManager) {
+        return `<button type="button" class="icon-btn notif-btn" onclick="navigateTo('it_dashboard')" aria-label="Alerts and admin">${icon('bell', 'icon-md')}<span id="rareAlertBadge" class="notif-badge hidden">0</span></button>`;
+    }
+    if (isGuide) {
+        return `<button type="button" class="icon-btn notif-btn" onclick="navigateTo('guide_dashboard')" aria-label="Guide alerts">${icon('bell', 'icon-md')}<span id="rareAlertBadge" class="notif-badge hidden">0</span></button>`;
+    }
+    return '';
+}
+
 function renderMainLayout(content) {
     const user = Auth.getCurrentUser() || { name: 'Guest', role: 'tourist' };
     const isGuide = user?.role === 'guide' || user?.userType === 'guide';
@@ -206,7 +243,7 @@ function renderMainLayout(content) {
     const isOffline = !navigator.onLine;
     const pending = OfflineSync?.getPendingCount?.() || 0;
     const statusText = isOffline ? `Offline mode • ${pending} pending` : (pending ? `Online • ${pending} pending sync` : 'Online');
-    return `<div class="app-container"><button class="sidebar-toggle" onclick="toggleSidebar()">${icon('menu', 'icon-sm')}</button><div class="sidebar"><div class="sidebar-header"><div class="sidebar-brand"><div class="sidebar-logo"><img src="/icons/icon-192.svg" alt="SIGTS logo"></div><div class="sidebar-title">Bwindi SIGTS</div></div></div><div class="sidebar-nav">${navItems.map(item => `<div class="nav-item-vertical ${window.currentView === item.id ? 'active' : ''}" onclick="navigateTo('${item.id}')"><div class="nav-icon-vertical">${icon(item.icon, 'icon-md')}</div><div class="nav-label-vertical">${item.label}</div></div>`).join('')}</div><div class="sidebar-logout" onclick="Auth.logout()">${icon('logout', 'icon-md')} Logout</div></div><div class="main-content" onclick="closeSidebar()"><div class="content-header"><h1>${getPageTitle(window.currentView)}</h1><div class="header-right"><span id="networkStatusBadge" class="net-status ${isOffline ? 'offline' : 'online'}">${statusText}</span><button class="icon-btn notif-btn" onclick="renderView('it_dashboard')">${icon('bell', 'icon-md')}<span id="rareAlertBadge" class="notif-badge hidden">0</span></button><button class="header-profile" onclick="navigateTo('profile')"><div class="header-avatar ${isITManager ? 'role-it' : (isGuide ? 'role-guide' : 'role-tourist')}">${avatarIcon}</div><div class="header-user-info"><div class="header-user-name">${escapeHtml(user.name)}</div><div class="header-user-role">${escapeHtml(roleLabel)}</div></div></button></div></div><div class="main-container">${content}</div></div></div>`;}
+    return `<div class="app-container"><button type="button" class="sidebar-toggle" onclick="toggleSidebar()">${icon('menu', 'icon-sm')}</button><div class="sidebar"><div class="sidebar-header"><div class="sidebar-brand"><div class="sidebar-logo"><img src="/icons/icon-192.svg" alt="SIGTS logo"></div><div class="sidebar-title">Bwindi SIGTS</div></div></div><div class="sidebar-nav">${navItems.map(item => `<div class="nav-item-vertical ${window.currentView === item.id ? 'active' : ''}" onclick="navigateTo('${item.id}')"><div class="nav-icon-vertical">${icon(item.icon, 'icon-md')}</div><div class="nav-label-vertical">${item.label}</div></div>`).join('')}</div><div class="sidebar-logout" onclick="Auth.logout()">${icon('logout', 'icon-md')} Logout</div></div><div class="main-content" onclick="closeSidebar()"><div class="content-header"><h1>${getPageTitle(window.currentView)}</h1><div class="header-right"><span id="networkStatusBadge" class="net-status ${isOffline ? 'offline' : 'online'}">${statusText}</span>${renderNotificationBell(user)}<button type="button" class="header-profile" onclick="navigateTo('profile')"><div class="header-avatar ${isITManager ? 'role-it' : (isGuide ? 'role-guide' : 'role-tourist')}">${avatarIcon}</div><div class="header-user-info"><div class="header-user-name">${escapeHtml(user.name)}</div><div class="header-user-role">${escapeHtml(roleLabel)}</div></div></button></div></div><div class="main-container">${content}</div></div></div>`;}
 
 function getAnimalIconName(animalName = '') {
     const value = animalName.toLowerCase();
@@ -791,8 +828,19 @@ function renderAIChatContent() {
 
 async function renderGuideDashboard() {
     const guideManager = getGuideOpsManager();
-    const dashboard = await guideManager.getGuideDashboard();
-    const animals = await Content.getAnimals();
+    const settled = await Promise.allSettled([
+        guideManager.getGuideDashboard(),
+        Content.getAnimals()
+    ]);
+    settled.forEach((r, i) => {
+        if (r.status === 'rejected') {
+            console.warn(`[Guide dashboard] section ${i} failed:`, r.reason);
+        }
+    });
+    const dashboard = settled[0].status === 'fulfilled' && settled[0].value
+        ? settled[0].value
+        : { today: [], stats: { totalTours: 0, totalGuests: 0, averageRating: 0 }, activeShift: false };
+    const animals = settled[1].status === 'fulfilled' && Array.isArray(settled[1].value) ? settled[1].value : [];
     const guideItems = (dashboard.today || []).slice(0, 3).map((t) => ({
         title: t.route_name || 'Gorilla Trek',
         match: `${new Date(t.scheduled_start).toLocaleTimeString()}`,
@@ -825,12 +873,39 @@ async function renderGuideDashboard() {
     })}<div class="section-card"><div class="section-header"><h3>${icon('clock', 'icon-sm')} Schedule Controls</h3></div><div class="seasonal-list">${(dashboard.today || []).length ? dashboard.today.map((t) => `<div class="seasonal-item"><strong>${escapeHtml(t.route_name || 'Tour Route')}</strong> - ${new Date(t.scheduled_start).toLocaleTimeString()} (${t.confirmed_guests || t.group_size || 0} guests) <button class="small-btn" onclick="startTour('${t.tour_session_id}')">Start</button></div>`).join('') : '<div class="seasonal-item">No tours today.</div>'}</div></div><div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Live Participants</h3></div><div class="seasonal-list">${participants.length ? participants.map((p) => `<div class="seasonal-item">${escapeHtml(p.first_name || p.username || 'Tourist')} ${escapeHtml(p.last_name || '')} - ${escapeHtml(p.pickup_location || 'In-session')}</div>`).join('') : '<div class="seasonal-item">No participants assigned yet.</div>'}</div></div><div class="shift-controls"><button class="login-btn" onclick="clockInOut()">${dashboard.activeShift ? 'Clock Out' : 'Clock In'}</button><button class="small-btn" onclick="addTourNotePrompt()">Add Tour Note</button></div><div id="activeTourPanel" style="${guideManager.activeTour ? 'display:block' : 'display:none'}"><div id="tourTimerDisplay" class="tour-timer">00:00:00</div><button onclick="quickSighting()">Log Sighting</button><button onclick="endActiveTour()">End Tour</button></div></div>`;}
 
 async function renderITManagerDashboard() {
-    const metrics = await ITAPI.getSystemMetrics();
-    const users = await ITAPI.getUserList();
-    const interactive = await ITAPI.getInteractiveAnalytics();
-    const liveOps = await ITAPI.getLiveOperations();
-    const feedbackInsights = await ITAPI.getFeedbackInsights(30);
-    const rareAlerts = await ITAPI.getRareAlerts(6);
+    // Resilient fan-out: if any single endpoint fails, fall back to a safe
+    // default so the dashboard still renders for the IT manager.
+    const settled = await Promise.allSettled([
+        ITAPI.getSystemMetrics(),
+        ITAPI.getUserList(),
+        ITAPI.getInteractiveAnalytics(),
+        ITAPI.getLiveOperations(),
+        ITAPI.getFeedbackInsights(30),
+        ITAPI.getRareAlerts(6)
+    ]);
+    settled.forEach((r, i) => {
+        if (r.status === 'rejected') {
+            console.warn(`[IT dashboard] section ${i} failed:`, r.reason);
+        }
+    });
+    const valueOr = (i, fallback) => (settled[i].status === 'fulfilled' && settled[i].value != null ? settled[i].value : fallback);
+    const metrics = valueOr(0, {});
+    const users = valueOr(1, []);
+    const interactive = valueOr(2, {
+        visitorFlow: [],
+        topLocations: [],
+        congestionPredictions: [],
+        congestionRecommendations: [],
+        popularContent: [],
+        satisfaction: {},
+        demographics: {}
+    });
+    const liveOps = valueOr(3, { peers: [], intranetStatus: {}, syncStatus: {} });
+    const feedbackInsights = valueOr(4, {
+        summary: { total_feedback: 0, avg_rating: 0, bug_reports: 0, feature_requests: 0, responded_count: 0 },
+        recent: []
+    });
+    const rareAlerts = valueOr(5, []);
     const flowBars = (interactive.visitorFlow || []).slice(-7).map((point) => {
         const value = Number(point.visitor_count || 0);
         const width = Math.min(100, value === 0 ? 6 : value);
@@ -1077,6 +1152,10 @@ window.submitContentHelpfulness = async function (contentType, contentId, conten
 };
 
 window.respondToFeedbackPrompt = async function (feedbackId) {
+    if (!Auth.hasRole('it_manager')) {
+        showToast('Only IT managers can respond to feedback.', 'warning');
+        return;
+    }
     const response = prompt('Enter response to this feedback:');
     if (!response) return;
     const saved = await ITAPI.respondToFeedback(feedbackId, response);
@@ -1089,6 +1168,10 @@ window.respondToFeedbackPrompt = async function (feedbackId) {
 };
 
 window.ackRareAlertPrompt = async function (alertId) {
+    if (!Auth.hasRole('it_manager')) {
+        showToast('Only IT managers can acknowledge admin alerts.', 'warning');
+        return;
+    }
     const saved = await ITAPI.acknowledgeRareAlert(alertId);
     if (!saved) {
         alert('Failed to acknowledge alert.');
@@ -1264,7 +1347,7 @@ async function handleLogin() {
         document.getElementById('rememberMe')?.checked || false
     );
     if (result.success) {
-        renderView('dashboard');
+        navigateTo(getLandingViewForUser(result.user));
         return;
     }
     const message = 'Login failed: ' + result.error;
@@ -1454,6 +1537,10 @@ async function addSighting() {
     }}
 
 async function startTour(tourId) {
+    if (!Auth.hasRole('guide')) {
+        showToast('Only tour guides can start tours.', 'warning');
+        return;
+    }
     const m = getGuideOpsManager();
     await m.startTour(tourId);
     document.getElementById('activeTourPanel').style.display = 'block';
@@ -1461,6 +1548,10 @@ async function startTour(tourId) {
 }
 
 async function endActiveTour() {
+    if (!Auth.hasRole('guide')) {
+        showToast('Only tour guides can end tours.', 'warning');
+        return;
+    }
     const m = getGuideOpsManager();
     const result = await m.endTour(m.activeTour?.tour_session_id);
     document.getElementById('activeTourPanel').style.display = 'none';
@@ -1472,6 +1563,10 @@ async function endActiveTour() {
 }
 
 async function quickSighting() {
+    if (!Auth.hasRole('guide')) {
+        showToast('Only tour guides can log sightings from this shortcut.', 'warning');
+        return;
+    }
     const [animals, locations] = await Promise.all([API.getAnimals(), API.getLocations()]);
     const animalText = prompt(`Animal seen? (${animals.slice(0, 5).map((a) => a.name).join(', ')})`);
     if (!animalText) return;
@@ -1514,6 +1609,10 @@ window.addSightingCommentPrompt = async function (sightingId) {
 };
 
 async function clockInOut() {
+    if (!Auth.hasRole('guide')) {
+        showToast('Only tour guides can use shift controls.', 'warning');
+        return;
+    }
     const m = new TourGuideManager();
     const s = await m.clockIn();
     if (!s.success) await m.clockOut();
@@ -1521,6 +1620,10 @@ async function clockInOut() {
 }
 
 window.addTourNotePrompt = async function () {
+    if (!Auth.hasRole('guide')) {
+        showToast('Only tour guides can add tour notes.', 'warning');
+        return;
+    }
     const note = prompt('Add a guide note for current/next tour:');
     if (!note) return;
     const m = getGuideOpsManager();
@@ -1599,6 +1702,30 @@ function renderRegisterScreen() {
 async function renderView(view, options = {}) {
     const safeView = normalizeView(view);
     const shouldUpdateHash = options.updateHash === true;
+    const suppressAccessToast = options.suppressAccessToast === true;
+
+    const app = document.getElementById('app');
+    if (!app) return;
+
+    if (!Auth.isAuthenticated() && !PUBLIC_VIEWS.has(safeView)) {
+        navigateTo('login');
+        return;
+    }
+
+    if (Auth.isAuthenticated() && !PUBLIC_VIEWS.has(safeView)) {
+        const role = getEffectiveRole(Auth.getCurrentUser());
+        if (!canUserAccessView(role, safeView)) {
+            if (!suppressAccessToast) {
+                showToast('You do not have access to that area.', 'warning');
+            }
+            await renderView(getLandingViewForUser(Auth.getCurrentUser()), {
+                updateHash: true,
+                suppressAccessToast: true
+            });
+            return;
+        }
+    }
+
     window.currentView = safeView;
 
     if (shouldUpdateHash) {
@@ -1608,15 +1735,7 @@ async function renderView(view, options = {}) {
         }
     }
 
-    const app = document.getElementById('app');
-    if (!app) return;
-
     document.body.classList.toggle('auth-page', PUBLIC_VIEWS.has(safeView));
-
-    if (!Auth.isAuthenticated() && !PUBLIC_VIEWS.has(safeView)) {
-        navigateTo('login');
-        return;
-    }
 
     if (safeView !== 'map') {
         teardownLiveMap();

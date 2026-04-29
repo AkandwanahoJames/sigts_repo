@@ -37,8 +37,10 @@ function ttlToExpiresAt(ttl) {
 }
 
 function signRefresh(userId, userType) {
+    // jti makes every issued token unique even when issued in the same second
+    // for the same user, preventing token_hash UNIQUE constraint collisions.
     return jwt.sign(
-        { userId, userType, typ: 'refresh' },
+        { userId, userType, typ: 'refresh', jti: crypto.randomUUID() },
         REFRESH_JWT_SECRET,
         { expiresIn: REFRESH_TOKEN_TTL }
     );

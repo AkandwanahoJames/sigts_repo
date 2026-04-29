@@ -110,7 +110,7 @@ async function init() {
     // Render the first screen directly (and sync hash) to avoid
     // depending on hashchange event timing for initial paint.
     if (Auth.isAuthenticated()) {
-        await renderView(requestedView || 'dashboard', { updateHash: true });
+        await renderView(requestedView || getLandingViewForUser(Auth.getCurrentUser()), { updateHash: true });
         return;
     }
 

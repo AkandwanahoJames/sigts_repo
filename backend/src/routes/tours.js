@@ -13,6 +13,14 @@ async function resolveGuideProfileId(userId) {
     return result.rows[0]?.tourguide_id || null;
 }
 
+async function resolveTouristProfileId(userId) {
+    const result = await pool.query(
+        'SELECT tourist_id FROM tourists WHERE user_id = $1 LIMIT 1',
+        [userId]
+    );
+    return result.rows[0]?.tourist_id || null;
+}
+
 async function hasTable(tableName) {
     const result = await pool.query(
         `SELECT 1
@@ -113,6 +121,42 @@ router.get('/:id', authenticateJWT, async (req, res) => {
         }
 
         const tour = tourResult.rows[0];
+
+        const role = req.user?.user_type;
+        if (role === 'it_manager') {
+            // full access
+        } else if (role === 'guide') {
+            const guideId = await resolveGuideProfileId(req.user.user_id);
+            if (!guideId || tour.tourguide_id !== guideId) {
+                return res.status(403).json({
+                    success: false,
+                    error: 'Access denied',
+                    message: 'You can only view tours assigned to you.'
+                });
+            }
+        } else {
+            const touristId = await resolveTouristProfileId(req.user.user_id);
+            if (!touristId) {
+                return res.status(403).json({
+                    success: false,
+                    error: 'Access denied',
+                    message: 'Tourist profile required to view tour details.'
+                });
+            }
+            const access = await pool.query(
+                `SELECT 1 FROM tour_participants
+                 WHERE tour_session_id = $1 AND tourist_id = $2
+                 LIMIT 1`,
+                [id, touristId]
+            );
+            if (access.rows.length === 0) {
+                return res.status(403).json({
+                    success: false,
+                    error: 'Access denied',
+                    message: 'You can only view tours you are registered on.'
+                });
+            }
+        }
 
         // Get participants
         const participantsResult = await pool.query(
