@@ -38,7 +38,8 @@ router.post(
         body('source_content_id').optional().isUUID(),
         body('source_content_type').optional().isString().isLength({ min: 2, max: 40 }),
         body('nps_score').optional().isInt({ min: 0, max: 10 }),
-        body('helpfulness_rating').optional().isInt({ min: 1, max: 5 })
+        body('helpfulness_rating').optional().isInt({ min: 1, max: 5 }),
+        body('screenshot_url').optional().isString().isLength({ min: 5, max: 500 })
     ],
     async (req, res) => {
         const errors = validationResult(req);
@@ -56,7 +57,8 @@ router.post(
             source_content_id,
             source_content_type,
             nps_score,
-            helpfulness_rating
+            helpfulness_rating,
+            screenshot_url
         } = req.body;
 
         try {
@@ -66,12 +68,12 @@ router.post(
             const result = await pool.query(
                 `INSERT INTO feedback (
                     feedback_id, rating, comment, category, tourist_id, tour_session_id, tourguide_id,
-                    source_content_id, source_content_type, nps_score, helpfulness_rating
+                    source_content_id, source_content_type, nps_score, helpfulness_rating, screenshot_url
                 )
                 VALUES (
-                    gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+                    gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
                 )
-                RETURNING feedback_id, rating, comment, category, created_at, nps_score, helpfulness_rating`,
+                RETURNING feedback_id, rating, comment, category, created_at, nps_score, helpfulness_rating, improvement_status`,
                 [
                     rating,
                     comment || null,
@@ -82,7 +84,8 @@ router.post(
                     source_content_id || null,
                     source_content_type || null,
                     nps_score ?? null,
-                    helpfulness_rating ?? null
+                    helpfulness_rating ?? null,
+                    screenshot_url || null
                 ]
             );
 
@@ -180,6 +183,8 @@ router.get(
                     ROUND(AVG(rating)::numeric, 2) AS avg_rating,
                     COUNT(*) FILTER (WHERE category = 'bug_report')::int AS bug_reports,
                     COUNT(*) FILTER (WHERE category = 'feature_suggestion')::int AS feature_requests,
+                    COUNT(*) FILTER (WHERE category = 'survey')::int AS survey_count,
+                    ROUND(AVG(nps_score)::numeric, 2) AS avg_nps,
                     COUNT(*) FILTER (WHERE response_text IS NOT NULL)::int AS responded_count
                  FROM feedback
                  WHERE created_at > NOW() - ($1::text || ' days')::interval`,
@@ -188,7 +193,8 @@ router.get(
 
             const recent = await pool.query(
                 `SELECT feedback_id, rating, comment, category, created_at,
-                        response_text, responded_at
+                        response_text, responded_at, nps_score, helpfulness_rating,
+                        improvement_status, screenshot_url
                  FROM feedback
                  WHERE created_at > NOW() - ($1::text || ' days')::interval
                  ORDER BY created_at DESC
@@ -204,6 +210,57 @@ router.get(
         } catch (error) {
             console.error('Feedback dashboard error:', error);
             return res.status(500).json({ error: 'Failed to fetch feedback dashboard' });
+        }
+    }
+);
+
+// GET /api/feedback/manager (IT manager filtered queue)
+router.get(
+    '/manager',
+    authenticateJWT,
+    authorize('it_manager'),
+    [
+        query('days').optional().isInt({ min: 1, max: 365 }),
+        query('limit').optional().isInt({ min: 1, max: 200 }),
+        query('category').optional().isIn([
+            'tour', 'guide', 'content', 'app', 'general',
+            'bug_report', 'feature_suggestion', 'nps', 'survey', 'helpfulness'
+        ]),
+        query('status').optional().isIn(['new', 'in_review', 'planned', 'implemented', 'dismissed'])
+    ],
+    async (req, res) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
+        const days = Number(req.query.days || 30);
+        const limit = Number(req.query.limit || 60);
+        const category = req.query.category ? String(req.query.category) : null;
+        const status = req.query.status ? String(req.query.status) : null;
+
+        try {
+            const params = [days];
+            let idx = 2;
+            let sql = `SELECT feedback_id, rating, comment, category, created_at,
+                              response_text, responded_at, nps_score, helpfulness_rating,
+                              improvement_status, improvement_notes, screenshot_url
+                       FROM feedback
+                       WHERE created_at > NOW() - ($1::text || ' days')::interval`;
+            if (category) {
+                sql += ` AND category = $${idx++}`;
+                params.push(category);
+            }
+            if (status) {
+                sql += ` AND improvement_status = $${idx++}`;
+                params.push(status);
+            }
+            sql += ` ORDER BY created_at DESC LIMIT $${idx}`;
+            params.push(limit);
+            const result = await pool.query(sql, params);
+            return res.json({ success: true, feedback: result.rows });
+        } catch (error) {
+            console.error('Manager feedback queue error:', error);
+            return res.status(500).json({ error: 'Failed to fetch manager feedback queue' });
         }
     }
 );
@@ -237,6 +294,40 @@ router.put(
         } catch (error) {
             console.error('Feedback response error:', error);
             return res.status(500).json({ error: 'Failed to respond to feedback' });
+        }
+    }
+);
+
+// PUT /api/feedback/:id/status (IT manager)
+router.put(
+    '/:id/status',
+    authenticateJWT,
+    authorize('it_manager'),
+    [
+        body('improvement_status').isIn(['new', 'in_review', 'planned', 'implemented', 'dismissed']),
+        body('improvement_notes').optional().isString().isLength({ max: 2000 })
+    ],
+    async (req, res) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
+        try {
+            const result = await pool.query(
+                `UPDATE feedback
+                 SET improvement_status = $1,
+                     improvement_notes = COALESCE($2, improvement_notes)
+                 WHERE feedback_id = $3
+                 RETURNING feedback_id, improvement_status, improvement_notes`,
+                [req.body.improvement_status, req.body.improvement_notes || null, req.params.id]
+            );
+            if (!result.rows.length) {
+                return res.status(404).json({ error: 'Feedback not found' });
+            }
+            return res.json({ success: true, feedback: result.rows[0] });
+        } catch (error) {
+            console.error('Feedback status update error:', error);
+            return res.status(500).json({ error: 'Failed to update feedback status' });
         }
     }
 );

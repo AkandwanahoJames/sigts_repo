@@ -200,6 +200,7 @@ let activeGuidanceTarget = null;
 let liveMapTileLayers = {};
 let measureStartPoint = null;
 let lastTurnAlertAt = 0;
+let adminRealtimeUsersTimer = null;
 let parkAccessSimulation = (() => {
     try {
         const saved = JSON.parse(localStorage.getItem('parkAccessSimulation') || '{}');
@@ -290,6 +291,48 @@ function getGuideOpsManager() {
         window.__guideOpsManager = new TourGuideManager();
     }
     return window.__guideOpsManager;
+}
+
+function renderLiveUserRows(peers = []) {
+    if (!Array.isArray(peers) || !peers.length) {
+        return '<div class="user-item">No active users detected in the latest 5-minute window.</div>';
+    }
+    return peers.slice(0, 20).map((peer) => {
+        const where = peer.location
+            ? ` @ ${Number(peer.location.lat).toFixed(4)}, ${Number(peer.location.lng).toFixed(4)}`
+            : ' @ location unavailable';
+        return `<div class="user-item">${escapeHtml(peer.name || 'User')} (${escapeHtml(peer.type || 'user')})${where}</div>`;
+    }).join('');
+}
+
+async function refreshAdminRealtimeUsers() {
+    if (window.currentView !== 'it_dashboard') return;
+    const listNode = document.getElementById('adminLiveUsersList');
+    if (!listNode) return;
+    const liveOps = await ITAPI.getLiveOperations();
+    const peers = Array.isArray(liveOps?.peers) ? liveOps.peers : [];
+    listNode.innerHTML = renderLiveUserRows(peers);
+    const stampNode = document.getElementById('adminLiveUsersStamp');
+    if (stampNode) {
+        const usersSnapshot = await API.request('/admin/users?limit=1&offset=0');
+        const totalUsers = Number(usersSnapshot?.total || 0);
+        stampNode.textContent = `Updated ${new Date().toLocaleTimeString()} • ${peers.length} active now / ${totalUsers} total`;
+    }
+}
+
+function stopAdminRealtimeUsersRefresh() {
+    if (adminRealtimeUsersTimer) {
+        clearInterval(adminRealtimeUsersTimer);
+        adminRealtimeUsersTimer = null;
+    }
+}
+
+function startAdminRealtimeUsersRefresh() {
+    stopAdminRealtimeUsersRefresh();
+    refreshAdminRealtimeUsers();
+    adminRealtimeUsersTimer = setInterval(() => {
+        refreshAdminRealtimeUsers();
+    }, 15000);
 }
 
 function renderNotificationBell(user) {
@@ -1054,8 +1097,28 @@ async function renderSightingsContent() {
 function renderProfileContent() {
     const user = Auth.getCurrentUser() || { name: 'Tourist' };
     const isITManager = user?.role === 'it_manager' || user?.userType === 'it_manager';
+    const isGuide = user?.role === 'guide' || user?.userType === 'guide';
     const currentLanguage = AppState.userPreferences?.language || 'en';
-    return `<div class="profile-header"><div class="profile-avatar">${icon('user', 'icon-xl')}</div><div class="profile-name">${escapeHtml(user.name)}</div><div class="profile-role">${user.role || 'tourist'}</div><div class="profile-dept">${user.department || ''}</div></div><div class="section-card"><div class="section-header"><h3>${icon('note', 'icon-sm')} Experience Settings</h3></div><div style="padding:16px; display:grid; gap:12px;"><label class="auth-field"><span class="auth-field-label">Language</span><select id="profileLanguage" class="auth-select"><option value="en" ${currentLanguage === 'en' ? 'selected' : ''}>English</option><option value="fr" ${currentLanguage === 'fr' ? 'selected' : ''}>French</option><option value="sw" ${currentLanguage === 'sw' ? 'selected' : ''}>Swahili</option><option value="ruk" ${currentLanguage === 'ruk' ? 'selected' : ''}>Rukiga</option></select></label><button class="small-btn" onclick="saveLanguagePreference()">Save Language</button></div></div><div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Feedback Loop</h3></div><div style="padding:16px; display:grid; gap:12px;"><label class="auth-field"><span class="auth-field-label">Rate your recent experience</span><select id="feedbackRating" class="auth-select"><option value="5">5 - Excellent</option><option value="4">4 - Good</option><option value="3">3 - Average</option><option value="2">2 - Poor</option><option value="1">1 - Very Poor</option></select></label><label class="auth-field"><span class="auth-field-label">Category</span><select id="feedbackCategory" class="auth-select"><option value="tour">Tour</option><option value="guide">Guide</option><option value="content">Content</option><option value="app">App</option><option value="general">General</option></select></label><label class="auth-field"><span class="auth-field-label">Comment</span><textarea id="feedbackComment" class="auth-input" style="min-height:80px; padding-top:10px;" placeholder="Share what worked and what can improve..."></textarea></label><button class="small-btn" onclick="submitUserFeedback()">Submit Feedback</button><div id="feedbackList" class="seasonal-list"><div class="seasonal-item">Loading your recent feedback...</div></div></div></div><div class="profile-menu"><div class="menu-item" onclick="downloadOfflineContent()"><div class="menu-icon">${icon('download', 'icon-md')}</div><div class="menu-text">Download Offline Content</div></div>${isITManager ? `<div class="menu-item" onclick="handleMFASetup()"><div class="menu-icon">${icon('shield', 'icon-md')}</div><div class="menu-text">Configure MFA</div></div>` : ''}<div class="menu-item" onclick="Auth.logout()"><div class="menu-icon">${icon('logout', 'icon-md')}</div><div class="menu-text">Logout</div></div></div>`;
+    return `<div class="profile-header"><div class="profile-avatar">${icon('user', 'icon-xl')}</div><div class="profile-name">${escapeHtml(user.name)}</div><div class="profile-role">${user.role || 'tourist'}</div><div class="profile-dept">${user.department || ''}</div></div>
+    <div class="section-card"><div class="section-header"><h3>${icon('note', 'icon-sm')} Experience Settings</h3></div><div style="padding:16px; display:grid; gap:12px;"><label class="auth-field"><span class="auth-field-label">Language</span><select id="profileLanguage" class="auth-select"><option value="en" ${currentLanguage === 'en' ? 'selected' : ''}>English</option><option value="fr" ${currentLanguage === 'fr' ? 'selected' : ''}>French</option><option value="sw" ${currentLanguage === 'sw' ? 'selected' : ''}>Swahili</option><option value="ruk" ${currentLanguage === 'ruk' ? 'selected' : ''}>Rukiga</option></select></label><button class="small-btn" onclick="saveLanguagePreference()">Save Language</button></div></div>
+    <div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Feedback Loop</h3></div><div style="padding:16px; display:grid; gap:12px;">
+        <label class="auth-field"><span class="auth-field-label">Rate your recent experience</span><select id="feedbackRating" class="auth-select"><option value="5">5 - Excellent</option><option value="4">4 - Good</option><option value="3">3 - Average</option><option value="2">2 - Poor</option><option value="1">1 - Very Poor</option></select></label>
+        <label class="auth-field"><span class="auth-field-label">Category</span><select id="feedbackCategory" class="auth-select"><option value="tour">Tour</option><option value="guide">Guide</option><option value="content">Content</option><option value="app">App</option><option value="general">General</option><option value="bug_report">Bug Report</option><option value="feature_suggestion">Feature Suggestion</option><option value="survey">Survey</option><option value="nps">NPS</option></select></label>
+        <label class="auth-field"><span class="auth-field-label">Tour Session ID (optional)</span><input id="feedbackTourSession" class="auth-input" placeholder="Paste tour session UUID if available" /></label>
+        <label class="auth-field"><span class="auth-field-label">NPS Score (0-10, optional)</span><input id="feedbackNPS" type="number" min="0" max="10" class="auth-input" placeholder="How likely are you to recommend SIGTS?" /></label>
+        <label class="auth-field"><span class="auth-field-label">Screenshot URL (optional)</span><input id="feedbackScreenshot" class="auth-input" placeholder="For bug reports: screenshot link" /></label>
+        <label class="auth-field"><span class="auth-field-label">Comment</span><textarea id="feedbackComment" class="auth-input" style="min-height:80px; padding-top:10px;" placeholder="Share what worked and what can improve..."></textarea></label>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button class="small-btn" onclick="submitUserFeedback()">Submit Feedback</button>
+            <button class="small-btn" onclick="submitSatisfactionSurvey()">Quick Survey</button>
+            <button class="small-btn" onclick="submitNPSFeedback()">Submit NPS</button>
+            ${!isGuide ? '<button class="small-btn" onclick="submitTourCompletionFeedback()">Rate Last Tour</button><button class="small-btn" onclick="submitGuidePerformanceFeedback()">Rate Guide</button>' : ''}
+            <button class="small-btn" onclick="submitBugReportPrompt()">Report Bug</button>
+            <button class="small-btn" onclick="submitFeatureSuggestionPrompt()">Suggest Feature</button>
+        </div>
+        <div id="feedbackList" class="seasonal-list"><div class="seasonal-item">Loading your recent feedback...</div></div>
+    </div></div>
+    <div class="profile-menu"><div class="menu-item" onclick="downloadOfflineContent()"><div class="menu-icon">${icon('download', 'icon-md')}</div><div class="menu-text">Download Offline Content</div></div>${isITManager ? `<div class="menu-item" onclick="handleMFASetup()"><div class="menu-icon">${icon('shield', 'icon-md')}</div><div class="menu-text">Configure MFA</div></div>` : ''}<div class="menu-item" onclick="Auth.logout()"><div class="menu-icon">${icon('logout', 'icon-md')}</div><div class="menu-text">Logout</div></div></div>`;
 }
 
 function renderInfoContent() {
@@ -1160,6 +1223,7 @@ async function renderITManagerDashboard() {
         recent: []
     });
     const rareAlerts = valueOr(5, []);
+    const managerQueue = await ITAPI.getManagerFeedbackQueue({ days: 30, limit: 12 });
     const flowBars = (interactive.visitorFlow || []).slice(-7).map((point) => {
         const value = Number(point.visitor_count || 0);
         const width = Math.min(100, value === 0 ? 6 : value);
@@ -1173,6 +1237,7 @@ async function renderITManagerDashboard() {
         `<div class="analytics-row"><span>${escapeHtml(row.user_type || 'user')}</span><div class="analytics-bar"><div style="width:${Math.min(100, Number(row.count || 0) * 10)}%;"></div></div><strong>${row.count || 0}</strong></div>`
     ).join('') || '<div class="empty-state">No demographics data yet.</div>';
     const rareAlertsHtml = `<div class="section-card"><div class="section-header"><h3>${icon('bell', 'icon-sm')} Rare Sighting Alerts</h3></div><div class="seasonal-list">${(rareAlerts || []).length ? rareAlerts.map((a) => `<div class="seasonal-item rare-alert-item"><strong>${escapeHtml((a.risk_level || 'high').toUpperCase())}</strong> • ${escapeHtml(a.animal_name || 'Wildlife')} @ ${escapeHtml(a.location_name || 'Unknown')} (${a.number_observed || 0}) ${a.acknowledged ? '<span style="color:#2E7D32;">(Acknowledged)</span>' : `<button class=\"small-btn\" onclick=\"ackRareAlertPrompt('${a.alert_id}')\">Acknowledge</button>`}<br><span style="color:#6B705C;">${escapeHtml(a.reason || '')}</span></div>`).join('') : '<div class="seasonal-item">• No rare alerts in recent reports.</div>'}</div></div>`;
+    const managerFeedbackControlHtml = `<div class="section-card"><div class="section-header"><h3>${icon('note', 'icon-sm')} Feedback Control Queue</h3></div><div class="seasonal-list">${(managerQueue || []).length ? managerQueue.map((item) => `<div class="seasonal-item"><strong>${escapeHtml(item.category || 'general')}</strong> • ${'★'.repeat(Number(item.rating || 0))} • <em>${escapeHtml(item.improvement_status || 'new')}</em><br>${escapeHtml(item.comment || 'No comment')}<br>${item.response_text ? `<span style=\"color:#2E7D32;\">Response sent</span>` : `<button class=\"small-btn\" onclick=\"respondToFeedbackPrompt('${item.feedback_id}')\">Respond</button>`} <button class=\"small-btn\" onclick=\"updateFeedbackStatusPrompt('${item.feedback_id}')\">Update Status</button></div>`).join('') : '<div class="seasonal-item">• No feedback items in queue.</div>'}</div></div>`;
     const animals = await Content.getAnimals();
     const itKpis = [
         { label: 'Active Users', value: metrics.activeUsers || 0, hint: 'Current sessions' },
@@ -1180,6 +1245,7 @@ async function renderITManagerDashboard() {
         { label: 'Sightings', value: metrics.totalSightings || 0, hint: 'Recorded entries' },
         { label: 'Avg Rating', value: Number(interactive.satisfaction?.overall || 0).toFixed(1), hint: '/ 5' }
     ];
+    const liveUsersHtml = renderLiveUserRows(liveOps.peers || []);
     return `<div class="it-dashboard">${renderKpiStrip(itKpis)}${renderDashboardShell({
         primaryTitle: 'System Recommendations',
         primaryIcon: 'database',
@@ -1222,7 +1288,7 @@ async function renderITManagerDashboard() {
         ],
         seasonalActionLabel: 'View Suggestions',
         animalCount: animals.length
-    })}<div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Users</h3></div>${users.map(u => `<div class="user-item">${u.full_name} (${u.user_type}) - ${u.department || ''}</div>`).join('')}</div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('chart', 'icon-sm')} Visitor Flow (7 days)</h3></div><div class="analytics-list">${flowBars}</div></div><div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Popular Content</h3></div><div class="analytics-list">${popularRows}</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} User Type Demographics</h3></div><div class="analytics-list">${demographicRows}</div></div><div class="section-card"><div class="section-header"><h3>${icon('map', 'icon-sm')} Congestion Guidance</h3></div><div class="seasonal-list">${(interactive.congestionRecommendations || []).map((r) => `<div class="seasonal-item">• ${escapeHtml(r)}</div>`).join('') || '<div class="seasonal-item">• No congestion recommendations available</div>'}</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('building', 'icon-sm')} Intranet Connectivity</h3></div><div class="analytics-list"><div class="analytics-row"><span>Intranet</span><div class="analytics-bar"><div style="width:${liveOps.intranetStatus?.isIntranet ? 100 : 35}%;"></div></div><strong>${liveOps.intranetStatus?.isIntranet ? 'Connected' : 'External'}</strong></div><div class="analytics-row"><span>Device IP</span><span></span><strong>${escapeHtml(liveOps.intranetStatus?.ip || 'Unknown')}</strong></div><div class="analytics-row"><span>Pending Sync</span><span></span><strong>${liveOps.syncStatus?.pending || liveOps.syncStatus?.pending_items || 0}</strong></div></div></div><div class="section-card"><div class="section-header"><h3>${icon('user', 'icon-sm')} Live Peers / Guests</h3></div><div class="seasonal-list">${(liveOps.peers || []).length ? liveOps.peers.slice(0, 8).map((p) => `<div class="seasonal-item">• ${escapeHtml(p.name || 'Peer')} (${escapeHtml(p.type || 'user')})${p.location ? ` @ ${Number(p.location.lat).toFixed(4)}, ${Number(p.location.lng).toFixed(4)}` : ''}</div>`).join('') : '<div class="seasonal-item">• No live peers detected in last 5 minutes.</div>'}</div></div></div><div class="section-card"><div class="section-header"><h3>${icon('note', 'icon-sm')} Feedback & Improvements (30 days)</h3></div><div class="analytics-list"><div class="analytics-row"><span>Total Feedback</span><span></span><strong>${feedbackInsights.summary?.total_feedback || 0}</strong></div><div class="analytics-row"><span>Average Rating</span><span></span><strong>${feedbackInsights.summary?.avg_rating || 0}</strong></div><div class="analytics-row"><span>Bug Reports</span><span></span><strong>${feedbackInsights.summary?.bug_reports || 0}</strong></div><div class="analytics-row"><span>Feature Requests</span><span></span><strong>${feedbackInsights.summary?.feature_requests || 0}</strong></div><div class="analytics-row"><span>Responded</span><span></span><strong>${feedbackInsights.summary?.responded_count || 0}</strong></div></div><div class="seasonal-list">${(feedbackInsights.recent || []).slice(0, 5).map((item) => `<div class="seasonal-item">• ${escapeHtml(item.category)} - ${escapeHtml(item.comment || 'No comment')} ${item.response_text ? '<span style="color:#2E7D32;">(Responded)</span>' : `<button class=\"small-btn\" onclick=\"respondToFeedbackPrompt('${item.feedback_id}')\">Respond</button>`}</div>`).join('') || '<div class="seasonal-item">• No recent feedback</div>'}</div></div>${rareAlertsHtml}<div class="admin-actions"><button class="admin-action-btn" onclick="handleMFASetup()">${icon('shield', 'icon-sm')} Configure MFA</button><button class="admin-action-btn" onclick="clearAllCache()">Clear Cache</button><button class="admin-action-btn" onclick="exportData()">Export Data</button><button class="admin-action-btn danger" onclick="resetApp()">Reset App</button></div></div>`;}
+    })}<div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Current Users (Realtime)</h3><span id="adminLiveUsersStamp" class="status-badge neutral">Updated just now • ${(liveOps.peers || []).length} active now / ${Number(metrics.activeUsers || 0)} total</span></div><div id="adminLiveUsersList">${liveUsersHtml}</div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('chart', 'icon-sm')} Visitor Flow (7 days)</h3></div><div class="analytics-list">${flowBars}</div></div><div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Popular Content</h3></div><div class="analytics-list">${popularRows}</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} User Type Demographics</h3></div><div class="analytics-list">${demographicRows}</div></div><div class="section-card"><div class="section-header"><h3>${icon('map', 'icon-sm')} Congestion Guidance</h3></div><div class="seasonal-list">${(interactive.congestionRecommendations || []).map((r) => `<div class="seasonal-item">• ${escapeHtml(r)}</div>`).join('') || '<div class="seasonal-item">• No congestion recommendations available</div>'}</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('building', 'icon-sm')} Intranet Connectivity</h3></div><div class="analytics-list"><div class="analytics-row"><span>Intranet</span><div class="analytics-bar"><div style="width:${liveOps.intranetStatus?.isIntranet ? 100 : 35}%;"></div></div><strong>${liveOps.intranetStatus?.isIntranet ? 'Connected' : 'External'}</strong></div><div class="analytics-row"><span>Device IP</span><span></span><strong>${escapeHtml(liveOps.intranetStatus?.ip || 'Unknown')}</strong></div><div class="analytics-row"><span>Pending Sync</span><span></span><strong>${liveOps.syncStatus?.pending || liveOps.syncStatus?.pending_items || 0}</strong></div></div></div><div class="section-card"><div class="section-header"><h3>${icon('user', 'icon-sm')} Live Peers / Guests</h3></div><div class="seasonal-list">${(liveOps.peers || []).length ? liveOps.peers.slice(0, 8).map((p) => `<div class="seasonal-item">• ${escapeHtml(p.name || 'Peer')} (${escapeHtml(p.type || 'user')})${p.location ? ` @ ${Number(p.location.lat).toFixed(4)}, ${Number(p.location.lng).toFixed(4)}` : ''}</div>`).join('') : '<div class="seasonal-item">• No live peers detected in last 5 minutes.</div>'}</div></div></div><div class="section-card"><div class="section-header"><h3>${icon('note', 'icon-sm')} Feedback & Improvements (30 days)</h3></div><div class="analytics-list"><div class="analytics-row"><span>Total Feedback</span><span></span><strong>${feedbackInsights.summary?.total_feedback || 0}</strong></div><div class="analytics-row"><span>Average Rating</span><span></span><strong>${feedbackInsights.summary?.avg_rating || 0}</strong></div><div class="analytics-row"><span>Bug Reports</span><span></span><strong>${feedbackInsights.summary?.bug_reports || 0}</strong></div><div class="analytics-row"><span>Feature Requests</span><span></span><strong>${feedbackInsights.summary?.feature_requests || 0}</strong></div><div class="analytics-row"><span>Surveys</span><span></span><strong>${feedbackInsights.summary?.survey_count || 0}</strong></div><div class="analytics-row"><span>Avg NPS</span><span></span><strong>${feedbackInsights.summary?.avg_nps || 0}</strong></div><div class="analytics-row"><span>Responded</span><span></span><strong>${feedbackInsights.summary?.responded_count || 0}</strong></div></div><div class="seasonal-list">${(feedbackInsights.recent || []).slice(0, 5).map((item) => `<div class="seasonal-item">• ${escapeHtml(item.category)} - ${escapeHtml(item.comment || 'No comment')} [${escapeHtml(item.improvement_status || 'new')}] ${item.response_text ? '<span style="color:#2E7D32;">(Responded)</span>' : `<button class=\"small-btn\" onclick=\"respondToFeedbackPrompt('${item.feedback_id}')\">Respond</button>`} <button class=\"small-btn\" onclick=\"updateFeedbackStatusPrompt('${item.feedback_id}')\">Status</button></div>`).join('') || '<div class="seasonal-item">• No recent feedback</div>'}</div></div>${managerFeedbackControlHtml}${rareAlertsHtml}<div class="admin-actions"><button class="admin-action-btn" onclick="handleMFASetup()">${icon('shield', 'icon-sm')} Configure MFA</button><button class="admin-action-btn" onclick="clearAllCache()">Clear Cache</button><button class="admin-action-btn" onclick="exportData()">Export Data</button><button class="admin-action-btn danger" onclick="resetApp()">Reset App</button></div></div>`;}
 
 // =====================================================
 // INTRANET DASHBOARD (HR, Announcements, Inventory)
@@ -1431,7 +1497,13 @@ window.submitUserFeedback = async function () {
     const rating = Number(document.getElementById('feedbackRating')?.value || 5);
     const category = document.getElementById('feedbackCategory')?.value || 'general';
     const comment = (document.getElementById('feedbackComment')?.value || '').trim();
+    const tourSessionId = (document.getElementById('feedbackTourSession')?.value || '').trim();
+    const npsRaw = (document.getElementById('feedbackNPS')?.value || '').trim();
+    const screenshotUrl = (document.getElementById('feedbackScreenshot')?.value || '').trim();
     const payload = { rating, category, comment };
+    if (tourSessionId) payload.tour_session_id = tourSessionId;
+    if (npsRaw !== '' && Number.isFinite(Number(npsRaw))) payload.nps_score = Number(npsRaw);
+    if (screenshotUrl) payload.screenshot_url = screenshotUrl;
     const result = await API.submitFeedback(payload);
 
     if (!result) {
@@ -1451,6 +1523,107 @@ window.submitUserFeedback = async function () {
     }
     const commentNode = document.getElementById('feedbackComment');
     if (commentNode) commentNode.value = '';
+    await loadRecentFeedback();
+};
+
+window.submitTourCompletionFeedback = async function () {
+    const tours = await API.getToursForGuide();
+    const last = Array.isArray(tours) ? tours[0] : null;
+    if (!last?.tour_session_id) {
+        showToast('No recent tour session found to rate.', 'warning');
+        return;
+    }
+    const rating = Number(await showPromptDialog('Rate the tour (1-5)', '5'));
+    if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+        showToast('Invalid tour rating.', 'warning');
+        return;
+    }
+    const comment = await showPromptDialog('Tour review comment', 'Great route and pacing.');
+    const saved = await API.submitFeedback({
+        rating,
+        category: 'tour',
+        comment: comment || 'Tour feedback submitted.',
+        tour_session_id: last.tour_session_id
+    });
+    showToast(saved ? 'Tour rating recorded.' : 'Tour rating queued/offline.', saved ? 'success' : 'info');
+    await loadRecentFeedback();
+};
+
+window.submitGuidePerformanceFeedback = async function () {
+    const guideId = await showPromptDialog('Guide ID to rate (optional if linked from tour)');
+    const rating = Number(await showPromptDialog('Guide rating (1-5)', '5'));
+    if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+        showToast('Invalid guide rating.', 'warning');
+        return;
+    }
+    const comment = await showPromptDialog('Guide feedback comment', 'Helpful and knowledgeable.');
+    const payload = {
+        rating,
+        category: 'guide',
+        comment: comment || 'Guide feedback submitted.'
+    };
+    if (guideId) payload.tourguide_id = guideId;
+    const saved = await API.submitFeedback(payload);
+    showToast(saved ? 'Guide rating recorded.' : 'Guide feedback queued/offline.', saved ? 'success' : 'info');
+    await loadRecentFeedback();
+};
+
+window.submitBugReportPrompt = async function () {
+    const issue = await showPromptDialog('Describe the issue you found');
+    if (!issue) return;
+    const screenshot = await showPromptDialog('Screenshot URL (optional)');
+    const saved = await API.submitFeedback({
+        rating: 2,
+        category: 'bug_report',
+        comment: issue,
+        screenshot_url: screenshot || null
+    });
+    showToast(saved ? 'Bug report logged.' : 'Bug report saved offline.', saved ? 'success' : 'info');
+    await loadRecentFeedback();
+};
+
+window.submitFeatureSuggestionPrompt = async function () {
+    const suggestion = await showPromptDialog('Suggest an improvement');
+    if (!suggestion) return;
+    const saved = await API.submitFeedback({
+        rating: 4,
+        category: 'feature_suggestion',
+        comment: suggestion
+    });
+    showToast(saved ? 'Feature suggestion logged.' : 'Feature suggestion saved offline.', saved ? 'success' : 'info');
+    await loadRecentFeedback();
+};
+
+window.submitSatisfactionSurvey = async function () {
+    const overall = Number(await showPromptDialog('Overall satisfaction (1-5)', '4'));
+    if (!Number.isFinite(overall) || overall < 1 || overall > 5) {
+        showToast('Invalid survey score.', 'warning');
+        return;
+    }
+    const useAgain = await showPromptDialog('Would you use SIGTS again? (yes/no)', 'yes');
+    const saved = await API.submitFeedback({
+        rating: overall,
+        category: 'survey',
+        comment: `Survey response: reuse=${String(useAgain || 'yes').toLowerCase()}`
+    });
+    showToast(saved ? 'Survey response recorded.' : 'Survey response saved offline.', saved ? 'success' : 'info');
+    await loadRecentFeedback();
+};
+
+window.submitNPSFeedback = async function () {
+    const nps = Number(await showPromptDialog('NPS score (0-10)', '8'));
+    if (!Number.isFinite(nps) || nps < 0 || nps > 10) {
+        showToast('NPS must be between 0 and 10.', 'warning');
+        return;
+    }
+    const why = await showPromptDialog('What is the main reason for your score?');
+    const saved = await API.submitFeedback({
+        rating: nps >= 9 ? 5 : (nps >= 7 ? 4 : 2),
+        category: 'nps',
+        nps_score: nps,
+        comment: why || 'NPS response'
+    });
+    showToast(saved ? 'NPS response recorded.' : 'NPS response saved offline.', saved ? 'success' : 'info');
     await loadRecentFeedback();
 };
 
@@ -1486,6 +1659,23 @@ window.respondToFeedbackPrompt = async function (feedbackId) {
     }
 };
 
+window.updateFeedbackStatusPrompt = async function (feedbackId) {
+    if (!Auth.hasRole('it_manager')) {
+        showToast('Only IT managers can update improvement status.', 'warning');
+        return;
+    }
+    const status = await showPromptDialog('Status: new | in_review | planned | implemented | dismissed', 'in_review');
+    if (!status) return;
+    const notes = await showPromptDialog('Improvement notes (optional)');
+    const saved = await ITAPI.updateFeedbackStatus(feedbackId, String(status).trim(), notes || '');
+    if (!saved) {
+        showToast('Failed to update improvement status.', 'danger');
+        return;
+    }
+    showToast(`Feedback marked as ${saved.improvement_status}.`, 'success');
+    if (window.currentView === 'it_dashboard') await renderView('it_dashboard', { updateHash: false, suppressAccessToast: true });
+};
+
 window.ackRareAlertPrompt = async function (alertId) {
     if (!Auth.hasRole('it_manager')) {
         showToast('Only IT managers can acknowledge admin alerts.', 'warning');
@@ -1513,7 +1703,9 @@ async function loadRecentFeedback() {
     }
     list.innerHTML = feedback.map((item) => {
         const date = new Date(item.created_at || Date.now()).toLocaleDateString();
-        return `<div class="seasonal-item"><strong>${'★'.repeat(Number(item.rating || 0))}</strong> ${escapeHtml(item.category || 'general')} - ${escapeHtml(item.comment || 'No comment')} <span style="color:#6B705C;">(${date})</span></div>`;
+        const status = item.improvement_status ? ` • ${item.improvement_status}` : '';
+        const response = item.response_text ? `<br><small style="color:#2E7D32;">Manager response: ${escapeHtml(item.response_text)}</small>` : '';
+        return `<div class="seasonal-item"><strong>${'★'.repeat(Number(item.rating || 0))}</strong> ${escapeHtml(item.category || 'general')}${status} - ${escapeHtml(item.comment || 'No comment')} <span style="color:#6B705C;">(${date})</span>${response}</div>`;
     }).join('');
 }
 
@@ -2059,6 +2251,9 @@ async function renderView(view, options = {}) {
     if (safeView !== 'map') {
         teardownLiveMap();
     }
+    if (safeView !== 'it_dashboard') {
+        stopAdminRealtimeUsersRefresh();
+    }
 
     let content = '';
     switch (safeView) {
@@ -2081,6 +2276,9 @@ async function renderView(view, options = {}) {
     app.innerHTML = renderMainLayout(content);
     refreshNetworkStatusBadge();
     await refreshRareAlertBadge();
+    if (safeView === 'it_dashboard') {
+        startAdminRealtimeUsersRefresh();
+    }
     if (safeView === 'map') {
         await initializeLiveMap();
     } else if (safeView === 'profile') {

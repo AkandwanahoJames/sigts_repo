@@ -352,10 +352,32 @@ class APIService {
         return result?.success ? result : null;
     }
 
+    async getManagerFeedbackQueue({ days = 30, limit = 60, category = '', status = '' } = {}) {
+        const params = new URLSearchParams();
+        params.set('days', String(days));
+        params.set('limit', String(limit));
+        if (category) params.set('category', category);
+        if (status) params.set('status', status);
+        const result = await this.request(`/feedback/manager?${params.toString()}`);
+        if (result?.success && Array.isArray(result.feedback)) return result.feedback;
+        return [];
+    }
+
     async respondToFeedback(feedbackId, responseText) {
         const result = await this.request(`/feedback/${feedbackId}/respond`, {
             method: 'PUT',
             body: JSON.stringify({ response_text: responseText })
+        });
+        return result?.success ? result.feedback : null;
+    }
+
+    async updateFeedbackStatus(feedbackId, improvementStatus, improvementNotes = '') {
+        const result = await this.request(`/feedback/${feedbackId}/status`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                improvement_status: improvementStatus,
+                improvement_notes: improvementNotes || null
+            })
         });
         return result?.success ? result.feedback : null;
     }

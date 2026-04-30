@@ -1077,9 +1077,11 @@ class ITManagerAPI {
     async getSystemMetrics() {
         const result = await API.request('/admin/stats');
         const hrStats = await Intranet.getHRStats();
+        const usersSnapshot = await API.request('/admin/users?limit=1&offset=0');
+        const liveTotalUsers = Number(usersSnapshot?.total || 0);
         if (result) {
             return {
-                activeUsers: result.totalUsers || 0,
+                activeUsers: Number(result.totalUsers || liveTotalUsers || 0),
                 syncQueueSize: OfflineSync.getPendingCount(),
                 storageUsed: Content.getOfflineStorageSize(),
                 totalSightings: result.pendingApprovals || 0,
@@ -1091,10 +1093,9 @@ class ITManagerAPI {
             };
         }
 
-        const users = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
         const sightings = JSON.parse(localStorage.getItem('sightings') || '[]');
         return {
-            activeUsers: users.length + 1,
+            activeUsers: liveTotalUsers,
             syncQueueSize: OfflineSync.getPendingCount(),
             storageUsed: Content.getOfflineStorageSize(),
             totalSightings: sightings.length,
@@ -1118,9 +1119,7 @@ class ITManagerAPI {
             }));
         }
 
-        return JSON.parse(localStorage.getItem('registeredUsers') || '[]').map(u => ({
-            user_id: u.id, username: u.username, email: u.email, full_name: u.name, user_type: u.role, department: u.department
-        }));
+        return [];
     }
     
     async getSightingsList(limit) {
@@ -1231,6 +1230,14 @@ class ITManagerAPI {
 
     async respondToFeedback(feedbackId, responseText) {
         return API.respondToFeedback(feedbackId, responseText);
+    }
+
+    async getManagerFeedbackQueue(options = {}) {
+        return API.getManagerFeedbackQueue(options);
+    }
+
+    async updateFeedbackStatus(feedbackId, improvementStatus, improvementNotes = '') {
+        return API.updateFeedbackStatus(feedbackId, improvementStatus, improvementNotes);
     }
 }
 
