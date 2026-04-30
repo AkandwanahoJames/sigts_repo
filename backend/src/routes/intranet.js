@@ -7,7 +7,25 @@ const { authenticateJWT, authorize } = require('../middleware/auth');
 const { execFile } = require('child_process');
 const path = require('path');
 
-router.use(authenticateJWT, authorize('it_manager'));
+router.use(authenticateJWT);
+
+// Lightweight access context for all authenticated roles (used silently by UI).
+router.get('/status-lite', async (req, res) => {
+    const rawIp = req.ip || req.connection.remoteAddress || '';
+    const clientIp = String(rawIp).replace('::ffff:', '');
+    const isIntranet = clientIp.startsWith('192.168.100') ||
+        clientIp.startsWith('10.') ||
+        clientIp.startsWith('172.');
+    const role = req.user?.user_type || 'tourist';
+    return res.json({
+        isIntranet,
+        ip: clientIp,
+        role,
+        timestamp: new Date().toISOString()
+    });
+});
+
+router.use(authorize('it_manager'));
 
 // Get current intranet status
 router.get('/status', async (req, res) => {

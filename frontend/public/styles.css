@@ -3413,12 +3413,20 @@ body {
 .park-access-meta {
     display: flex;
     flex-wrap: wrap;
+    align-items: flex-start;
     gap: 8px;
 }
 
 .park-chip {
+    display: inline-flex;
+    align-items: center;
     border-radius: 999px;
-    padding: 5px 10px;
+    padding: 6px 12px;
+    width: fit-content;
+    max-width: 100%;
+    flex: 0 0 auto;
+    line-height: 1.2;
+    white-space: nowrap;
     font-size: 12px;
     font-weight: 700;
     background: #eef0ea;
@@ -3436,6 +3444,12 @@ body {
     background: #fff3ea;
     color: #9a3412;
     border-color: rgba(154, 52, 18, 0.25);
+}
+
+.park-chip.neutral {
+    background: #f2f3ef;
+    color: #4b5d50;
+    border-color: rgba(75, 93, 80, 0.2);
 }
 
 .park-access-sim {

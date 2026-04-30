@@ -407,7 +407,12 @@ const AppState = {
     // Intranet specific extensions
     internalAnnouncements: [],
     inventoryItems: [],
-    hrStats: { totalStaff: 0, guidesOnDuty: 0, itStaff: 0 }
+    hrStats: { totalStaff: 0, guidesOnDuty: 0, itStaff: 0 },
+    accessContext: {
+        isIntranet: null,
+        ip: null,
+        lastUpdatedAt: null
+    }
 };
 
 const API_URL = API_BASE_URL;

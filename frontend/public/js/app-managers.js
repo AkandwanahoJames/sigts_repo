@@ -1057,6 +1057,11 @@ class IntranetManager {
         return result || { isIntranet: false, ip: null };
     }
 
+    async getAccessContext() {
+        const result = await API.request('/intranet/status-lite');
+        return result || { isIntranet: false, ip: null };
+    }
+
     async seedInteractiveMapData() {
         const result = await API.request('/intranet/seed/interactive', {
             method: 'POST'

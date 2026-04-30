@@ -59,6 +59,32 @@ function initHashRouting() {
     });
 }
 
+let accessContextPollTimer = null;
+async function refreshAccessContext() {
+    if (!Auth?.isAuthenticated?.()) return;
+    try {
+        const context = await Intranet.getAccessContext();
+        if (context) {
+            AppState.accessContext = {
+                isIntranet: context.isIntranet === true,
+                ip: context.ip || null,
+                lastUpdatedAt: context.timestamp || new Date().toISOString()
+            };
+            if (typeof window.refreshParkAccessPanel === 'function') {
+                window.refreshParkAccessPanel();
+            }
+        }
+    } catch (_) {}
+}
+
+function initBackgroundAccessContext() {
+    if (accessContextPollTimer) clearInterval(accessContextPollTimer);
+    refreshAccessContext();
+    accessContextPollTimer = setInterval(() => {
+        refreshAccessContext();
+    }, 20000);
+}
+
 function initLiveAccessStatusHooks() {
     const refresh = () => {
         if (typeof window.refreshNetworkStatusBadge === 'function') {
@@ -78,6 +104,7 @@ async function init() {
     registerServiceWorker();
     initHashRouting();
     initLiveAccessStatusHooks();
+    initBackgroundAccessContext();
 
     // Never block first paint/login on geofence startup network calls.
     Geofence.init().catch((error) => {

@@ -221,12 +221,18 @@ function getParkAccessState() {
     const liveInside = live ? !!Geofence?.isInsidePark?.(live.lat, live.lng) : null;
     const boundaryMode = parkAccessSimulation.boundary || 'auto';
     const networkMode = parkAccessSimulation.network || 'auto';
+    const role = getEffectiveRole(Auth.getCurrentUser() || {});
+    const intranetState = AppState?.accessContext?.isIntranet;
+    const requiresIntranet = role === 'tourist' || role === 'guide';
     const insidePark = boundaryMode === 'auto'
         ? (liveInside === null ? true : liveInside)
         : boundaryMode === 'inside';
-    const online = networkMode === 'auto'
+    let online = networkMode === 'auto'
         ? navigator.onLine
         : networkMode === 'online';
+    if (networkMode === 'auto' && requiresIntranet && intranetState === false) {
+        online = false;
+    }
     const status = (!online || !insidePark) ? 'restricted' : 'active';
     return {
         status,
@@ -235,7 +241,8 @@ function getParkAccessState() {
         location: live,
         liveInside,
         boundaryMode,
-        networkMode
+        networkMode,
+        requiresIntranet
     };
 }
 
@@ -248,8 +255,9 @@ function getAccessStatusText(state) {
 
 function renderParkAccessPanel() {
     const state = getParkAccessState();
-    const latText = Number.isFinite(Number(state.location?.lat)) ? Number(state.location.lat).toFixed(5) : '--';
-    const lngText = Number.isFinite(Number(state.location?.lng)) ? Number(state.location.lng).toFixed(5) : '--';
+    const hasCoords = Number.isFinite(Number(state.location?.lat)) && Number.isFinite(Number(state.location?.lng));
+    const latText = hasCoords ? Number(state.location.lat).toFixed(5) : 'Waiting for GPS';
+    const lngText = hasCoords ? Number(state.location.lng).toFixed(5) : '--';
     return `<section class="park-access-panel ${state.status}">
         <div class="park-access-head">
             <h3>${icon('shield', 'icon-sm')} Park Access Status</h3>
@@ -259,7 +267,7 @@ function renderParkAccessPanel() {
         <div class="park-access-meta">
             <span class="park-chip ${state.insidePark ? 'ok' : 'warn'}">Boundary: ${state.insidePark ? 'Inside' : 'Outside'}</span>
             <span class="park-chip ${state.online ? 'ok' : 'warn'}">Network: ${state.online ? 'Online' : 'Offline'}</span>
-            <span class="park-chip">Lat: ${escapeHtml(latText)} • Lng: ${escapeHtml(lngText)}</span>
+            <span class="park-chip ${hasCoords ? '' : 'neutral'}">Lat: ${escapeHtml(latText)}${hasCoords ? ` • Lng: ${escapeHtml(lngText)}` : ''}</span>
         </div>
         <details class="park-access-sim">
             <summary>Demo simulation controls</summary>
