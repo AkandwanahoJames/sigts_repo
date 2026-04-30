@@ -12,6 +12,8 @@
     "migrate:down": "node scripts/migrate.js down",
     "migrate:status": "node scripts/migrate.js status",
     "seed": "node scripts/seed.js",
+    "seed:interactive": "node scripts/seedInteractiveData.js",
+    "seed:full": "node scripts/seed.js",
     "backup": "node scripts/backup.js backup",
     "backup:list": "node scripts/backup.js list",
     "backup:clean": "node scripts/backup.js clean",

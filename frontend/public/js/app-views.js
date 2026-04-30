@@ -272,7 +272,7 @@ function renderParkAccessPanel() {
                 <button type="button" class="small-btn ${state.networkMode === 'offline' ? 'btn-primary' : ''}" onclick="setParkNetworkMode('offline')">Force Offline</button>
                 <button type="button" class="small-btn" onclick="resetParkAccessSimulation()">Reset Simulation</button>
             </div>
-            <div class="park-access-note">Use these controls in presentations to simulate field restrictions without leaving the room.</div>
+            <div class="park-access-note">Use these controls to validate boundary and network restriction behavior.</div>
         </details>
     </section>`;
 }
@@ -1252,12 +1252,12 @@ async function renderIntranetDashboard() {
                     match: intranetStatus?.isIntranet ? 'Intranet linked' : 'External network',
                     reason: intranetStatus?.isIntranet
                         ? `Connected via trusted network (${intranetStatus?.ip || 'IP unavailable'}).`
-                        : 'Currently outside the trusted intranet network; restricted workflows should be treated as demo/read-only.'
+                        : 'Currently outside the trusted intranet network; restricted workflows should be limited until connectivity is restored.'
                 },
                 {
-                    title: 'Presentation Mode',
+                    title: 'Simulation Controls',
                     match: 'Simulation available',
-                    reason: 'Use the Park Access Status simulation controls above to force inside/outside and online/offline demo scenarios.'
+                    reason: 'Use the Park Access Status simulation controls above to verify inside/outside and online/offline behavior safely.'
                 }
             ],
             quote: '"Conservation systems are strongest when access is location-aware."',
@@ -1302,13 +1302,16 @@ async function renderIntranetDashboard() {
             </div>
         </div>
         <div class="section-card">
-            <div class="section-header"><h3>${icon('target', 'icon-sm')} Panel Demo Flow</h3></div>
+            <div class="section-header"><h3>${icon('target', 'icon-sm')} Access Validation Flow</h3></div>
             <div class="seasonal-list">
                 <div class="seasonal-item">1) Keep simulation on <strong>Auto</strong> to show live field mode.</div>
-                <div class="seasonal-item">2) Force <strong>Outside</strong> to demonstrate boundary restriction messaging.</div>
-                <div class="seasonal-item">3) Force <strong>Offline</strong> to demonstrate network restriction messaging.</div>
+                <div class="seasonal-item">2) Force <strong>Outside</strong> to verify boundary restriction messaging.</div>
+                <div class="seasonal-item">3) Force <strong>Offline</strong> to verify network restriction messaging.</div>
                 <div class="seasonal-item">4) Reset simulation to restore normal operations.</div>
             </div>
+        </div>
+        <div class="admin-actions">
+            <button class="admin-action-btn" onclick="runInteractiveMapSeedFromUI()">${icon('database', 'icon-sm')} Seed Map Demo Data</button>
         </div>
     </div>`;
 }
@@ -1371,6 +1374,20 @@ window.toggleEmployeeStatus = async function(id, currentStatus) {
     const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
     await Intranet.updateEmployeeStatus(id, newStatus);
     renderView('intranet');
+};
+
+window.runInteractiveMapSeedFromUI = async function () {
+    if (!(await showConfirmDialog('Run interactive map seed now? This refreshes map and tour data.'))) return;
+    showToast('Running interactive map seed...', 'info');
+    const result = await Intranet.seedInteractiveMapData();
+    if (!result?.success) {
+        showToast(`Seed failed: ${result?.error || 'Unknown error'}`, 'danger');
+        return;
+    }
+    showToast('Interactive map seed completed successfully.', 'success');
+    if (window.currentView === 'intranet' || window.currentView === 'map') {
+        await renderView(window.currentView, { updateHash: false, suppressAccessToast: true });
+    }
 };
 
 window.sendAIChatMessage = async function() {

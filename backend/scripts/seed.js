@@ -6,6 +6,7 @@ const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
+const { execFileSync } = require('child_process');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const pool = new Pool({
@@ -224,6 +225,17 @@ async function seed() {
         await seedSafetyTips();
         await seedFAQs();
         await seedTestUser();
+        try {
+            log('\n🗺️ Seeding interactive map dataset...', 'blue');
+            execFileSync(process.execPath, [path.join(__dirname, 'seedInteractiveData.js')], {
+                stdio: 'inherit',
+                cwd: path.join(__dirname, '..'),
+                env: process.env
+            });
+            log('  ✓ Interactive map dataset seeded', 'green');
+        } catch (error) {
+            log('  ⚠ Interactive map dataset failed; base seed remains available.', 'yellow');
+        }
         
         log('\n✅ Seeding completed successfully!', 'green');
         

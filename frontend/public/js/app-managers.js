@@ -1056,6 +1056,13 @@ class IntranetManager {
         const result = await API.request('/intranet/status');
         return result || { isIntranet: false, ip: null };
     }
+
+    async seedInteractiveMapData() {
+        const result = await API.request('/intranet/seed/interactive', {
+            method: 'POST'
+        });
+        return result || { success: false, error: 'Failed to run seed from interface' };
+    }
 }
 
 // =====================================================

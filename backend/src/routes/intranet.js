@@ -4,6 +4,8 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const { pool } = require('../config/database');
 const { authenticateJWT, authorize } = require('../middleware/auth');
+const { execFile } = require('child_process');
+const path = require('path');
 
 router.use(authenticateJWT, authorize('it_manager'));
 
@@ -227,6 +229,25 @@ router.get('/bandwidth-test', (req, res) => {
 router.post('/sync/manual', async (req, res) => {
     // Trigger sync for all offline data
     res.json({ success: true, message: 'Sync initiated' });
+});
+
+// Trigger interactive seed data from UI (IT manager only)
+router.post('/seed/interactive', async (req, res) => {
+    const scriptPath = path.join(__dirname, '../../scripts/seedInteractiveData.js');
+    execFile(process.execPath, [scriptPath], { cwd: path.join(__dirname, '../..') }, (error, stdout, stderr) => {
+        if (error) {
+            return res.status(500).json({
+                success: false,
+                error: 'Interactive seed failed',
+                details: (stderr || error.message || '').slice(0, 4000)
+            });
+        }
+        return res.json({
+            success: true,
+            message: 'Interactive map seed completed.',
+            output: (stdout || '').slice(-4000)
+        });
+    });
 });
 
 // Get IP address
