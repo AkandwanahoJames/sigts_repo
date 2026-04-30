@@ -143,6 +143,19 @@ class AuthManager {
                 },
                 token: 'demo.tourist.token'
             },
+            demo_tourist: {
+                password: 'Tourist123!',
+                user: {
+                    id: 'demo-tourist',
+                    name: 'Demo Tourist',
+                    email: 'tourist@sigts.local',
+                    username: 'demo_tourist',
+                    role: 'tourist',
+                    user_type: 'tourist',
+                    department: 'Visitor'
+                },
+                token: 'demo.tourist.token'
+            },
             guide: {
                 password: 'guide123',
                 user: {
@@ -156,6 +169,19 @@ class AuthManager {
                 },
                 token: 'demo.guide.token'
             },
+            demo_guide: {
+                password: 'Guide123!',
+                user: {
+                    id: 'demo-guide',
+                    name: 'Demo Guide',
+                    email: 'guide@sigts.local',
+                    username: 'demo_guide',
+                    role: 'guide',
+                    user_type: 'guide',
+                    department: 'Tour Operations'
+                },
+                token: 'demo.guide.token'
+            },
             it_manager: {
                 password: 'itmanager123',
                 user: {
@@ -163,6 +189,32 @@ class AuthManager {
                     name: 'IT Manager',
                     email: 'admin@demo.local',
                     username: 'it_manager',
+                    role: 'it_manager',
+                    user_type: 'it_manager',
+                    department: 'IT'
+                },
+                token: 'demo.it_manager.token'
+            },
+            demo_it: {
+                password: 'ITManager123!',
+                user: {
+                    id: 'demo-admin',
+                    name: 'IT Manager',
+                    email: 'it@sigts.local',
+                    username: 'demo_it',
+                    role: 'it_manager',
+                    user_type: 'it_manager',
+                    department: 'IT'
+                },
+                token: 'demo.it_manager.token'
+            },
+            demo_admin: {
+                password: 'Admin123!',
+                user: {
+                    id: 'demo-root-admin',
+                    name: 'System Admin',
+                    email: 'admin@sigts.local',
+                    username: 'demo_admin',
                     role: 'it_manager',
                     user_type: 'it_manager',
                     department: 'IT'
@@ -414,6 +466,12 @@ class GeofenceManager {
         }
         this.checkProximityAlerts(latitude, longitude);
         AppState.currentLocation = newLocation;
+        window.dispatchEvent(new CustomEvent('geofence:location', {
+            detail: {
+                location: newLocation,
+                isInsidePark: isInside
+            }
+        }));
     }
 
     isInsidePark(lat, lng) {

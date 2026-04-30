@@ -199,6 +199,83 @@ let liveMapPOIs = [];
 let activeGuidanceTarget = null;
 let liveMapTileLayers = {};
 let measureStartPoint = null;
+let lastTurnAlertAt = 0;
+let parkAccessSimulation = (() => {
+    try {
+        const saved = JSON.parse(localStorage.getItem('parkAccessSimulation') || '{}');
+        return {
+            boundary: ['auto', 'inside', 'outside'].includes(saved.boundary) ? saved.boundary : 'auto',
+            network: ['auto', 'online', 'offline'].includes(saved.network) ? saved.network : 'auto'
+        };
+    } catch (_) {
+        return { boundary: 'auto', network: 'auto' };
+    }
+})();
+
+function saveParkAccessSimulation() {
+    localStorage.setItem('parkAccessSimulation', JSON.stringify(parkAccessSimulation));
+}
+
+function getParkAccessState() {
+    const live = Geofence?.currentLocation || AppState?.currentLocation || null;
+    const liveInside = live ? !!Geofence?.isInsidePark?.(live.lat, live.lng) : null;
+    const boundaryMode = parkAccessSimulation.boundary || 'auto';
+    const networkMode = parkAccessSimulation.network || 'auto';
+    const insidePark = boundaryMode === 'auto'
+        ? (liveInside === null ? true : liveInside)
+        : boundaryMode === 'inside';
+    const online = networkMode === 'auto'
+        ? navigator.onLine
+        : networkMode === 'online';
+    const status = (!online || !insidePark) ? 'restricted' : 'active';
+    return {
+        status,
+        online,
+        insidePark,
+        location: live,
+        liveInside,
+        boundaryMode,
+        networkMode
+    };
+}
+
+function getAccessStatusText(state) {
+    if (!state.online && !state.insidePark) return 'Out of park boundary and network unavailable';
+    if (!state.online) return 'Network unavailable for this park';
+    if (!state.insidePark) return 'Outside approved park boundary';
+    return 'Inside boundary and network available';
+}
+
+function renderParkAccessPanel() {
+    const state = getParkAccessState();
+    const latText = Number.isFinite(Number(state.location?.lat)) ? Number(state.location.lat).toFixed(5) : '--';
+    const lngText = Number.isFinite(Number(state.location?.lng)) ? Number(state.location.lng).toFixed(5) : '--';
+    return `<section class="park-access-panel ${state.status}">
+        <div class="park-access-head">
+            <h3>${icon('shield', 'icon-sm')} Park Access Status</h3>
+            ${renderStatusBadge(state.status === 'active' ? 'active' : 'warning')}
+        </div>
+        <p>${escapeHtml(getAccessStatusText(state))}</p>
+        <div class="park-access-meta">
+            <span class="park-chip ${state.insidePark ? 'ok' : 'warn'}">Boundary: ${state.insidePark ? 'Inside' : 'Outside'}</span>
+            <span class="park-chip ${state.online ? 'ok' : 'warn'}">Network: ${state.online ? 'Online' : 'Offline'}</span>
+            <span class="park-chip">Lat: ${escapeHtml(latText)} • Lng: ${escapeHtml(lngText)}</span>
+        </div>
+        <details class="park-access-sim">
+            <summary>Demo simulation controls</summary>
+            <div class="park-access-actions">
+                <button type="button" class="small-btn ${state.boundaryMode === 'auto' ? 'btn-primary' : ''}" onclick="setParkBoundaryMode('auto')">Boundary Auto</button>
+                <button type="button" class="small-btn ${state.boundaryMode === 'inside' ? 'btn-primary' : ''}" onclick="setParkBoundaryMode('inside')">Force Inside</button>
+                <button type="button" class="small-btn ${state.boundaryMode === 'outside' ? 'btn-primary' : ''}" onclick="setParkBoundaryMode('outside')">Force Outside</button>
+                <button type="button" class="small-btn ${state.networkMode === 'auto' ? 'btn-primary' : ''}" onclick="setParkNetworkMode('auto')">Network Auto</button>
+                <button type="button" class="small-btn ${state.networkMode === 'online' ? 'btn-primary' : ''}" onclick="setParkNetworkMode('online')">Force Online</button>
+                <button type="button" class="small-btn ${state.networkMode === 'offline' ? 'btn-primary' : ''}" onclick="setParkNetworkMode('offline')">Force Offline</button>
+                <button type="button" class="small-btn" onclick="resetParkAccessSimulation()">Reset Simulation</button>
+            </div>
+            <div class="park-access-note">Use these controls in presentations to simulate field restrictions without leaving the room.</div>
+        </details>
+    </section>`;
+}
 
 function getGuideOpsManager() {
     if (!window.__guideOpsManager) {
@@ -240,10 +317,11 @@ function renderMainLayout(content) {
         navItems.push({ id: 'intranet', icon: 'building', label: 'Intranet' });
     }
     
-    const isOffline = !navigator.onLine;
+    const accessState = getParkAccessState();
+    const isOffline = !accessState.online;
     const pending = OfflineSync?.getPendingCount?.() || 0;
     const statusText = isOffline ? `Offline mode • ${pending} pending` : (pending ? `Online • ${pending} pending sync` : 'Online');
-    return `<div class="app-container"><button type="button" class="sidebar-toggle" onclick="toggleSidebar()">${icon('menu', 'icon-sm')}</button><div class="sidebar"><div class="sidebar-header"><div class="sidebar-brand"><div class="sidebar-logo"><img src="/icons/icon-192.svg" alt="SIGTS logo"></div><div class="sidebar-title">Bwindi SIGTS</div></div></div><div class="sidebar-nav">${navItems.map(item => `<div class="nav-item-vertical ${window.currentView === item.id ? 'active' : ''}" onclick="navigateTo('${item.id}')"><div class="nav-icon-vertical">${icon(item.icon, 'icon-md')}</div><div class="nav-label-vertical">${item.label}</div></div>`).join('')}</div><div class="sidebar-logout" onclick="Auth.logout()">${icon('logout', 'icon-md')} Logout</div></div><div class="main-content" onclick="closeSidebar()"><div class="content-header"><h1>${getPageTitle(window.currentView)}</h1><div class="header-right"><span id="networkStatusBadge" class="net-status ${isOffline ? 'offline' : 'online'}">${statusText}</span>${renderNotificationBell(user)}<button type="button" class="header-profile" onclick="navigateTo('profile')"><div class="header-avatar ${isITManager ? 'role-it' : (isGuide ? 'role-guide' : 'role-tourist')}">${avatarIcon}</div><div class="header-user-info"><div class="header-user-name">${escapeHtml(user.name)}</div><div class="header-user-role">${escapeHtml(roleLabel)}</div></div></button></div></div><div class="main-container">${content}</div></div></div>`;}
+    return `<div class="app-container"><button type="button" class="sidebar-toggle" onclick="toggleSidebar()">${icon('menu', 'icon-sm')}</button><div class="sidebar"><div class="sidebar-header"><div class="sidebar-brand"><div class="sidebar-logo"><img src="/icons/icon-192.svg" alt="SIGTS logo"></div><div class="sidebar-title">Bwindi SIGTS</div></div></div><div class="sidebar-nav">${navItems.map(item => `<div class="nav-item-vertical ${window.currentView === item.id ? 'active' : ''}" onclick="navigateTo('${item.id}')"><div class="nav-icon-vertical">${icon(item.icon, 'icon-md')}</div><div class="nav-label-vertical">${item.label}</div></div>`).join('')}</div><div class="sidebar-logout" onclick="Auth.logout()">${icon('logout', 'icon-md')} Logout</div></div><div class="main-content" onclick="closeSidebar()"><div class="content-header"><h1>${getPageTitle(window.currentView)}</h1><div class="header-right"><span id="networkStatusBadge" class="net-status ${isOffline ? 'offline' : 'online'}">${statusText}</span>${renderNotificationBell(user)}<button type="button" class="header-profile" onclick="navigateTo('profile')"><div class="header-avatar ${isITManager ? 'role-it' : (isGuide ? 'role-guide' : 'role-tourist')}">${avatarIcon}</div><div class="header-user-info"><div class="header-user-name">${escapeHtml(user.name)}</div><div class="header-user-role">${escapeHtml(roleLabel)}</div></div></button></div></div><div class="main-container">${renderParkAccessPanel()}${content}</div></div></div>`;}
 
 function getAnimalIconName(animalName = '') {
     const value = animalName.toLowerCase();
@@ -319,7 +397,7 @@ async function renderAnimalsContent() {
 }
 
 function renderMapContent() {
-    return `<div class="map-container"><div id="bwindiLiveMap" class="map-canvas"></div><div class="map-overlay"><div class="map-status" id="mapStatus">Loading Bwindi live map...</div><div class="map-coords" id="mapCoords">Lat: --, Lng: --</div><div class="map-guidance"><select id="mapLayer" class="map-destination" onchange="changeMapLayer()"><option value="standard">Standard</option><option value="topo">Terrain</option></select></div><div class="map-guidance"><input id="mapSearchInput" class="map-destination" placeholder="Search location..." /><button class="small-btn" onclick="searchMapLocation()">Find</button></div><div class="map-guidance"><select id="mapDestination" class="map-destination"><option value="">Select destination...</option></select><button class="small-btn" onclick="openMapGuidance()">Guide Me</button></div><div class="map-guidance"><button class="small-btn" onclick="startDistanceMeasure()">Set A</button><button class="small-btn" onclick="measureToCurrent()">A → Me</button></div><div class="map-guidance-text" id="mapGuidanceText">Select a destination to get turn-by-turn guidance.</div><div class="map-nearby" id="mapNearbyList">Nearby POIs will appear here.</div></div></div>`;
+    return `<div class="map-container"><div id="bwindiLiveMap" class="map-canvas"></div><div class="map-overlay"><div class="map-status" id="mapStatus">Loading Bwindi live map...</div><div class="map-coords" id="mapCoords">Lat: --, Lng: --</div><div class="map-guidance"><select id="mapLayer" class="map-destination" onchange="changeMapLayer()"><option value="standard">Standard</option><option value="topo">Terrain</option><option value="satellite">Satellite</option><option value="trails">Trails Focus</option></select><button class="small-btn" onclick="cacheVisibleMapTiles()">Cache Area</button></div><div class="map-guidance"><input id="mapSearchInput" class="map-destination" placeholder="Search location..." /><button class="small-btn" onclick="searchMapLocation()">Find</button></div><div class="map-guidance"><select id="mapDestination" class="map-destination"><option value="">Select destination...</option></select><button class="small-btn" onclick="openMapGuidance()">Guide Me</button></div><div class="map-guidance"><button class="small-btn" onclick="startDistanceMeasure()">Set A</button><button class="small-btn" onclick="setDistanceMeasurePointB()">Set B</button><button class="small-btn" onclick="measureToCurrent()">A → Me</button></div><div class="map-guidance-text" id="mapGuidanceText">Select a destination to get turn-by-turn guidance.</div><div id="mapDirectionsList" class="map-directions">Directions will appear here.</div><div id="mapCompassStatus" class="map-compass">Compass: --</div><div id="mapElevationProfile" class="map-elevation">Elevation profile unavailable.</div><div class="map-nearby" id="mapNearbyList">Nearby POIs will appear here.</div></div></div>`;
 }
 
 function normalizeCoordinatePair(point) {
@@ -416,6 +494,64 @@ function buildTurnByTurnGuidance(from, to, destinationName) {
     return `Head ${ns} for ~${phaseOne} min, continue ${ew} for ~${phaseTwo} min, then follow park trail signs to ${destinationName} for ~${phaseThree} min. Total distance: ${distanceKm} km (${minutes} min walk).`;
 }
 
+function getTrailDifficulty(location = {}) {
+    const source = `${location.difficulty || ''} ${location.name || ''} ${location.description || ''}`.toLowerCase();
+    if (source.includes('hard') || source.includes('difficult') || source.includes('steep')) return 'difficult';
+    if (source.includes('moderate') || source.includes('medium')) return 'moderate';
+    return 'easy';
+}
+
+function trailDifficultyColor(level = 'easy') {
+    if (level === 'difficult') return '#D62828';
+    if (level === 'moderate') return '#F4A261';
+    return '#2A9D8F';
+}
+
+function renderDirectionsList(from, to, destinationName) {
+    const distanceMeters = Geofence.calculateDistance(from.lat, from.lng, to.lat, to.lng);
+    const km = distanceMeters / 1000;
+    const minutes = Math.max(3, Math.round(km / 4.2 * 60));
+    const eta = new Date(Date.now() + minutes * 60000);
+    const ns = to.lat >= from.lat ? 'north' : 'south';
+    const ew = to.lng >= from.lng ? 'east' : 'west';
+    return [
+        `1. Face ${ns} and continue for ${(km * 0.45).toFixed(2)} km.`,
+        `2. Keep ${ew} on the marked trail for ${(km * 0.35).toFixed(2)} km.`,
+        `3. Follow ranger posts/signage to ${destinationName} for ${(km * 0.20).toFixed(2)} km.`,
+        `ETA: ${minutes} min (arrive around ${eta.toLocaleTimeString()}).`
+    ];
+}
+
+function updateCompassStatus(from, to) {
+    const node = document.getElementById('mapCompassStatus');
+    if (!node) return;
+    if (!from || !to) {
+        node.textContent = 'Compass: --';
+        return;
+    }
+    const lat1 = from.lat * Math.PI / 180;
+    const lat2 = to.lat * Math.PI / 180;
+    const dLng = (to.lng - from.lng) * Math.PI / 180;
+    const y = Math.sin(dLng) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+    const bearing = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    const cardinal = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(bearing / 45) % 8];
+    node.textContent = `Compass: ${cardinal} (${Math.round(bearing)}° from north)`;
+}
+
+function renderElevationProfile(from, to, difficulty = 'easy') {
+    const node = document.getElementById('mapElevationProfile');
+    if (!node || !from || !to) return;
+    const distanceKm = Math.max(0.1, Geofence.calculateDistance(from.lat, from.lng, to.lat, to.lng) / 1000);
+    const baseGain = difficulty === 'difficult' ? 220 : (difficulty === 'moderate' ? 140 : 80);
+    const elevationGain = Math.round(baseGain * distanceKm);
+    const bars = Array.from({ length: 8 }).map((_, i) => {
+        const h = 16 + Math.round((i + 1) / 8 * (difficulty === 'difficult' ? 40 : (difficulty === 'moderate' ? 30 : 22)));
+        return `<span class="elev-bar" style="height:${h}px"></span>`;
+    }).join('');
+    node.innerHTML = `<div class="map-elev-title">Estimated elevation profile (${difficulty})</div><div class="map-elev-bars">${bars}</div><div class="map-elev-meta">Approx gain: ${elevationGain} m over ${distanceKm.toFixed(2)} km</div>`;
+}
+
 window.openMapGuidance = function () {
     const selector = document.getElementById('mapDestination');
     const guidanceNode = document.getElementById('mapGuidanceText');
@@ -440,6 +576,13 @@ window.openMapGuidance = function () {
 
     const guidance = buildTurnByTurnGuidance(current, destination, selected.name || 'destination');
     guidanceNode.textContent = guidance;
+    const list = document.getElementById('mapDirectionsList');
+    if (list) {
+        const items = renderDirectionsList(current, destination, selected.name || 'destination');
+        list.innerHTML = items.map((line) => `<div>• ${escapeHtml(line)}</div>`).join('');
+    }
+    updateCompassStatus(current, destination);
+    renderElevationProfile(current, destination, getTrailDifficulty(selected));
     activeGuidanceTarget = {
         name: selected.name || 'destination',
         lat: destination.lat,
@@ -455,6 +598,49 @@ window.openMapGuidance = function () {
             { color: '#D62828', weight: 3, dashArray: '10,6', opacity: 0.9 }
         ).addTo(liveMapInstance);
         liveMapInstance.fitBounds(liveMapLayers.activeTourRoute.getBounds().pad(0.28));
+    }
+};
+
+window.cacheVisibleMapTiles = async function () {
+    if (!liveMapInstance || !window.caches) {
+        setMapStatus('Tile caching unavailable in this browser.');
+        return;
+    }
+    const layerName = document.getElementById('mapLayer')?.value || 'standard';
+    const template = liveMapTileLayers[layerName]?._url || liveMapTileLayers.standard?._url;
+    if (!template) {
+        setMapStatus('No tile template available for caching.');
+        return;
+    }
+    const zoom = liveMapInstance.getZoom();
+    const bounds = liveMapInstance.getBounds();
+    const nw = bounds.getNorthWest();
+    const se = bounds.getSouthEast();
+    const latLngToTile = (lat, lng, z) => {
+        const n = 2 ** z;
+        const x = Math.floor(((lng + 180) / 360) * n);
+        const latRad = lat * Math.PI / 180;
+        const y = Math.floor((1 - Math.log(Math.tan(latRad) + (1 / Math.cos(latRad))) / Math.PI) / 2 * n);
+        return { x, y };
+    };
+    const a = latLngToTile(nw.lat, nw.lng, zoom);
+    const b = latLngToTile(se.lat, se.lng, zoom);
+    const minX = Math.min(a.x, b.x);
+    const maxX = Math.max(a.x, b.x);
+    const minY = Math.min(a.y, b.y);
+    const maxY = Math.max(a.y, b.y);
+    const urls = [];
+    for (let x = minX; x <= maxX; x += 1) {
+        for (let y = minY; y <= maxY; y += 1) {
+            urls.push(template.replace('{s}', 'a').replace('{z}', String(zoom)).replace('{x}', String(x)).replace('{y}', String(y)));
+        }
+    }
+    try {
+        const cache = await caches.open('bwindi-map-tiles-v1');
+        await Promise.all(urls.slice(0, 120).map((url) => cache.add(url).catch(() => null)));
+        setMapStatus(`Cached ${Math.min(120, urls.length)} map tiles for offline use.`);
+    } catch (_) {
+        setMapStatus('Failed to cache map tiles. Check connection and retry.');
     }
 };
 
@@ -514,6 +700,27 @@ window.measureToCurrent = function () {
             { color: '#7B1FA2', weight: 3, dashArray: '6,5', opacity: 0.9 }
         ).addTo(liveMapInstance);
     }
+};
+
+window.setDistanceMeasurePointB = function () {
+    if (!liveMapInstance || !measureStartPoint) {
+        setMapStatus('Set point A first, then click the map to set point B.');
+        return;
+    }
+    setMapStatus('Tap/click map once to set point B.');
+    const onceHandler = (event) => {
+        const end = { lat: event.latlng.lat, lng: event.latlng.lng };
+        const meters = Geofence.calculateDistance(measureStartPoint.lat, measureStartPoint.lng, end.lat, end.lng);
+        setMapStatus(`Distance A → B: ${(meters / 1000).toFixed(2)} km`);
+        if (liveMapLayers.route) {
+            try { liveMapInstance.removeLayer(liveMapLayers.route); } catch (_) {}
+        }
+        liveMapLayers.route = window.L.polyline(
+            [[measureStartPoint.lat, measureStartPoint.lng], [end.lat, end.lng]],
+            { color: '#7B1FA2', weight: 3, dashArray: '6,5', opacity: 0.9 }
+        ).addTo(liveMapInstance);
+    };
+    liveMapInstance.once('click', onceHandler);
 };
 
 function teardownLiveMap() {
@@ -613,15 +820,30 @@ async function refreshLiveMapData() {
             .map((loc) => {
                 const coords = coerceLatLng(loc);
                 if (!coords) return null;
+                const difficulty = getTrailDifficulty(loc);
                 return createDivMarker(
                     coords.lat,
                     coords.lng,
                     markerClassForLocation(loc),
-                    `<strong>${escapeHtml(loc.name || 'POI')}</strong><br>${escapeHtml(loc.type || 'location')}`
+                    `<strong>${escapeHtml(loc.name || 'POI')}</strong><br>${escapeHtml(loc.type || 'location')}<br>Trail: ${escapeHtml(difficulty)}`
                 );
             })
             .filter(Boolean);
         liveMapLayers.markers.push(...poiMarkers);
+
+        const trailPolylines = liveMapPOIs
+            .filter((loc) => String(loc.type || loc.location_type || '').toLowerCase().includes('trail'))
+            .map((loc) => coerceLatLng(loc))
+            .filter(Boolean)
+            .sort((a, b) => a.lat - b.lat || a.lng - b.lng);
+        if (trailPolylines.length > 1) {
+            const difficulty = getTrailDifficulty({ name: 'trail', description: 'moderate' });
+            const trailLayer = window.L.polyline(
+                trailPolylines.map((p) => [p.lat, p.lng]),
+                { color: trailDifficultyColor(difficulty), weight: 4, opacity: 0.7 }
+            ).addTo(liveMapInstance);
+            liveMapLayers.markers.push(trailLayer);
+        }
 
         const sightingMarkers = (Array.isArray(sightings) ? sightings : [])
             .map((sighting) => {
@@ -642,6 +864,16 @@ async function refreshLiveMapData() {
             const userMarker = createDivMarker(current.lat, current.lng, 'map-marker-user', 'Your current location');
             userMarker.bindPopup('Your current location');
             liveMapLayers.markers.push(userMarker);
+            if (Number.isFinite(Number(current.accuracy)) && Number(current.accuracy) > 0) {
+                const accuracyCircle = window.L.circle([current.lat, current.lng], {
+                    radius: Math.min(1200, Number(current.accuracy)),
+                    color: '#2563eb',
+                    fillColor: '#60a5fa',
+                    fillOpacity: 0.12,
+                    weight: 1
+                }).addTo(liveMapInstance);
+                liveMapLayers.markers.push(accuracyCircle);
+            }
             setMapCoords(current.lat, current.lng);
             if (activeGuidanceTarget) {
                 const remaining = Geofence.calculateDistance(current.lat, current.lng, activeGuidanceTarget.lat, activeGuidanceTarget.lng);
@@ -652,6 +884,11 @@ async function refreshLiveMapData() {
                     } else {
                         node.textContent = `Navigating to ${activeGuidanceTarget.name}. Remaining distance: ${(remaining / 1000).toFixed(2)} km.`;
                     }
+                }
+                updateCompassStatus(current, activeGuidanceTarget);
+                if (remaining <= 200 && Date.now() - lastTurnAlertAt > 30000) {
+                    lastTurnAlertAt = Date.now();
+                    showToast(`Next turn alert: ${activeGuidanceTarget.name} is ${(remaining).toFixed(0)}m ahead.`, 'info');
                 }
             }
             const nearby = liveMapPOIs
@@ -737,6 +974,15 @@ async function initializeLiveMap() {
     });
     liveMapTileLayers.topo = window.L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
         maxZoom: 17,
+        attribution: '&copy; OpenTopoMap contributors'
+    });
+    liveMapTileLayers.satellite = window.L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+    });
+    liveMapTileLayers.trails = window.L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+        maxZoom: 17,
+        opacity: 0.95,
         attribution: '&copy; OpenTopoMap contributors'
     });
     liveMapTileLayers.standard.addTo(liveMapInstance);
@@ -974,47 +1220,95 @@ async function renderITManagerDashboard() {
 // INTRANET DASHBOARD (HR, Announcements, Inventory)
 // =====================================================
 async function renderIntranetDashboard() {
-    const [announcements, inventory, employees, hrStats] = await Promise.all([
-        Intranet.getAnnouncements(),
-        Intranet.getInventory(),
-        Intranet.getEmployees(),
-        Intranet.getHRStats()
+    const settled = await Promise.allSettled([
+        Intranet.getIntranetStatus(),
+        Intranet.getPeers(),
+        API.request('/geofence/events?limit=12'),
+        Intranet.getEmployees()
     ]);
-    
-    const animals = await Content.getAnimals();
+    const valueOr = (i, fallback) => (settled[i].status === 'fulfilled' && settled[i].value != null ? settled[i].value : fallback);
+    const intranetStatus = valueOr(0, { isIntranet: false, ip: null });
+    const peers = valueOr(1, []);
+    const eventsResponse = valueOr(2, {});
+    const employees = valueOr(3, []);
+    const geofenceEvents = eventsResponse?.events || [];
+    const insideCount = peers.filter((p) => p.location && Geofence?.isInsidePark?.(p.location.lat, p.location.lng)).length;
+    const outsideCount = peers.filter((p) => p.location && !Geofence?.isInsidePark?.(p.location.lat, p.location.lng)).length;
+    const unknownCount = Math.max(0, peers.length - insideCount - outsideCount);
+    const activeEmployees = employees.filter((e) => String(e.status || '').toLowerCase() === 'active').length;
+
     return `<div class="intranet-dashboard">
         ${renderDashboardShell({
-            primaryTitle: 'Intranet Highlights',
-            primaryIcon: 'megaphone',
-            primaryItems: (announcements || []).slice(0, 3).map((a) => ({
-                title: a.title,
-                match: `${a.priority || 'normal'} priority`,
-                reason: a.content
-            })),
-            quote: '"Clear internal communication powers smooth operations."',
-            seasonalTitle: `${icon('users', 'icon-sm')} HR Snapshot`,
-            seasonalItems: [
-                `Total staff: ${hrStats.totalStaff}`,
-                `Guides on duty: ${hrStats.guidesOnDuty}`,
-                `IT team: ${hrStats.itStaff}`,
-                `Inventory records: ${inventory.length}`
+            primaryTitle: 'Access Governance',
+            primaryIcon: 'shield',
+            primaryItems: [
+                {
+                    title: 'Boundary Rule',
+                    match: 'Inside park required',
+                    reason: 'Users are expected to operate inside approved park boundaries for protected actions.'
+                },
+                {
+                    title: 'Network Rule',
+                    match: intranetStatus?.isIntranet ? 'Intranet linked' : 'External network',
+                    reason: intranetStatus?.isIntranet
+                        ? `Connected via trusted network (${intranetStatus?.ip || 'IP unavailable'}).`
+                        : 'Currently outside the trusted intranet network; restricted workflows should be treated as demo/read-only.'
+                },
+                {
+                    title: 'Presentation Mode',
+                    match: 'Simulation available',
+                    reason: 'Use the Park Access Status simulation controls above to force inside/outside and online/offline demo scenarios.'
+                }
             ],
-            seasonalActionLabel: 'View Suggestions',
-            animalCount: animals.length
+            quote: '"Conservation systems are strongest when access is location-aware."',
+            seasonalTitle: `${icon('users', 'icon-sm')} Team Snapshot`,
+            seasonalItems: [
+                `Active employees: ${activeEmployees}`,
+                `Live peers tracked: ${peers.length}`,
+                `Inside boundary: ${insideCount}`,
+                `Outside/unknown: ${outsideCount + unknownCount}`
+            ],
+            seasonalActionLabel: 'Monitor Access',
+            animalCount: activeEmployees
         })}
-        <div class="section-card">
-            <div class="section-header"><h3>${icon('megaphone', 'icon-sm')} Internal Announcements</h3><button class="add-btn btn-primary" onclick="showAddAnnouncementModal()">${icon('plus', 'icon-sm')} Post</button></div>
-            <div id="announcementsList">${announcements.map(a => `<div class="announcement-item ${a.priority}"><div class="announcement-title">${escapeHtml(a.title)}</div><div class="announcement-meta">${new Date(a.date).toLocaleDateString()} by ${a.author}</div><div class="announcement-content">${escapeHtml(a.content)}</div><button class="small-btn btn-danger" onclick="deleteAnnouncement(${a.id})">Delete</button></div>`).join('') || '<div class="empty-state">No announcements</div>'}</div>
+        <div class="dashboard-feature-grid">
+            <div class="section-card">
+                <div class="section-header"><h3>${icon('building', 'icon-sm')} Network & Boundary Compliance</h3></div>
+                <div class="analytics-list">
+                    <div class="analytics-row"><span>Intranet Link</span><div class="analytics-bar"><div style="width:${intranetStatus?.isIntranet ? 100 : 35}%;"></div></div><strong>${intranetStatus?.isIntranet ? 'Connected' : 'External'}</strong></div>
+                    <div class="analytics-row"><span>Device IP</span><span></span><strong>${escapeHtml(intranetStatus?.ip || 'Unknown')}</strong></div>
+                    <div class="analytics-row"><span>Peers inside boundary</span><span></span><strong>${insideCount}</strong></div>
+                    <div class="analytics-row"><span>Peers outside boundary</span><span></span><strong>${outsideCount}</strong></div>
+                </div>
+            </div>
+            <div class="section-card">
+                <div class="section-header"><h3>${icon('user', 'icon-sm')} Live Access Presence</h3></div>
+                <div class="seasonal-list">${(peers || []).length ? peers.slice(0, 12).map((p) => {
+                    const isInside = p.location ? !!Geofence?.isInsidePark?.(p.location.lat, p.location.lng) : null;
+                    const accessLabel = isInside === null ? 'Unknown location' : (isInside ? 'Inside boundary' : 'Outside boundary');
+                    return `<div class="seasonal-item">• ${escapeHtml(p.name || 'Peer')} (${escapeHtml(p.type || 'user')}) - ${accessLabel}${p.location ? ` @ ${Number(p.location.lat).toFixed(4)}, ${Number(p.location.lng).toFixed(4)}` : ''}</div>`;
+                }).join('') : '<div class="seasonal-item">• No live peers detected in the latest window.</div>'}</div>
+            </div>
         </div>
-        
         <div class="section-card">
-            <div class="section-header"><h3>${icon('box', 'icon-sm')} Inventory Management</h3><button class="add-btn btn-primary" onclick="showAddInventoryModal()">${icon('plus', 'icon-sm')} Add Item</button></div>
-            <div class="inventory-list">${inventory.map(i => `<div class="inventory-item"><span><strong>${escapeHtml(i.name)}</strong> - ${i.quantity} units (${i.category})</span><button class="small-btn btn-secondary" onclick="updateInventoryQuantity(${i.id})">Update</button></div>`).join('') || '<div class="empty-state">No inventory items</div>'}</div>
+            <div class="section-header"><h3>${icon('map', 'icon-sm')} Recent Boundary Events</h3></div>
+            <div class="seasonal-list">${(geofenceEvents || []).length ? geofenceEvents.slice(0, 10).map((event) => `
+                <div class="seasonal-item">
+                    • ${String(event.event_type || '').toUpperCase()} at ${new Date(event.event_time || Date.now()).toLocaleString()}
+                    ${Number.isFinite(Number(event.latitude)) && Number.isFinite(Number(event.longitude))
+                        ? `<br><small>${Number(event.latitude).toFixed(5)}, ${Number(event.longitude).toFixed(5)}</small>`
+                        : ''}
+                </div>`).join('') : '<div class="seasonal-item">• No recent boundary entry/exit events.</div>'}
+            </div>
         </div>
-        
         <div class="section-card">
-            <div class="section-header"><h3>${icon('users', 'icon-sm')} Employee Directory</h3><button class="add-btn btn-primary" onclick="showAddEmployeeModal()">${icon('plus', 'icon-sm')} Add Employee</button></div>
-            <div class="employee-list">${employees.map(e => `<div class="employee-item"><div><strong>${escapeHtml(e.name)}</strong> - ${escapeHtml(e.role)}<br><small>${escapeHtml(e.department)}</small> ${renderStatusBadge(e.status)}</div><button class="small-btn ${e.status === 'active' ? 'btn-danger' : 'btn-secondary'}" onclick="toggleEmployeeStatus(${e.id}, '${e.status}')">${e.status === 'active' ? 'Deactivate' : 'Activate'}</button></div>`).join('') || '<div class="empty-state">No employees</div>'}</div>
+            <div class="section-header"><h3>${icon('target', 'icon-sm')} Panel Demo Flow</h3></div>
+            <div class="seasonal-list">
+                <div class="seasonal-item">1) Keep simulation on <strong>Auto</strong> to show live field mode.</div>
+                <div class="seasonal-item">2) Force <strong>Outside</strong> to demonstrate boundary restriction messaging.</div>
+                <div class="seasonal-item">3) Force <strong>Offline</strong> to demonstrate network restriction messaging.</div>
+                <div class="seasonal-item">4) Reset simulation to restore normal operations.</div>
+            </div>
         </div>
     </div>`;
 }
@@ -1772,7 +2066,8 @@ async function renderView(view, options = {}) {
 function refreshNetworkStatusBadge() {
     const badge = document.getElementById('networkStatusBadge');
     if (!badge) return;
-    const isOffline = !navigator.onLine;
+    const state = getParkAccessState();
+    const isOffline = !state.online;
     const pending = OfflineSync?.getPendingCount?.() || 0;
     badge.classList.toggle('offline', isOffline);
     badge.classList.toggle('online', !isOffline);
@@ -1780,6 +2075,40 @@ function refreshNetworkStatusBadge() {
 }
 
 window.refreshNetworkStatusBadge = refreshNetworkStatusBadge;
+
+function refreshParkAccessPanel() {
+    const panel = document.querySelector('.park-access-panel');
+    if (!panel) return;
+    panel.outerHTML = renderParkAccessPanel();
+    refreshNetworkStatusBadge();
+}
+
+window.refreshParkAccessPanel = refreshParkAccessPanel;
+
+window.setParkBoundaryMode = function (mode) {
+    if (!['auto', 'inside', 'outside'].includes(mode)) return;
+    parkAccessSimulation.boundary = mode;
+    saveParkAccessSimulation();
+    refreshParkAccessPanel();
+    if (mode === 'outside') showToast('Boundary simulation: OUTSIDE park', 'warning');
+    if (mode === 'inside') showToast('Boundary simulation: INSIDE park', 'success');
+};
+
+window.setParkNetworkMode = function (mode) {
+    if (!['auto', 'online', 'offline'].includes(mode)) return;
+    parkAccessSimulation.network = mode;
+    saveParkAccessSimulation();
+    refreshParkAccessPanel();
+    if (mode === 'offline') showToast('Network simulation: OFFLINE', 'warning');
+    if (mode === 'online') showToast('Network simulation: ONLINE', 'success');
+};
+
+window.resetParkAccessSimulation = function () {
+    parkAccessSimulation = { boundary: 'auto', network: 'auto' };
+    saveParkAccessSimulation();
+    refreshParkAccessPanel();
+    showToast('Park access simulation reset to live mode.', 'info');
+};
 
 async function refreshRareAlertBadge() {
     const badge = document.getElementById('rareAlertBadge');

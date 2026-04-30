@@ -3374,6 +3374,132 @@ body {
     border-color: #d8dfda;
 }
 
+.park-access-panel {
+    border: 1px solid #d9d7cc;
+    border-radius: 16px;
+    background: #fff;
+    padding: 14px 16px;
+    display: grid;
+    gap: 10px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+}
+
+.park-access-panel.restricted {
+    border-color: rgba(185, 28, 28, 0.35);
+    background: #fff7f7;
+}
+
+.park-access-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.park-access-head h3 {
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.park-access-panel p {
+    margin: 0;
+    color: var(--text-700);
+    font-size: 13px;
+}
+
+.park-access-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.park-chip {
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    background: #eef0ea;
+    color: #364236;
+    border: 1px solid rgba(54, 66, 54, 0.2);
+}
+
+.park-chip.ok {
+    background: #eef7ef;
+    color: #1b5e20;
+    border-color: rgba(27, 94, 32, 0.25);
+}
+
+.park-chip.warn {
+    background: #fff3ea;
+    color: #9a3412;
+    border-color: rgba(154, 52, 18, 0.25);
+}
+
+.park-access-sim {
+    border-top: 1px dashed #d9d7cc;
+    padding-top: 8px;
+}
+
+.park-access-sim summary {
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-600);
+    font-weight: 700;
+}
+
+.park-access-actions {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.park-access-note {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-500);
+}
+
+.map-directions,
+.map-compass,
+.map-elevation {
+    margin-top: 6px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.94);
+    border: 1px solid #e3e0d5;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #2b3a2f;
+}
+
+.map-elev-title {
+    font-weight: 700;
+    margin-bottom: 6px;
+}
+
+.map-elev-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    min-height: 44px;
+}
+
+.elev-bar {
+    width: 10px;
+    border-radius: 4px 4px 2px 2px;
+    background: linear-gradient(180deg, #7fb069, #3f704d);
+}
+
+.map-elev-meta {
+    margin-top: 6px;
+    color: #5c695f;
+    font-size: 11px;
+}
+
 @media (max-width: 900px) {
     .kpi-strip {
         grid-template-columns: repeat(2, minmax(0, 1fr));

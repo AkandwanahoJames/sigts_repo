@@ -59,10 +59,25 @@ function initHashRouting() {
     });
 }
 
+function initLiveAccessStatusHooks() {
+    const refresh = () => {
+        if (typeof window.refreshNetworkStatusBadge === 'function') {
+            window.refreshNetworkStatusBadge();
+        }
+        if (typeof window.refreshParkAccessPanel === 'function') {
+            window.refreshParkAccessPanel();
+        }
+    };
+    window.addEventListener('online', refresh);
+    window.addEventListener('offline', refresh);
+    window.addEventListener('geofence:location', refresh);
+}
+
 async function init() {
     showLoading();
     registerServiceWorker();
     initHashRouting();
+    initLiveAccessStatusHooks();
 
     // Never block first paint/login on geofence startup network calls.
     Geofence.init().catch((error) => {

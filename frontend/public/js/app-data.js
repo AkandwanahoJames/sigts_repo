@@ -20,6 +20,15 @@ const API_BASE_URL = (() => {
     return `${window.location.origin}/api`;
 })();
 class APIService {
+    getLiveCoordinates() {
+        const loc = window.Geofence?.currentLocation || window.AppState?.currentLocation;
+        if (!loc) return null;
+        const lat = Number(loc.lat);
+        const lng = Number(loc.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        return { lat, lng };
+    }
+
     getToken() {
         return localStorage.getItem('token') || sessionStorage.getItem('token');
     }
@@ -41,6 +50,11 @@ class APIService {
         }
         if (token) {
             headers.Authorization = `Bearer ${token}`;
+        }
+        const coords = this.getLiveCoordinates();
+        if (coords && !headers['x-user-lat'] && !headers['x-user-lng']) {
+            headers['x-user-lat'] = String(coords.lat);
+            headers['x-user-lng'] = String(coords.lng);
         }
 
         try {
