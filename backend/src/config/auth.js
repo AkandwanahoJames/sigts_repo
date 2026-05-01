@@ -206,7 +206,7 @@ async function createTestUser() {
         const testPassword = 'test123';
         const hashedPassword = await hashPassword(testPassword);
         
-        // Check if test user already exists
+        // Check whether the user already exists
         const existing = await pool.query(
             'SELECT user_id FROM users WHERE username = $1',
             ['testuser']

@@ -20,7 +20,7 @@ const REQUIREMENTS = {
 };
 
 // Boot-time environment validation. Refuses to start if required env vars
-// are missing or carry obvious placeholder values.
+// are missing or clearly invalid.
 function ensureSecurityConfiguration() {
     const isProd = process.env.NODE_ENV === 'production';
     const errors = [];

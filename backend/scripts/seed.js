@@ -186,7 +186,7 @@ async function seedFAQs() {
     log(`  ✓ Seeded ${faqs.length} FAQs`, 'green');
 }
 
-// Seed test user
+// Seed user
 async function seedTestUser() {
     log('\n👤 Seeding Test User...', 'blue');
     

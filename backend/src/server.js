@@ -275,7 +275,7 @@ app.post('/api/auth/create-test-user', async (req, res) => {
             );
             console.log('Updated testuser password');
         } else {
-            // Create new test user
+            // Create new user
             await pool.query(
                 `INSERT INTO users (user_id, username, password_hash, email, user_type, is_active)
                  VALUES (gen_random_uuid(), $1, $2, $3, $4, true)`,
