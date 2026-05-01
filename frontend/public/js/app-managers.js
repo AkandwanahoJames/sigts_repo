@@ -82,18 +82,39 @@ class AuthManager {
     async login(username, password, rememberMe = false) {
         // Client-side attempt lockout disabled during testing.
         // Re-enable later by restoring the failedAttempts >= maxAttempts check.
+        const isDev = (window.__SIGTS_CONFIG__?.NODE_ENV || 'development') !== 'production';
+        const loginStart = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
 
-        let geo = null;
-        if (navigator.geolocation) {
+        // Avoid blocking login on geolocation. Use cached location first, then
+        // attempt a very short lookup; continue without coordinates if unavailable.
+        let geo = AppState?.currentLocation
+            ? { lat: AppState.currentLocation.lat, lng: AppState.currentLocation.lng }
+            : null;
+
+        if (!geo && navigator.geolocation) {
             try {
                 geo = await new Promise((resolve) => {
+                    let resolved = false;
+                    const finish = (value) => {
+                        if (resolved) return;
+                        resolved = true;
+                        resolve(value);
+                    };
+
+                    const timer = setTimeout(() => finish(null), 800);
                     navigator.geolocation.getCurrentPosition(
-                        (position) => resolve({
-                            lat: position.coords.latitude,
-                            lng: position.coords.longitude
-                        }),
-                        () => resolve(null),
-                        { enableHighAccuracy: true, timeout: 6000, maximumAge: 120000 }
+                        (position) => {
+                            clearTimeout(timer);
+                            finish({
+                                lat: position.coords.latitude,
+                                lng: position.coords.longitude
+                            });
+                        },
+                        () => {
+                            clearTimeout(timer);
+                            finish(null);
+                        },
+                        { enableHighAccuracy: false, timeout: 700, maximumAge: 300000 }
                     );
                 });
             } catch (_) {}
@@ -108,6 +129,10 @@ class AuthManager {
                 lng: geo?.lng
             })
         });
+        const afterAuthRequest = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        if (isDev) {
+            console.debug(`[auth] /auth/login request completed in ${Math.round(afterAuthRequest - loginStart)}ms`);
+        }
 
         if (result?.success && result.mfaRequired && result.mfaToken) {
             const code = await window.showPromptDialog('Enter your 6-digit authenticator code');
@@ -126,6 +151,10 @@ class AuthManager {
         }
 
         if (result?.success && result.token && result.user) {
+            if (isDev) {
+                const loginEnd = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                console.debug(`[auth] total login flow completed in ${Math.round(loginEnd - loginStart)}ms`);
+            }
             return this.completeLogin(result.user, result.token, rememberMe);
         }
 
@@ -226,6 +255,10 @@ class AuthManager {
         const key = String(username || '').trim().toLowerCase();
         const demo = demoCredentials[key];
         if (demo && password === demo.password) {
+            if (isDev) {
+                const loginEnd = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                console.debug(`[auth] demo login flow completed in ${Math.round(loginEnd - loginStart)}ms`);
+            }
             return this.completeLogin(demo.user, demo.token, rememberMe);
         }
 

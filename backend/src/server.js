@@ -9,7 +9,6 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
-const dotenv = require('dotenv');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
@@ -17,7 +16,8 @@ const http = require('http');
 const socketIo = require('socket.io');
 
 // Load environment variables
-dotenv.config();
+const { loadEnv } = require('./config/env');
+loadEnv();
 
 // Import configuration modules
 const { pool, connectDB } = require('./config/database');

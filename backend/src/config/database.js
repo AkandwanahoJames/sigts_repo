@@ -2,11 +2,12 @@
 
 const { Pool } = require('pg');
 const logger = {
-    info: (msg) => console.log(`[INFO] ${msg}`),
-    error: (msg) => console.error(`[ERROR] ${msg}`),
-    warn: (msg) => console.warn(`[WARN] ${msg}`)
+    info: (...args) => console.log('[INFO]', ...args),
+    error: (...args) => console.error('[ERROR]', ...args),
+    warn: (...args) => console.warn('[WARN]', ...args)
 };
-require('dotenv').config();
+const { loadEnv } = require('./env');
+loadEnv();
 
 // Validate required environment variables for database connection
 function validateDatabaseConfig() {

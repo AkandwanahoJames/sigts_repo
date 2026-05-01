@@ -44,7 +44,11 @@ function icon(name, className = '') {
         download: '<path d="M12 4v10"/><path d="M8 10l4 4 4-4"/><path d="M4 19h16"/>',
         plus: '<path d="M12 5v14M5 12h14"/>',
         menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
-        note: '<path d="M6 3h9l3 3v15H6z"/><path d="M15 3v4h4"/><path d="M9 11h6M9 15h6"/>'
+        note: '<path d="M6 3h9l3 3v15H6z"/><path d="M15 3v4h4"/><path d="M9 11h6M9 15h6"/>',
+        mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
+        lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+        key: '<circle cx="7.5" cy="12" r="3.5"/><path d="M11 12h10"/><path d="M18 12v3"/><path d="M15 12v2"/>',
+        userPlus: '<circle cx="10" cy="8" r="4"/><path d="M3 21a7 7 0 0 1 14 0"/><path d="M19 8v6M16 11h6"/>'
         ,
         smile: '<circle cx="12" cy="12" r="9"/><path d="M8 10h.01M16 10h.01"/><path d="M8 15c1.2 1.2 2.3 1.8 4 1.8s2.8-.6 4-1.8"/>'    };
     const content = icons[name] || icons.info;
@@ -2165,36 +2169,36 @@ function renderAuthMergedScreen(activePanel = 'login') {
             </div>
             <div class="auth-side-message">
                 <span class="auth-side-kicker">Welcome</span>
-                <h1>Smart Park Access Portal</h1>
-                <p>Manage wildlife insights, tours, and park operations from one secure platform.</p>
+                <h1>Smart Information Access to<br>Bwindi Impenetrable National Park</h1>
+                <p>Navigate trails, discover wildlife insights, and receive real-time guidance for a safer, richer park experience as you navigate with your prefered tour guide.</p>
             </div>
         </aside>
         <main class="auth-portal-main">
             <section class="auth-card">
                 <div class="auth-tabs">
-                    <button type="button" class="auth-tab ${isLogin ? 'active' : ''}" onclick="renderView('login')">Log In</button>
-                    <button type="button" class="auth-tab ${!isLogin ? 'active' : ''}" onclick="renderView('register')">Create Account</button>
+                    <button type="button" class="auth-tab ${isLogin ? 'active' : ''}" onclick="renderView('login')">${icon('user', 'icon-sm')} Log In</button>
+                    <button type="button" class="auth-tab ${!isLogin ? 'active' : ''}" onclick="renderView('register')">${icon('userPlus', 'icon-sm')} Create Account</button>
                 </div>
                 ${isLogin ? `
                 <form class="auth-form" onsubmit="event.preventDefault(); handleLogin();">
-                    <label class="auth-field"><span class="auth-field-label">Email or Username</span><span class="auth-input-shell"><input type="text" id="loginUsername" class="auth-input" placeholder="Enter your email or username"></span></label>
-                    <label class="auth-field"><span class="auth-field-label">Password</span><span class="auth-input-shell"><input type="password" id="loginPassword" class="auth-input" placeholder="Enter your password"></span></label>
+                    <label class="auth-field"><span class="auth-field-label">Email or Username</span><span class="auth-input-shell">${icon('mail', 'auth-input-icon')}<input type="text" id="loginUsername" class="auth-input auth-input-with-icon" placeholder="Enter your email or username"></span></label>
+                    <label class="auth-field"><span class="auth-field-label">Password</span><span class="auth-input-shell">${icon('lock', 'auth-input-icon')}<input type="password" id="loginPassword" class="auth-input auth-input-with-icon" placeholder="Enter your password"></span></label>
                     <label class="auth-check"><input type="checkbox" id="rememberMe" checked><span>Remember me</span></label>
-                    <button type="submit" class="auth-primary-btn">Sign In</button>
-                    <button type="button" class="auth-link-btn" onclick="handleForgotPassword()">Forgot password?</button>
+                    <button type="submit" class="auth-primary-btn">${icon('user', 'icon-sm')} Sign In</button>
+                    <button type="button" class="auth-link-btn" onclick="handleForgotPassword()">${icon('key', 'icon-sm')} Forgot password?</button>
                     <div id="authFeedback" class="auth-feedback" hidden></div>
                 </form>
                 ` : `
                 <form class="auth-form" onsubmit="event.preventDefault(); handleRegistration();">
                     <div class="auth-grid">
-                        <label class="auth-field"><span class="auth-field-label">Full Name</span><span class="auth-input-shell"><input type="text" id="regFullName" class="auth-input" placeholder="Your full name"></span></label>
-                        <label class="auth-field"><span class="auth-field-label">Username</span><span class="auth-input-shell"><input type="text" id="regUsername" class="auth-input" placeholder="Choose a username"></span></label>
+                        <label class="auth-field"><span class="auth-field-label">Full Name</span><span class="auth-input-shell">${icon('user', 'auth-input-icon')}<input type="text" id="regFullName" class="auth-input auth-input-with-icon" placeholder="Your full name"></span></label>
+                        <label class="auth-field"><span class="auth-field-label">Username</span><span class="auth-input-shell">${icon('user', 'auth-input-icon')}<input type="text" id="regUsername" class="auth-input auth-input-with-icon" placeholder="Choose a username"></span></label>
                     </div>
-                    <label class="auth-field"><span class="auth-field-label">Email</span><span class="auth-input-shell"><input type="email" id="regEmail" class="auth-input" placeholder="name@example.com"></span></label>
-                    <label class="auth-field"><span class="auth-field-label">Password</span><span class="auth-input-shell"><input type="password" id="regPassword" class="auth-input" placeholder="Create a password"></span></label>
-                    <label class="auth-field"><span class="auth-field-label">Confirm Password</span><span class="auth-input-shell"><input type="password" id="regConfirmPassword" class="auth-input" placeholder="Repeat your password"></span></label>
+                    <label class="auth-field"><span class="auth-field-label">Email</span><span class="auth-input-shell">${icon('mail', 'auth-input-icon')}<input type="email" id="regEmail" class="auth-input auth-input-with-icon" placeholder="name@example.com"></span></label>
+                    <label class="auth-field"><span class="auth-field-label">Password</span><span class="auth-input-shell">${icon('lock', 'auth-input-icon')}<input type="password" id="regPassword" class="auth-input auth-input-with-icon" placeholder="Create a password"></span></label>
+                    <label class="auth-field"><span class="auth-field-label">Confirm Password</span><span class="auth-input-shell">${icon('lock', 'auth-input-icon')}<input type="password" id="regConfirmPassword" class="auth-input auth-input-with-icon" placeholder="Repeat your password"></span></label>
                     <label class="auth-field"><span class="auth-field-label">Role</span><select id="regUserType" class="auth-select"><option value="tourist">Tourist</option><option value="guide">Tour Guide</option><option value="it_manager">IT Manager</option></select></label>
-                    <button type="submit" class="auth-primary-btn">Create Account</button>
+                    <button type="submit" class="auth-primary-btn">${icon('userPlus', 'icon-sm')} Create Account</button>
                     <div id="authFeedback" class="auth-feedback" hidden></div>
                 </form>
                 `}

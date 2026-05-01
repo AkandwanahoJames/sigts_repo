@@ -5,8 +5,9 @@
 // APP STATE MANAGEMENT (Extended for Intranet)
 // =====================================================
 
+const RUNTIME_CONFIG = window.__SIGTS_CONFIG__ || {};
 const API_BASE_URL = (() => {
-    const configuredBase = window.__SIGTS_API_BASE__;
+    const configuredBase = RUNTIME_CONFIG.API_URL || window.__SIGTS_API_BASE__;
     if (typeof configuredBase === 'string' && configuredBase.trim()) {
         return configuredBase.replace(/\/$/, '');
     }
@@ -410,7 +411,7 @@ const AppState = {
         cultural: []
     },
     userPreferences: {
-        language: localStorage.getItem('language') || 'en',
+        language: localStorage.getItem('language') || RUNTIME_CONFIG.DEFAULT_LANGUAGE || 'en',
         theme: localStorage.getItem('theme') || 'light',
         offlineMode: localStorage.getItem('offlineMode') === 'true',
         notifications: true,
