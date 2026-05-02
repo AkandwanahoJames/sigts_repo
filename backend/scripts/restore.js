@@ -5,7 +5,8 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 const { promisify } = require('util');
-require('dotenv').config({ path: path.join(__dirname, '../.env') });
+const { loadEnv } = require('../src/config/env');
+loadEnv();
 
 const execPromise = promisify(exec);
 const BACKUP_DIR = path.join(__dirname, '../../backups');

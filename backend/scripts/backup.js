@@ -4,7 +4,8 @@ const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { promisify } = require('util');
-require('dotenv').config({ path: path.join(__dirname, '../.env') });
+const { loadEnv } = require('../src/config/env');
+loadEnv();
 
 const execPromise = promisify(exec);
 

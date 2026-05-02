@@ -1,7 +1,7 @@
-const path = require('path');
 const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
-require('dotenv').config({ path: path.join(__dirname, '../.env') });
+const { loadEnv } = require('../src/config/env');
+loadEnv();
 
 const pool = new Pool({
     host: process.env.DB_HOST || 'localhost',

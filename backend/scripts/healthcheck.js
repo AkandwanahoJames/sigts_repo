@@ -4,7 +4,8 @@ const { Pool } = require('pg');
 const { createClient } = require('redis');
 const http = require('http');
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '../.env') });
+const { loadEnv } = require('../src/config/env');
+loadEnv();
 
 const colors = {
     reset: '\x1b[0m',

@@ -23,10 +23,10 @@ function buildRuleBasedAnswer(question, context = {}) {
         return 'Bwindi offers verified cultural narratives and Batwa heritage stories. You can open the Culture module to explore storyteller-approved content.';
     }
     if (q.includes('route') || q.includes('map') || q.includes('direction')) {
-        return `Use the Map module for route and POI guidance.${locationName ? ` Based on your latest coordinates, you appear to be near ${locationName}.` : ''}`;
+        return `Routes and POIs: use the Map screen in SIGTS.${locationName ? ` Latest fix near ${locationName} (landmark name only; verify on the ground).` : ''}`;
     }
 
-    return `I can help with wildlife, tours, safety, culture, maps, and park guidance. Ask a specific question for a more precise answer.${locationName ? ` I can also tailor guidance for your current area near ${locationName}.` : ''}`;
+    return `Short answers only: wildlife, trekking safety, culture tab content, maps, park hours. Narrow the question for something useful.${locationName ? ` Nearby label in data: ${locationName}. Confirm with your guide.` : ''}`;
 }
 
 async function resolveLocationName(lat, lng) {

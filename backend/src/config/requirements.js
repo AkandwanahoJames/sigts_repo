@@ -55,7 +55,7 @@ function ensureSecurityConfiguration() {
             'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
         );
     } else if (isWeakSecret) {
-        warnings.push('JWT_SECRET is weak or missing — fine for dev, must be replaced before production.');
+        warnings.push('JWT_SECRET is weak or missing. Fine for dev, but replace before production.');
     }
 
     // Database
@@ -73,7 +73,7 @@ function ensureSecurityConfiguration() {
 
     if (errors.length > 0) {
         throw new Error(
-            'CONFIGURATION ERROR — refusing to start:\n  - ' + errors.join('\n  - ')
+            'CONFIGURATION ERROR: refusing to start:\n  - ' + errors.join('\n  - ')
         );
     }
 

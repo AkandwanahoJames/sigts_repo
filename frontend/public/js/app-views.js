@@ -1,13 +1,25 @@
+function syncSidebarToggleA11y() {
+    const sidebar = document.querySelector('.sidebar');
+    const btn = document.querySelector('.sidebar-toggle');
+    if (!sidebar || !btn) return;
+    const open = sidebar.classList.contains('open');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    btn.setAttribute('aria-label', open ? 'Close navigation menu' : 'Open navigation menu');
+}
+
 function toggleSidebar() {
     document.querySelector('.sidebar')?.classList.toggle('open');
+    syncSidebarToggleA11y();
 }
 
 function closeSidebar() {
-    if (window.innerWidth < 768) document.querySelector('.sidebar')?.classList.remove('open');
+    if (window.innerWidth <= 860) document.querySelector('.sidebar')?.classList.remove('open');
+    syncSidebarToggleA11y();
 }
 
-function escapeHtml(str) {
-    if (!str) return '';
+function escapeHtml(input) {
+    if (input == null || input === '') return '';
+    const str = typeof input === 'string' ? input : String(input);
     return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m] || m));
 }
 
@@ -28,6 +40,7 @@ function icon(name, className = '') {
         info: '<circle cx="12" cy="12" r="9"/><path d="M12 10v6"/><circle cx="12" cy="7" r="1"/>',
         target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1.5"/>',
         leaf: '<path d="M5 15c6-8 13-8 14-8 0 8-5 12-10 12-2 0-3-.8-4-4z"/><path d="M7 18c3-4 7-8 12-11"/>',
+        grid: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
         sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1l2.1-2.1M17 7l2.1-2.1"/>',
         rain: '<path d="M6 14a4 4 0 1 1 .2-8 5 5 0 0 1 9.6 1.5A3.5 3.5 0 1 1 17 14z"/><path d="M8 17l-1 3M12 17l-1 3M16 17l-1 3"/>',
         gorilla: '<path d="M6 18c0-4 2.8-7 6-7s6 3 6 7"/><circle cx="12" cy="8" r="3"/><circle cx="8" cy="9" r="1.2"/><circle cx="16" cy="9" r="1.2"/>',
@@ -48,9 +61,10 @@ function icon(name, className = '') {
         mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
         lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
         key: '<circle cx="7.5" cy="12" r="3.5"/><path d="M11 12h10"/><path d="M18 12v3"/><path d="M15 12v2"/>',
-        userPlus: '<circle cx="10" cy="8" r="4"/><path d="M3 21a7 7 0 0 1 14 0"/><path d="M19 8v6M16 11h6"/>'
-        ,
-        smile: '<circle cx="12" cy="12" r="9"/><path d="M8 10h.01M16 10h.01"/><path d="M8 15c1.2 1.2 2.3 1.8 4 1.8s2.8-.6 4-1.8"/>'    };
+        userPlus: '<circle cx="10" cy="8" r="4"/><path d="M3 21a7 7 0 0 1 14 0"/><path d="M19 8v6M16 11h6"/>',
+        smile: '<circle cx="12" cy="12" r="9"/><path d="M8 10h.01M16 10h.01"/><path d="M8 15c1.2 1.2 2.3 1.8 4 1.8s2.8-.6 4-1.8"/>',
+        x: '<path d="M6 18L18 6M6 6l12 12"/>'
+    };
     const content = icons[name] || icons.info;
     return `<svg class="${classes}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${content}</svg>`;
 }
@@ -88,7 +102,7 @@ function getRecommendationPhotoClass(item = {}, index = 0) {
 }
 
 function getPageTitle(view) {
-    const titles = { dashboard: 'Dashboard', animals: 'Animals', map: 'Map', culture: 'Culture', sightings: 'Sightings', profile: 'Profile', info: 'Info', ai_chat: 'AI Assistant', guide_dashboard: 'Guide Dashboard', it_dashboard: 'Admin Dashboard', intranet: 'Intranet Hub' };
+    const titles = { dashboard: 'Dashboard', animals: 'Animals', map: 'Map', culture: 'Culture', sightings: 'Sightings', profile: 'Profile', info: 'Info', ai_chat: 'Tour help', guide_dashboard: 'Guide Dashboard', it_dashboard: 'Admin Dashboard', intranet: 'Intranet Hub' };
     return titles[view] || 'SIGTS Platform';
 }
 
@@ -124,6 +138,8 @@ function normalizeView(view) {
     return APP_VIEWS.has(candidate) ? candidate : 'dashboard';
 }
 
+window.__SIGTS_normalizeView = normalizeView;
+
 /** Normalized role string from stored user object. */
 function getEffectiveRole(user) {
     return String(user?.userType || user?.role || user?.user_type || 'tourist').trim();
@@ -157,11 +173,10 @@ function navigateTo(view, options = {}) {
         const targetHash = `#${targetView}`;
         if (window.location.hash !== targetHash) {
             window.location.hash = targetHash;
-            return;
         }
     }
 
-    renderView(targetView, { updateHash: false });
+    return renderView(targetView, { ...options, updateHash: false });
 }
 
 function formatRoleName(role = 'tourist') {
@@ -355,14 +370,14 @@ function renderMainLayout(content) {
     const user = Auth.getCurrentUser() || { name: 'Guest', role: 'tourist' };
     const isGuide = user?.role === 'guide' || user?.userType === 'guide';
     const isITManager = user?.role === 'it_manager' || user?.userType === 'it_manager';
-    const roleLabel = (user.role || user.userType || 'tourist').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    const roleLabel = formatRoleName(user.role ?? user.userType ?? user.user_type ?? 'tourist');
     const avatarIcon = isITManager ? icon('chart', 'icon-md') : (isGuide ? icon('ticket', 'icon-md') : icon('user', 'icon-md'));    
     let navItems = [
         { id: 'dashboard', icon: 'home', label: 'Home' },
         { id: 'animals', icon: 'paw', label: 'Animals' },
         { id: 'map', icon: 'map', label: 'Map' },
         { id: 'culture', icon: 'book', label: 'Culture' },
-        { id: 'ai_chat', icon: 'target', label: 'AI Chat' },
+        { id: 'ai_chat', icon: 'target', label: 'Tour help' },
         { id: 'sightings', icon: 'camera', label: 'Sightings' },
         { id: 'profile', icon: 'user', label: 'Profile' }
     ];
@@ -376,15 +391,451 @@ function renderMainLayout(content) {
     const isOffline = !accessState.online;
     const pending = OfflineSync?.getPendingCount?.() || 0;
     const statusText = isOffline ? `Offline mode • ${pending} pending` : (pending ? `Online • ${pending} pending sync` : 'Online');
-    return `<div class="app-container"><button type="button" class="sidebar-toggle" onclick="toggleSidebar()">${icon('menu', 'icon-sm')}</button><div class="sidebar"><div class="sidebar-header"><div class="sidebar-brand"><div class="sidebar-logo"><img src="/icons/icon-192.svg" alt="SIGTS logo"></div><div class="sidebar-title">Bwindi SIGTS</div></div></div><div class="sidebar-nav">${navItems.map(item => `<div class="nav-item-vertical ${window.currentView === item.id ? 'active' : ''}" onclick="navigateTo('${item.id}')"><div class="nav-icon-vertical">${icon(item.icon, 'icon-md')}</div><div class="nav-label-vertical">${item.label}</div></div>`).join('')}</div><div class="sidebar-logout" onclick="Auth.logout()">${icon('logout', 'icon-md')} Logout</div></div><div class="main-content" onclick="closeSidebar()"><div class="content-header"><h1>${getPageTitle(window.currentView)}</h1><div class="header-right"><span id="networkStatusBadge" class="net-status ${isOffline ? 'offline' : 'online'}">${statusText}</span>${renderNotificationBell(user)}<button type="button" class="header-profile" onclick="navigateTo('profile')"><div class="header-avatar ${isITManager ? 'role-it' : (isGuide ? 'role-guide' : 'role-tourist')}">${avatarIcon}</div><div class="header-user-info"><div class="header-user-name">${escapeHtml(user.name)}</div><div class="header-user-role">${escapeHtml(roleLabel)}</div></div></button></div></div><div class="main-container">${renderParkAccessPanel()}${content}</div></div></div>`;}
+    return `<div class="app-container"><div id="app-sidebar" class="sidebar"><div class="sidebar-header"><div class="sidebar-brand"><div class="sidebar-logo"><img src="/icons/icon-192.svg" alt="SIGTS logo"></div><div class="sidebar-title">Bwindi SIGTS</div></div></div><div class="sidebar-nav">${navItems.map(item => `<div class="nav-item-vertical ${window.currentView === item.id ? 'active' : ''}" onclick="navigateTo('${item.id}')"><div class="nav-icon-vertical">${icon(item.icon, 'icon-md')}</div><div class="nav-label-vertical">${item.label}</div></div>`).join('')}</div><div class="sidebar-logout" onclick="Auth.logout()">${icon('logout', 'icon-md')} Logout</div></div><div class="main-content" onclick="closeSidebar()"><div class="content-header"><button type="button" class="sidebar-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="app-sidebar" onclick="toggleSidebar()">${icon('menu', 'icon-sm')}</button><h1>${getPageTitle(window.currentView)}</h1><div class="header-right"><span id="networkStatusBadge" class="net-status ${isOffline ? 'offline' : 'online'}">${statusText}</span>${renderNotificationBell(user)}<button type="button" class="header-profile" onclick="navigateTo('profile')"><div class="header-avatar ${isITManager ? 'role-it' : (isGuide ? 'role-guide' : 'role-tourist')}">${avatarIcon}</div><div class="header-user-info"><div class="header-user-name">${escapeHtml(user.name)}</div><div class="header-user-role">${escapeHtml(roleLabel)}</div></div></button></div></div><div class="main-container">${renderParkAccessPanel()}${content}</div></div></div>`;}
 
 function getAnimalIconName(animalName = '') {
     const value = animalName.toLowerCase();
     if (value.includes('gorilla')) return 'gorilla';
     if (value.includes('elephant')) return 'elephant';
-    if (value.includes('bird') || value.includes('turaco')) return 'bird';
+    if (value.includes('eagle')) return 'bird';
+    if (value.includes('turaco')) return 'bird';
+    if (value.includes('bee-eater')) return 'bird';
+    if (value.includes('broadbill')) return 'bird';
+    if (value.includes('colobus') || value.includes('monkey') || value.includes('chimp')) return 'paw';
+    if (value.includes('bird')) return 'bird';
     return 'paw';
 }
+
+function truncateSnippet(text = '', max = 148) {
+    const t = String(text || '').replace(/\s+/g, ' ').trim();
+    if (t.length <= max) return t;
+    return `${t.slice(0, Math.max(0, max - 1))}…`;
+}
+
+function coerceStringArray(raw) {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw.map((s) => String(s || '').trim()).filter(Boolean);
+    if (typeof raw === 'string') {
+        const s = raw.trim();
+        if (s.startsWith('{') && s.endsWith('}')) {
+            try {
+                const inner = s.slice(1, -1);
+                const parts = inner.split(/,(?=(?:[^']*'[^']*')*[^']*$)/);
+                const out = [];
+                parts.forEach((p) => {
+                    let v = p.trim();
+                    if (v.startsWith("'") && v.endsWith("'")) v = v.slice(1, -1).replace(/''/g, "'");
+                    else if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1);
+                    if (v) out.push(v);
+                });
+                if (out.length) return out;
+            } catch (_) {
+                /**/
+            }
+        }
+    }
+    return [];
+}
+
+function firstSpeciesImage(animal = {}) {
+    const urls = animal.image_urls ?? animal.primary_image_urls;
+    if (Array.isArray(urls) && urls[0]) return String(urls[0]);
+    if (typeof urls === 'string') {
+        const s = urls.trim();
+        try {
+            const parsed = JSON.parse(s);
+            if (Array.isArray(parsed) && parsed[0]) return String(parsed[0]);
+        } catch (_) {
+            if (s.startsWith('http')) return s.split(/[|,]/)[0]?.trim();
+        }
+    }
+    return '';
+}
+
+function firstStoryImage(story = {}) {
+    const u = story.image_urls;
+    if (Array.isArray(u) && u[0]) return String(u[0]);
+    return '';
+}
+
+function joinMaybeList(value) {
+    if (!value) return '';
+    const list = Array.isArray(value) ? value : [value];
+    return list.map((v) => String(v || '').trim()).filter(Boolean).join(', ');
+}
+
+function speciesAIPromptFromRecord(animal = {}) {
+    const sci = animal.scientific_name ? String(animal.scientific_name).trim() : '';
+    const name = animal.name || 'this species';
+    return `Field brief for Bwindi: ${name}${sci ? ` (${sci})` : ''}. Usual trail zones, habitat, visitor rules, seasonality, status, one rumor to correct. Rangers’ safety line comes first.`;
+}
+
+function culturalAIPromptFromRecord(story = {}) {
+    const title = story.title_en || story.title_local || 'this story';
+    return `Cultural note on "${title}": background for visitors near Bwindi; Batwa/Bakiga angle if it fits; respectful behavior; how it lines up with trekking regulations. Plain words, no drama.`;
+}
+
+function stripOverlayFromBody() {
+    document.body.classList.remove('detail-modal-open');
+}
+
+function showRichContentModal({ title, heroUrl = '', heroAlt = '', bodyHtml = '', footerHtml = '' }) {
+    const root = ensureFeedbackRoot();
+    stripOverlayFromBody();
+    document.body.classList.add('detail-modal-open');
+    const overlay = document.createElement('div');
+    overlay.className = 'ui-modal-overlay ui-modal-overlay-rich';
+    const heroBlock = heroUrl
+        ? `<div class="ui-modal-hero"><img src="${escapeHtml(heroUrl)}" alt="${escapeHtml(heroAlt || title || 'Illustration')}" loading="lazy" decoding="async" /></div>`
+        : '';
+    overlay.innerHTML = `
+        <div class="ui-modal ui-modal-rich" role="dialog" aria-modal="true" tabindex="-1">
+            <button type="button" class="ui-modal-close" aria-label="Close">${icon('x', 'icon-sm')}</button>
+            <div class="ui-modal-title">${escapeHtml(title || 'Details')}</div>
+            ${heroBlock}
+            <div class="ui-modal-rich-body">${bodyHtml}</div>
+            ${footerHtml || ''}
+        </div>
+    `.trim();
+
+    const close = () => {
+        overlay.remove();
+        stripOverlayFromBody();
+    };
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) close();
+    });
+
+    overlay.querySelector('.ui-modal-close')?.addEventListener('click', close);
+
+    overlay.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') close();
+    });
+
+    root.appendChild(overlay);
+    overlay.tabIndex = 0;
+    overlay.focus({ preventScroll: true });
+    return overlay;
+}
+
+function applySIGTSAIPrefill() {
+    try {
+        const raw = sessionStorage.getItem('sigts_ai_prefill');
+        if (!raw) return;
+        sessionStorage.removeItem('sigts_ai_prefill');
+        const input = document.getElementById('aiChatInput');
+        if (!input) return;
+        input.value = raw;
+        input.focus();
+        const hint = document.getElementById('aiPrefillBanner');
+        if (hint) {
+            hint.textContent = 'Draft text from the last screen is in the box. Edit it, then tap Send.';
+        }
+    } catch (_) {
+        /**/
+    }
+}
+
+/** Session storage key: selected UNESCO / tour thematic filter on the Animals tab */
+const SIGTS_TOUR_FOCUS_KEY = 'sigts_tour_focus';
+
+const BWINDI_UNESCO_TOUR_THEMES = [
+    {
+        id: 'all',
+        icon: 'grid',
+        title: 'All species',
+        subtitle: 'Browse everything in SIGTS'
+    },
+    {
+        id: 'unesco_primates',
+        icon: 'paw',
+        title: 'Great apes & monkeys',
+        subtitle: 'Gorillas, chimps & primate richness (WHC text)'
+    },
+    {
+        id: 'unesco_large_mammals',
+        icon: 'elephant',
+        title: 'Elephants & large mammals',
+        subtitle: 'Wide-ranging fauna beyond primates'
+    },
+    {
+        id: 'unesco_albertine_birds',
+        icon: 'bird',
+        title: 'Albertine bird icons',
+        subtitle: 'Passerines singled out under criterion x'
+    },
+    {
+        id: 'unesco_swallowtails',
+        icon: 'leaf',
+        title: 'Swallowtail butterflies',
+        subtitle: 'Canopy Lepidoptera called out by UNESCO'
+    },
+    {
+        id: 'globally_threatened',
+        icon: 'shield',
+        title: 'Globally threatened',
+        subtitle: 'Endangered, vulnerable & near-threatened picks'
+    }
+];
+
+function normalizeTourLabel(raw) {
+    return String(raw || '').toLowerCase().replace(/\u2019/g, "'").trim();
+}
+
+function animalMatchesBwindiTourFocus(animal, focusKey = 'all') {
+    if (!focusKey || focusKey === 'all') return true;
+    const name = normalizeTourLabel(animal.name);
+    const sci = normalizeTourLabel(animal.scientific_name || '');
+    const blob = `${name} ${sci}`;
+
+    switch (focusKey) {
+        case 'unesco_primates': {
+            if (/bird|broadbill|flycatcher|warbler|swallowtail|butterfly|turaco|\bbee-eagle\b|\beagle\b/.test(blob)) return false;
+            return (
+                /\b(monkey|gorilla|chimp|chimpan|baboon|colobus|mangabey|guenon)\b/i.test(blob)
+                || /hoest|'s monkey|golden monkey/i.test(blob)
+                || /\b(pan gorilla|cercopithecus|chlorocebus|alophocebus|lophocebus|papio|papionini)\b/.test(blob)
+            );
+        }
+        case 'unesco_large_mammals': {
+            if (animalMatchesBwindiTourFocus(animal, 'unesco_primates')) return false;
+            if (/bird|flycatcher|warbler|broadbill|swallowtail|butterfly|\bbat\b/.test(blob)) return false;
+            if (/\b(mouse|rat|shrew|squirrel|dormouse)\b/i.test(blob)) return false;
+            return /elephant|duiker|buffalo|cape buffalo|bushpig|hog|hyaena|civet|leopard/i.test(blob);
+        }
+        case 'unesco_albertine_birds': {
+            if (/swallowtail|butterfly|papilio\b/.test(blob)) return false;
+            const needles = ['broadbill', 'green broadbill', 'grauer', 'warbler', 'turner', 'eremomela', 'chapin', 'flycatcher', 'shelley', 'crimsonwing'];
+            return needles.some((n) => name.includes(n));
+        }
+        case 'unesco_swallowtails':
+            return /swallowtail|papilio\b/.test(blob);
+        case 'globally_threatened': {
+            const s = String(animal.conservation_status || '').toLowerCase().replace(/\s+/g, '_');
+            return ['endangered', 'vulnerable', 'near_threatened'].includes(s);
+        }
+        default:
+            return true;
+    }
+}
+
+function getValidatedAnimalTourFocus() {
+    const valid = new Set(BWINDI_UNESCO_TOUR_THEMES.map((t) => t.id));
+    try {
+        const raw = sessionStorage.getItem(SIGTS_TOUR_FOCUS_KEY);
+        const k = typeof raw === 'string' ? raw.trim() : 'all';
+        return valid.has(k) ? k : 'all';
+    } catch (_) {
+        return 'all';
+    }
+}
+
+function tourFocusSpeciesCount(animals, focusKey) {
+    return animals.filter((a) => animalMatchesBwindiTourFocus(a, focusKey)).length;
+}
+
+function renderBwindiTourThemeStrip(animals, activeFocus, imageBySlug = {}) {
+    const cards = BWINDI_UNESCO_TOUR_THEMES.map((t) => {
+        const count = t.id === 'all' ? animals.length : tourFocusSpeciesCount(animals, t.id);
+        const active = activeFocus === t.id ? ' tour-focus-card--active' : '';
+        const badge = `<span class="tour-focus-count">${count}</span>`;
+        const safeId = escapeHtml(t.id);
+        const thumbSrc = typeof imageBySlug[t.id] === 'string' ? imageBySlug[t.id].trim() : '';
+        const thumbHtml = thumbSrc
+            ? `<div class="tour-focus-thumb" aria-hidden="true"><img src="${escapeHtml(thumbSrc)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer-when-downgrade" /></div>`
+            : `<div class="tour-focus-thumb tour-focus-thumb--placeholder" aria-hidden="true">${icon(t.icon || 'leaf', 'icon-lg')}</div>`;
+        return `
+        <div class="tour-focus-cell" role="listitem">
+            <div class="tour-focus-card${active}" data-tour-focus="${safeId}">
+                <div class="tour-focus-card-main" role="button" tabindex="0" aria-label="${escapeHtml(t.title)}. Opens guided session briefing."
+                     onclick="openWildlifeTourThemeBriefing(${JSON.stringify(t.id)})"
+                     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openWildlifeTourThemeBriefing(${JSON.stringify(t.id)});}">
+                    ${thumbHtml}
+                    <div class="tour-focus-card-top">
+                        <span class="tour-focus-icon">${icon(t.icon || 'leaf', 'icon-md')}</span>
+                        ${badge}
+                    </div>
+                    <div class="tour-focus-title">${escapeHtml(t.title)}</div>
+                    <div class="tour-focus-sub">${escapeHtml(t.subtitle)}</div>
+                    <div class="tour-focus-open-hint">Tap for ranger-style session notes</div>
+                </div>
+                <div class="tour-focus-card-footer">
+                    <button type="button" class="small-btn ghost-btn tour-focus-filter-btn" onclick="setAnimalTourFocus(${JSON.stringify(t.id)})">${icon('grid', 'icon-sm')} Match species grid</button>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+    return `<section class="section-card tour-focus-section" aria-labelledby="tour-focus-heading">
+        <div class="section-header"><h3 id="tour-focus-heading">${icon('target', 'icon-sm')} Pick a UNESCO tour wildlife theme</h3></div>
+        <p class="animals-page-blurb tour-focus-explainer">
+            These themes mirror biodiversity groups emphasized for Bwindi Impenetrable National Park (<a href="https://whc.unesco.org/en/list/682/" target="_blank" rel="noopener noreferrer">UNESCO list 682</a>).
+            <strong>Tap the card body</strong> to open scripted session briefings for guides and guests; use <strong>Match species grid</strong> to filter tiles below mid-tour.
+        </p>
+        <div class="tour-focus-grid" role="list">${cards}</div>
+    </section>`;
+}
+
+window.navigateToAIWithPrompt = async function navigateToAIWithPrompt(promptText) {
+    const text = String(promptText || '').trim();
+    if (text) sessionStorage.setItem('sigts_ai_prefill', text);
+    await renderView('ai_chat', { updateHash: true, suppressAccessToast: true });
+};
+
+window.setAnimalTourFocus = async function setAnimalTourFocus(key) {
+    const k = BWINDI_UNESCO_TOUR_THEMES.some((t) => t.id === key) ? key : 'all';
+    try {
+        sessionStorage.setItem(SIGTS_TOUR_FOCUS_KEY, k);
+    } catch (_) {
+        /**/
+    }
+    await navigateTo('animals', { updateHash: false, suppressAccessToast: true });
+};
+
+/** Close stacked rich modal (tour briefing / species) then apply species filter */
+window.dismissRichModalAndSetAnimalTourFocus = async function dismissRichModalAndSetAnimalTourFocus(slug) {
+    try {
+        document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();
+    } catch (_) {
+        /**/
+    }
+    await window.setAnimalTourFocus(slug);
+};
+
+window.openWildlifeTourThemeBriefing = async function openWildlifeTourThemeBriefing(slug) {
+    const s = String(slug || '').trim().toLowerCase();
+    if (!s) return;
+    try {
+        const theme = await Content.getWildlifeTourThemeBySlug(s);
+        if (!theme || (!theme.slug && !theme.theme_id)) {
+            showToast('Tour session briefing unavailable for this tile. Reload the page; if it persists, ensure migration 009 is applied and the backend seed has run.', 'warning');
+            return;
+        }
+        openWildlifeTourThemeBriefingModal(theme);
+    } catch (err) {
+        console.error('openWildlifeTourThemeBriefing', err);
+        showToast('Could not open the tour briefing. Check your connection and try again.', 'danger');
+    }
+};
+
+function openWildlifeTourThemeBriefingModal(theme) {
+    const title = theme.session_title || theme.slug || 'Tour session';
+    const points = coerceStringArray(theme.talking_points);
+    const talkList = points.length
+        ? `<ul class="ui-modal-facts">${points.map((p) => `<li>${escapeHtml(p)}</li>`).join('')}</ul>`
+        : '';
+    const body = `
+        ${theme.subtitle ? `<p class="ui-modal-muted">${escapeHtml(theme.subtitle)}</p>` : ''}
+        <p>${escapeHtml(theme.tourist_summary_en || '')}</p>
+        ${theme.guide_script_en ? `<h4 class="ui-modal-section-title">${icon('users', 'icon-sm')} Guide briefing</h4><p>${escapeHtml(theme.guide_script_en)}</p>` : ''}
+        ${talkList ? `<h4 class="ui-modal-section-title">${icon('note', 'icon-sm')} Talking points</h4>${talkList}` : ''}
+        ${theme.safety_notes ? `<h4 class="ui-modal-section-title">${icon('shield', 'icon-sm')} Safety & distance</h4><p>${escapeHtml(theme.safety_notes)}</p>` : ''}
+        ${theme.etiquette_notes ? `<h4 class="ui-modal-section-title">${icon('info', 'icon-sm')} Guest etiquette</h4><p>${escapeHtml(theme.etiquette_notes)}</p>` : ''}
+        ${theme.unesco_note ? `<h4 class="ui-modal-section-title">${icon('book', 'icon-sm')} Conservation framing</h4><p>${escapeHtml(theme.unesco_note)}</p>` : ''}
+        ${theme.suggested_duration_minutes
+        ? `<p class="ui-modal-muted">Suggested pacing: about <strong>${escapeHtml(String(theme.suggested_duration_minutes))}</strong> minutes. Stretch or trim with ranger discretion.</p>`
+        : ''}`;
+
+    const footer = `
+        <div class="ui-modal-chip-row" style="flex-wrap:wrap;gap:8px;justify-content:flex-start;">
+          <button type="button" class="login-btn" onclick="dismissRichModalAndSetAnimalTourFocus(${JSON.stringify(theme.slug)})">${icon('grid', 'icon-sm')} Apply filter below</button>
+          <button type="button" class="small-btn ghost-btn" onclick="document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();">${icon('x', 'icon-sm')} Close</button>
+        </div>`;
+
+    showRichContentModal({
+        title,
+        heroUrl: theme.image_url || '',
+        heroAlt: title,
+        bodyHtml: body,
+        footerHtml: footer
+    });
+}
+
+window.openAnimalSpeciesDetail = async function openAnimalSpeciesDetail(animalId) {
+    const id = String(animalId || '').trim();
+    if (!id) return showToast('Missing species reference', 'danger');
+    const animal = await Content.getAnimalById(id);
+    if (!animal?.name) return showToast('Unable to load that species.', 'danger');
+
+    const facts = coerceStringArray(animal.fun_facts);
+    const hero = firstSpeciesImage(animal);
+    const factList = facts.length
+        ? `<ul class="ui-modal-facts">${facts.map((f) => `<li>${escapeHtml(f)}</li>`).join('')}</ul>`
+        : '<p class="ui-modal-muted">Fun facts arriving soon.</p>';
+
+    const body = `
+        <p class="ui-modal-muted">${escapeHtml(animal.scientific_name || '')}</p>
+        <div class="ui-modal-chip-row">
+          <span class="animal-status status-${escapeHtml(String(animal.conservation_status || 'least_concern').replace(/_/g, '-'))}">${escapeHtml(String(animal.conservation_status || 'least_concern').replace(/_/g, ' '))}</span>
+          <span class="animal-status neutral-chip">${escapeHtml(animal.diet || 'Mixed diet')}</span>
+          <span class="animal-status neutral-chip">${escapeHtml(animal.lifespan ? `Lifespan: ${animal.lifespan}` : 'Lifespan: see guide')}</span>
+        </div>
+        <p>${escapeHtml(animal.description || 'Description coming soon via rangers.')}</p>
+        <p><strong>${icon('leaf', 'icon-sm')} Habitat</strong><br>${escapeHtml(animal.habitat || 'Montane rainforest mosaic')}</p>
+        ${joinMaybeList(animal.common_locations) ? `<p><strong>${icon('map', 'icon-sm')} Often near</strong><br>${escapeHtml(joinMaybeList(animal.common_locations))}</p>` : ''}
+        <h4 class="ui-modal-section-title">${icon('target', 'icon-sm')} Field notes</h4>
+        ${factList}`;
+
+    const footer = `
+        <div class="ui-modal-actions ui-modal-actions-rich">
+          <button type="button" class="login-btn">${icon('target', 'icon-sm')} Open tour help (draft)</button>
+          <button type="button" class="ui-btn ui-btn-secondary">Close</button>
+        </div>`;
+
+    const overlay = showRichContentModal({
+        title: animal.name,
+        heroUrl: hero,
+        heroAlt: animal.name,
+        bodyHtml: body,
+        footerHtml: footer
+    });
+
+    overlay?.querySelector('.login-btn')?.addEventListener('click', async () => {
+        await navigateToAIWithPrompt(speciesAIPromptFromRecord(animal));
+    });
+    overlay?.querySelector('.ui-btn-secondary')?.addEventListener('click', () => {
+        overlay.querySelector('.ui-modal-close')?.click();
+    });
+};
+
+window.openCulturalStoryDetail = async function openCulturalStoryDetail(narrativeId) {
+    const id = String(narrativeId || '').trim();
+    if (!id) return showToast('Missing narrative reference', 'danger');
+
+    const story = await API.getCulturalNarrativeById(id);
+    if (!story?.narrative_id) {
+        showToast('Could not load that cultural story.', 'danger');
+        return;
+    }
+
+    const hero = firstStoryImage(story);
+    const body = `
+        ${story?.story_type ? `<p class="ui-modal-muted">${escapeHtml(story.community || 'Community')} • ${escapeHtml(story.story_type)}</p>` : ''}
+        <p>${escapeHtml(story?.narrative_en || story?.story || 'Full narrative unavailable offline.')}</p>
+        ${story?.cultural_significance ? `<p><strong>${icon('book', 'icon-sm')} Why it matters</strong><br>${escapeHtml(story.cultural_significance)}</p>` : ''}
+        ${joinMaybeList(story?.related_locations) ? `<p><strong>${icon('map', 'icon-sm')} Linked places</strong><br>${escapeHtml(joinMaybeList(story.related_locations))}</p>` : ''}`;
+
+    const footer = `
+        <div class="ui-modal-actions ui-modal-actions-rich">
+          <button type="button" class="login-btn">${icon('target', 'icon-sm')} Open tour help (draft)</button>
+          <button type="button" class="ui-btn ui-btn-secondary">Close</button>
+        </div>`;
+
+    const overlay = showRichContentModal({
+        title: story.title_en || story.title_local || 'Cultural narrative',
+        heroUrl: hero,
+        heroAlt: story.title_en || '',
+        bodyHtml: body,
+        footerHtml: footer
+    });
+
+    overlay?.querySelector('.login-btn')?.addEventListener('click', async () => {
+        await navigateToAIWithPrompt(culturalAIPromptFromRecord(story));
+    });
+    overlay?.querySelector('.ui-btn-secondary')?.addEventListener('click', () => {
+        overlay.querySelector('.ui-modal-close')?.click();
+    });
+};
 
 // =====================================================
 // CONTENT RENDER FUNCTIONS
@@ -394,7 +845,7 @@ async function renderDashboardContent() {
     const recommendations = await AI.getRecommendations(3);
     const seasonal = await AI.getSeasonalRecommendations();
     return renderDashboardShell({
-        primaryTitle: 'AI Recommendations',
+        primaryTitle: 'Suggested for you',
         primaryIcon: 'target',
         primaryItems: recommendations.map((r) => ({
             title: r.name,
@@ -434,25 +885,62 @@ function renderDashboardShell({
 async function renderAnimalsContent() {
     const animals = await Content.getAnimals();
     if (!animals.length) {
-        return `<div class="section-card"><div class="empty-state">No animal records available yet.</div></div>`;
+        return `<div class="section-card"><div class="empty-state">No animal records available yet. Run backend seed to load the Bwindi catalogue.</div></div>`;
     }
 
-    return `<div class="animals-list">${animals.map(animal => `
-        <div class="animal-card">
-            <div class="animal-icon">${icon(getAnimalIconName(animal.name), 'icon-xl')}</div>
+    const themeRows = await Content.getWildlifeTourThemes();
+    const imageBySlug = {};
+    if (Array.isArray(themeRows)) {
+        themeRows.forEach((row) => {
+            const u = row && typeof row.image_url === 'string' ? row.image_url.trim() : '';
+            if (row?.slug && u) imageBySlug[row.slug] = u;
+        });
+    }
+
+    const focusKey = getValidatedAnimalTourFocus();
+    let filtered = animals.filter((a) => animalMatchesBwindiTourFocus(a, focusKey));
+    const focusMeta = BWINDI_UNESCO_TOUR_THEMES.find((t) => t.id === focusKey);
+    let filterBanner = '';
+    if (focusKey !== 'all' && !filtered.length) {
+        filterBanner = `<div class="tour-filter-note tour-filter-note--fallback" role="status">Nothing in this catalogue matched <strong>${escapeHtml(focusMeta?.title || 'that theme')}</strong> yet, so we’re showing every species instead. Choose another UNESCO theme above or rerun the extended seed script.</div>`;
+        filtered = animals;
+    } else if (focusKey !== 'all') {
+        filterBanner = `<div class="tour-filter-note" role="status">${icon('leaf', 'icon-sm')} Showing <strong>${filtered.length}</strong> species for <strong>${escapeHtml(focusMeta?.title || focusKey)}</strong>. UNESCO reference: list <a href="https://whc.unesco.org/en/list/682/" target="_blank" rel="noopener noreferrer">682</a>.</div>`;
+    }
+
+    const tourStrip = renderBwindiTourThemeStrip(animals, focusKey, imageBySlug);
+
+    const intro = `<div class="section-card animals-page-intro"><div class="section-header"><h3>${icon('leaf', 'icon-sm')} Bwindi biodiversity</h3></div><div class="animals-page-blurb">Use the UNESCO theme tiles to match the block your guide is running, or stay on <strong>All species</strong>. Gorillas get the limelight, but primates, Albertine forest birds, elephants, butterflies, and other Red List taxa are why this forest is on the World Heritage list. Open a species card for ranger-style notes. Tour help is optional if you want to expand a topic in your own words.</div><div class="info-chip-row"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${JSON.stringify('Bwindi newcomer checklist: main sectors, wet vs dry pacing, gorilla visit etiquette (short bullets).')})">${icon('target', 'icon-sm')} Tour help: first trek</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${JSON.stringify('Birding from main Bwindi trailheads: which Albertine specialties are realistic without playback or nest pressure?')})">${icon('bird', 'icon-sm')} Tour help: birding</button></div></div>`;
+
+    const cards = filtered.map((animal) => {
+        const id = escapeHtml(animal.animal_id || animal.id || '');
+        const thumb = firstSpeciesImage(animal);
+        const teaserSource = animal.description ? String(animal.description) : 'Tap for field notes from the catalogue.';
+        const teaser = escapeHtml(truncateSnippet(teaserSource, 164));
+        const thumbHtml = thumb
+            ? `<div class="animal-card-thumb"><img src="${escapeHtml(thumb)}" alt="" loading="lazy" decoding="async" /></div>`
+            : `<div class="animal-card-thumb animal-card-thumb--fallback">${icon(getAnimalIconName(animal.name), 'icon-xl')}</div>`;
+
+        return `<article class="animal-card animal-card--interactive" tabindex="0" aria-label="${escapeHtml(animal.name)} details" onclick="openAnimalSpeciesDetail('${id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAnimalSpeciesDetail('${id}');}">
+            ${thumbHtml}
             <div class="animal-info">
                 <div class="animal-name">${escapeHtml(animal.name)}</div>
                 <div class="animal-scientific">${escapeHtml(animal.scientific_name || 'Scientific name unavailable')}</div>
-                <span class="animal-status status-${escapeHtml((animal.conservation_status || 'least_concern').replace(/_/g, '-'))}">
-                    ${escapeHtml((animal.conservation_status || 'least_concern').replace(/_/g, ' '))}
-                </span>
-                <button class="small-btn" style="margin-top:10px;" onclick="submitContentHelpfulness('animal', '${animal.animal_id || animal.id}', '${escapeHtml(animal.name)}')">${icon('target', 'icon-sm')} Helpful?</button>
+                <p class="animal-teaser">${teaser}</p>
+                <span class="animal-status status-${escapeHtml(String(animal.conservation_status || 'least_concern').replace(/_/g, '-'))}">${escapeHtml(String(animal.conservation_status || 'least_concern').replace(/_/g, ' '))}</span>
+                <div class="animal-card-actions">
+                    <button type="button" class="small-btn" onclick="event.stopPropagation(); navigateToAIWithPrompt(${JSON.stringify(speciesAIPromptFromRecord(animal))});">${icon('target', 'icon-sm')} Tour help</button>
+                    <button type="button" class="small-btn ghost-btn" onclick="event.stopPropagation(); submitContentHelpfulness('animal', '${id}', '${escapeHtml(animal.name)}');">${icon('target', 'icon-sm')} Helpful?</button>
+                </div>
             </div>
-        </div>`).join('')}</div>`;
+        </article>`;
+    }).join('');
+
+    return `${tourStrip}${intro}${filterBanner}<div class="animals-list animals-list--responsive">${cards}</div>`;
 }
 
 function renderMapContent() {
-    return `<div class="map-container"><div id="bwindiLiveMap" class="map-canvas"></div><div class="map-overlay"><div class="map-status" id="mapStatus">Loading Bwindi live map...</div><div class="map-coords" id="mapCoords">Lat: --, Lng: --</div><div class="map-guidance"><select id="mapLayer" class="map-destination" onchange="changeMapLayer()"><option value="standard">Standard</option><option value="topo">Terrain</option><option value="satellite">Satellite</option><option value="trails">Trails Focus</option></select><button class="small-btn" onclick="cacheVisibleMapTiles()">Cache Area</button></div><div class="map-guidance"><input id="mapSearchInput" class="map-destination" placeholder="Search location..." /><button class="small-btn" onclick="searchMapLocation()">Find</button></div><div class="map-guidance"><select id="mapDestination" class="map-destination"><option value="">Select destination...</option></select><button class="small-btn" onclick="openMapGuidance()">Guide Me</button></div><div class="map-guidance"><button class="small-btn" onclick="startDistanceMeasure()">Set A</button><button class="small-btn" onclick="setDistanceMeasurePointB()">Set B</button><button class="small-btn" onclick="measureToCurrent()">A → Me</button></div><div class="map-guidance-text" id="mapGuidanceText">Select a destination to get turn-by-turn guidance.</div><div id="mapDirectionsList" class="map-directions">Directions will appear here.</div><div id="mapCompassStatus" class="map-compass">Compass: --</div><div id="mapElevationProfile" class="map-elevation">Elevation profile unavailable.</div><div class="map-nearby" id="mapNearbyList">Nearby POIs will appear here.</div></div></div>`;
+    return `<div class="map-container"><div id="bwindiLiveMap" class="map-canvas"></div><div class="map-overlay"><div class="map-status" id="mapStatus">Loading Bwindi live map...</div><div class="map-coords" id="mapCoords">Lat: --, Lng: --</div><div class="map-guidance"><select id="mapLayer" class="map-destination" onchange="changeMapLayer()"><option value="standard">Standard</option><option value="topo">Terrain</option><option value="satellite">Satellite</option><option value="trails">Trails Focus</option></select><button class="small-btn" onclick="cacheVisibleMapTiles()">Cache Area</button><button type="button" class="small-btn" onclick="toggleSpeciesHeatmapLayer()">${icon('target', 'icon-sm')} Species heat</button></div><div class="map-guidance"><input id="mapSearchInput" class="map-destination" placeholder="Search location..." /><button class="small-btn" onclick="searchMapLocation()">Find</button></div><div class="map-guidance"><select id="mapDestination" class="map-destination"><option value="">Select destination...</option></select><button class="small-btn" onclick="openMapGuidance()">Guide Me</button></div><div class="map-guidance"><button class="small-btn" onclick="startDistanceMeasure()">Set A</button><button class="small-btn" onclick="setDistanceMeasurePointB()">Set B</button><button class="small-btn" onclick="measureToCurrent()">A → Me</button></div><div class="map-guidance-text" id="mapGuidanceText">Select a destination to get turn-by-turn guidance.</div><div id="mapDirectionsList" class="map-directions">Directions will appear here.</div><div id="mapCompassStatus" class="map-compass">Compass: --</div><div id="mapElevationProfile" class="map-elevation">Elevation profile unavailable.</div><div class="map-nearby" id="mapNearbyList">Nearby POIs will appear here.</div></div></div>`;
 }
 
 function normalizeCoordinatePair(point) {
@@ -833,7 +1321,10 @@ async function refreshLiveMapData() {
     const defaultCenter = [-1.05, 29.7];
 
     try {
-        const [locations, boundary, sightings, tours] = await Promise.all([
+        const heatmapOn = () => localStorage.getItem('sigts_map_species_heat') === '1';
+        let heatCells = [];
+
+        const [locations, sightings, tours, boundaryGeo] = await Promise.all([
             API.getLocations(),
             API.getRecentSightings(50),
             API.getToursForGuide(),
@@ -848,7 +1339,16 @@ async function refreshLiveMapData() {
             })()
         ]);
 
-        const boundaryLatLngs = getBoundaryLatLngs(boundary);
+        if (heatmapOn() && Auth?.isAuthenticated?.()) {
+            try {
+                const hm = await API.getSightingsHeatmap({ limit: 180 });
+                heatCells = Array.isArray(hm?.points) ? hm.points : [];
+            } catch (_) {
+                heatCells = [];
+            }
+        }
+
+        const boundaryLatLngs = getBoundaryLatLngs(boundaryGeo);
         if (boundaryLatLngs.length >= 3) {
             liveMapLayers.boundary = window.L.polygon(boundaryLatLngs, {
                 color: '#1B5E20',
@@ -913,6 +1413,26 @@ async function refreshLiveMapData() {
             })
             .filter(Boolean);
         liveMapLayers.markers.push(...sightingMarkers);
+
+        if (heatCells.length && liveMapInstance) {
+            const maxW = Math.max(...heatCells.map((c) => Number(c.weight) || 1), 1);
+            heatCells.forEach((c) => {
+                const lat = Number(c.lat);
+                const lng = Number(c.lng);
+                if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+                const w = Number(c.weight) || 1;
+                const t = Math.min(1, w / maxW);
+                const cir = window.L.circle([lat, lng], {
+                    radius: 450 + w * 90,
+                    color: '#dc2626',
+                    weight: 1,
+                    fillColor: '#f97316',
+                    fillOpacity: 0.12 + t * 0.35
+                }).addTo(liveMapInstance);
+                cir.bindTooltip(`${escapeHtml(c.animal_name || 'Sightings')} · weight ${w}`);
+                liveMapLayers.markers.push(cir);
+            });
+        }
 
         const current = Geofence?.currentLocation || AppState?.currentLocation;
         if (current && Number.isFinite(current.lat) && Number.isFinite(current.lng)) {
@@ -1051,31 +1571,56 @@ async function initializeLiveMap() {
 async function renderCultureContent() {
     const stories = await API.getCulturalStories();
     if (!stories.length) {
-        return `<div class="section-card"><div class="empty-state">Cultural stories will appear here once they are published.</div></div>`;
+        return `<div class="section-card"><div class="empty-state">Cultural stories will appear here once guides publish narratives. Seed data adds Batwa/Bakiga-friendly demos automatically.</div></div>`;
     }
 
     const [featured, ...rest] = stories;
-    const secondary = rest.slice(0, 3);
+    const secondary = rest.slice(0, 5);
+    const featImg = firstStoryImage(featured);
+    const featuredBgStyle = featImg
+        ? `background-image:url('${escapeHtml(featImg)}');`
+        : 'background:linear-gradient(135deg,#795548,#5D4037);';
+    const featId = escapeHtml(featured.narrative_id || '');
 
-    return `
-        <div class="story-card featured">
-            <div class="story-image" style="background: linear-gradient(135deg, #795548, #5D4037);"></div>
+    const intro = `<div class="section-card culture-page-intro"><div class="section-header"><h3>${icon('users', 'icon-sm')} Living heritage</h3></div><div class="animals-page-blurb">Stories foreground Batwa forest knowledge and Bakiga highland rhythms around Bwindi. Cards carry consent-checked narratives and tie into trekking etiquette. Read here first. Tour help is only if you want a scratch draft to edit.</div><div class="info-chip-row"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${JSON.stringify('Visiting Buhoma-area communities tied to trekking: manners around Batwa interpreters and homestead hosts (practical list).')});">${icon('target', 'icon-sm')} Tour help: community etiquette</button></div></div>`;
+
+    const featuredMarkup = `
+        <div class="story-card featured story-card--interactive" tabindex="0" onclick="openCulturalStoryDetail('${featId}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openCulturalStoryDetail('${featId}');}">
+            <div class="story-image" style="${featuredBgStyle}" role="img" aria-label=""></div>
             <div class="story-content">
                 <span class="story-community">${escapeHtml(featured.community || 'Community story')}</span>
                 <div class="story-title">${escapeHtml(featured.title_en || featured.title_local || 'Untitled story')}</div>
-                <div class="story-storyteller">${escapeHtml(featured.storyteller_name || 'Unknown storyteller')}${featured.duration ? ` • ${featured.duration} min` : ''}</div>
-                <button class="small-btn" style="margin-top:10px;" onclick="submitContentHelpfulness('cultural', '${featured.narrative_id || ''}', '${escapeHtml(featured.title_en || featured.title_local || 'story')}')">${icon('target', 'icon-sm')} Helpful?</button>
-            </div>
-        </div>
-        ${secondary.map(story => `
-            <div class="story-card">
-                <div class="story-content">
-                    <span class="story-community">${escapeHtml(story.community || 'Community story')}</span>
-                    <div class="story-title">${escapeHtml(story.title_en || story.title_local || 'Untitled story')}</div>
-                    <div class="story-storyteller">${escapeHtml(story.storyteller_name || 'Unknown storyteller')}${story.duration ? ` • ${story.duration} min` : ''}</div>
-                    <button class="small-btn" style="margin-top:10px;" onclick="submitContentHelpfulness('cultural', '${story.narrative_id || ''}', '${escapeHtml(story.title_en || story.title_local || 'story')}')">${icon('target', 'icon-sm')} Helpful?</button>
+                <div class="animal-teaser">${escapeHtml(truncateSnippet(featured.duration ? `About ${featured.duration}-minute listen.` : 'Tap for full stewardship notes.', 140))}</div>
+                <div class="animal-card-actions">
+                    <button type="button" class="small-btn" onclick="event.stopPropagation(); navigateToAIWithPrompt(${JSON.stringify(culturalAIPromptFromRecord(featured))});">${icon('target', 'icon-sm')} Tour help</button>
+                    <button type="button" class="small-btn ghost-btn" onclick="event.stopPropagation(); submitContentHelpfulness('cultural', '${featId}', '${escapeHtml(featured.title_en || featured.title_local || 'story')}');">${icon('target', 'icon-sm')} Helpful?</button>
                 </div>
-            </div>`).join('')}`;
+                <div class="story-storyteller">${escapeHtml(featured.storyteller_name || 'Unknown storyteller')}${featured.duration ? ` • ${featured.duration} min` : ''}</div>
+            </div>
+        </div>`;
+
+    const secondaryMarkup = secondary.map((story) => {
+        const sid = escapeHtml(story.narrative_id || '');
+        const simg = firstStoryImage(story);
+        const thumb = simg
+            ? `<div class="culture-card-thumb"><img src="${escapeHtml(simg)}" alt="" loading="lazy" decoding="async" /></div>`
+            : `<div class="culture-card-thumb culture-card-thumb--fallback">${icon('book', 'icon-xl')}</div>`;
+
+        return `<article class="story-card culture-card-mini story-card--interactive" tabindex="0" onclick="openCulturalStoryDetail('${sid}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openCulturalStoryDetail('${sid}');}">
+            ${thumb}
+            <div class="story-content">
+                <span class="story-community">${escapeHtml(story.community || 'Community story')}</span>
+                <div class="story-title">${escapeHtml(story.title_en || story.title_local || 'Untitled story')}</div>
+                <div class="animal-teaser">${escapeHtml(truncateSnippet(story.verification_badge || 'Tap for narrative + etiquette prompts.', 120))}</div>
+                <div class="animal-card-actions">
+                    <button type="button" class="small-btn" onclick="event.stopPropagation(); navigateToAIWithPrompt(${JSON.stringify(culturalAIPromptFromRecord(story))});">${icon('target', 'icon-sm')} Tour help</button>
+                    <button type="button" class="small-btn ghost-btn" onclick="event.stopPropagation(); submitContentHelpfulness('cultural', '${sid}', '${escapeHtml(story.title_en || story.title_local || 'story')}');">${icon('target', 'icon-sm')} Helpful?</button>
+                </div>
+            </div>
+        </article>`;
+    }).join('');
+
+    return `${intro}${featuredMarkup}<div class="culture-card-grid">${secondaryMarkup}</div>`;
 }
 
 async function renderSightingsContent() {
@@ -1126,22 +1671,33 @@ function renderProfileContent() {
 }
 
 function renderInfoContent() {
-    return `<div class="section-card"><div class="section-header"><h3>${icon('clock', 'icon-sm')} Opening Hours</h3></div><div style="padding:16px;">Park: 6:00 AM - 7:00 PM<br><button class="small-btn" style="margin-top:10px;" onclick="submitContentHelpfulness('info', '', 'Opening Hours')">${icon('target', 'icon-sm')} Helpful?</button></div></div><div class="section-card"><div class="section-header"><h3>${icon('phone', 'icon-sm')} Emergency</h3></div><div style="padding:16px;">${icon('shield', 'icon-sm')} Rangers: +256-77-XXX-XXXX<br><button class="small-btn" style="margin-top:10px;" onclick="submitContentHelpfulness('info', '', 'Emergency Contacts')">${icon('target', 'icon-sm')} Helpful?</button></div></div>`;
+    const planPrompt = JSON.stringify(
+        'One-week low-footprint trekking plan in southwest Uganda, Bwindi core: daily rhythm, water, altitude, tipping, rainforest kit, radio check with guides.');
+    const unescoPrompt = JSON.stringify(
+        'Bwindi World Heritage (criteria vii and x): plain-language gist for tourists. Why the listing matters for protection.');
+    const birdPrompt = JSON.stringify(
+        'Rough bird tally people quote for Bwindi; Albertine families worth learning without stressing nests or playback.');
+
+    return `<div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Park snapshot</h3></div><div class="park-info-copy">Roughly <strong>331 km²</strong> of steep montane rainforest on the Albertine Rift shoulder. UNESCO cites exceptional biodiversity: gorillas, deep bird lists, elephants, thick primate mixes, layered trees and ferns (<a href="https://whc.unesco.org/en/list/682/" target="_blank" rel="noopener noreferrer">official summary</a>). SIGTS stitches maps, ranger copy, offline packs, and this app’s Tour help tab so groups can cross-check ecology, etiquette, culture, and safety on the trail.</div><div class="info-chip-row"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${unescoPrompt});">${icon('book', 'icon-sm')} Tour help: UNESCO gist</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${birdPrompt});">${icon('bird', 'icon-sm')} Tour help: birds</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${planPrompt});">${icon('map', 'icon-sm')} Tour help: week pacing</button></div><button type="button" class="small-btn ghost-btn" style="margin-top:10px;" onclick="submitContentHelpfulness('info', '', 'Park snapshot')">${icon('target', 'icon-sm')} Helpful?</button></div>
+    <div class="section-card"><div class="section-header"><h3>${icon('clock', 'icon-sm')} Opening Hours</h3></div><div style="padding:16px;">Typical UWA gate window: <strong>06:00 to 19:00</strong> (confirm with your issued permit).<div class="info-chip-row" style="margin-top:10px;"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${JSON.stringify('Packing: dawn gorilla briefing vs afternoon forest walk in Bwindi.')});">${icon('target', 'icon-sm')} Tour help: gear timing</button></div><button class="small-btn" style="margin-top:10px;" onclick="submitContentHelpfulness('info', '', 'Opening Hours')">${icon('target', 'icon-sm')} Helpful?</button></div></div>
+    <div class="section-card"><div class="section-header"><h3>${icon('phone', 'icon-sm')} Emergency</h3></div><div style="padding:16px;">${icon('shield', 'icon-sm')} UWA / emergency coordination: replace placeholder with live operations desk numbers before production.<br><button type="button" class="small-btn" style="margin-top:10px;" onclick="navigateToAIWithPrompt(${JSON.stringify('Trail injury before medics: who gets called first on a Bwindi trek (order of escalation).')});">${icon('target', 'icon-sm')} Tour help: casualty chain</button><br><button class="small-btn" style="margin-top:10px;" onclick="submitContentHelpfulness('info', '', 'Emergency Contacts')">${icon('target', 'icon-sm')} Helpful?</button></div></div>`;
 }
 
 function renderAIChatContent() {
     return `<div class="section-card">
-        <div class="section-header"><h3>${icon('target', 'icon-sm')} SIGTS AI Assistant</h3></div>
+        <div class="section-header"><h3>${icon('target', 'icon-sm')} Tour help</h3></div>
+        <p id="aiPrefillBanner" class="ai-prefill-banner" aria-live="polite">Animals, Culture, or Info may drop starter text here. Always edit before sending.</p>
         <div id="aiChatMessages" style="padding:16px; max-height: 50vh; overflow-y: auto;">
             <div class="rec-card">
                 <div class="rec-info">
-                    <div class="rec-title">Assistant</div>
-                    <div class="rec-reason">Ask about wildlife, safety, culture, routes, or local weather insights.</div>
+                    <div class="rec-title">How this works</div>
+                    <div class="rec-reason">Draft a question about wildlife, safety, culture, routes, or weather. Replies follow simple park-reference rules. Not a substitute for your guide or signposted rules.</div>
                 </div>
             </div>
         </div>
         <div style="padding:16px; border-top: 1px solid #E8EDDF; display:flex; gap:10px;">
-            <input id="aiChatInput" class="auth-input" style="height:44px; flex:1;" placeholder="Type your question..." />
+            <input id="aiChatInput" class="auth-input" style="height:44px; flex:1;" placeholder="Your question (edit any pre-filled draft)..." />
+            <button type="button" class="small-btn" style="margin:0;" title="Speak your question (browser Speech Recognition)" onclick="startTourHelpVoiceCapture()">${icon('target', 'icon-sm')} Mic</button>
             <button class="login-btn" style="margin:0; white-space:nowrap;" onclick="sendAIChatMessage()">Send</button>
         </div>
     </div>`;
@@ -1191,7 +1747,7 @@ async function renderGuideDashboard() {
         ],
         seasonalActionLabel: dashboard.activeShift ? 'Clock Out' : 'Clock In',
         animalCount: animals.length
-    })}<div class="section-card"><div class="section-header"><h3>${icon('clock', 'icon-sm')} Schedule Controls</h3></div><div class="seasonal-list">${(dashboard.today || []).length ? dashboard.today.map((t) => `<div class="seasonal-item"><strong>${escapeHtml(t.route_name || 'Tour Route')}</strong> - ${new Date(t.scheduled_start).toLocaleTimeString()} (${t.confirmed_guests || t.group_size || 0} guests) <button class="small-btn" onclick="startTour('${t.tour_session_id}')">Start</button></div>`).join('') : '<div class="seasonal-item">No tours today.</div>'}</div></div><div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Live Participants</h3></div><div class="seasonal-list">${participants.length ? participants.map((p) => `<div class="seasonal-item">${escapeHtml(p.first_name || p.username || 'Tourist')} ${escapeHtml(p.last_name || '')} - ${escapeHtml(p.pickup_location || 'In-session')}</div>`).join('') : '<div class="seasonal-item">No participants assigned yet.</div>'}</div></div><div class="shift-controls"><button class="login-btn" onclick="clockInOut()">${dashboard.activeShift ? 'Clock Out' : 'Clock In'}</button><button class="small-btn" onclick="addTourNotePrompt()">Add Tour Note</button></div><div id="activeTourPanel" style="${guideManager.activeTour ? 'display:block' : 'display:none'}"><div id="tourTimerDisplay" class="tour-timer">00:00:00</div><button onclick="quickSighting()">Log Sighting</button><button onclick="endActiveTour()">End Tour</button></div></div>`;}
+    })}<div class="section-card"><div class="section-header"><h3>${icon('clock', 'icon-sm')} Schedule Controls</h3></div><div class="seasonal-list">${(dashboard.today || []).length ? dashboard.today.map((t) => `<div class="seasonal-item"><strong>${escapeHtml(t.route_name || 'Tour Route')}</strong> - ${new Date(t.scheduled_start).toLocaleTimeString()} (${t.confirmed_guests || t.group_size || 0} guests) <button class="small-btn" onclick="startTour('${t.tour_session_id}')">Start</button></div>`).join('') : '<div class="seasonal-item">No tours today.</div>'}</div></div><div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Live Participants</h3></div><div class="seasonal-list">${participants.length ? participants.map((p) => `<div class="seasonal-item">${escapeHtml(p.first_name || p.username || 'Tourist')} ${escapeHtml(p.last_name || '')} - ${escapeHtml(p.pickup_location || 'In-session')}</div>`).join('') : '<div class="seasonal-item">No participants assigned yet.</div>'}</div></div><div class="section-card"><div class="section-header"><h3>${icon('bell', 'icon-sm')} Guide-to-guide messages</h3></div><p class="animals-page-blurb">Operational notes to peers (DB migration 011).</p><div class="info-chip-row" style="flex-wrap:wrap;gap:8px;"><select id="guideMsgPeerSelect" class="map-destination" style="flex:1;min-width:180px;"><option value="">Select peer…</option></select></div><div id="guideMsgThread" class="seasonal-list" style="max-height:200px;overflow:auto;margin-top:8px;"><div class="seasonal-item">Loading…</div></div><textarea id="guideMsgBody" class="map-destination" style="margin-top:8px;min-height:72px;width:100%;box-sizing:border-box;" placeholder="Operational note"></textarea><div class="info-chip-row" style="margin-top:8px;"><button type="button" class="login-btn" onclick="sendGuideDeskNote()">${icon('target', 'icon-sm')} Send</button><button type="button" class="small-btn ghost-btn" onclick="refreshGuideDeskInbox()">${icon('grid', 'icon-sm')} Refresh</button></div></div><div class="shift-controls"><button class="login-btn" onclick="clockInOut()">${dashboard.activeShift ? 'Clock Out' : 'Clock In'}</button><button class="small-btn" onclick="addTourNotePrompt()">Add Tour Note</button></div><div id="activeTourPanel" style="${guideManager.activeTour ? 'display:block' : 'display:none'}"><div id="tourTimerDisplay" class="tour-timer">00:00:00</div><button onclick="quickSighting()">Log Sighting</button><button onclick="endActiveTour()">End Tour</button></div></div>`;}
 
 async function renderITManagerDashboard() {
     // Resilient fan-out: if any single endpoint fails, fall back to a safe
@@ -1242,6 +1798,7 @@ async function renderITManagerDashboard() {
     ).join('') || '<div class="empty-state">No demographics data yet.</div>';
     const rareAlertsHtml = `<div class="section-card"><div class="section-header"><h3>${icon('bell', 'icon-sm')} Rare Sighting Alerts</h3></div><div class="seasonal-list">${(rareAlerts || []).length ? rareAlerts.map((a) => `<div class="seasonal-item rare-alert-item"><strong>${escapeHtml((a.risk_level || 'high').toUpperCase())}</strong> • ${escapeHtml(a.animal_name || 'Wildlife')} @ ${escapeHtml(a.location_name || 'Unknown')} (${a.number_observed || 0}) ${a.acknowledged ? '<span style="color:#2E7D32;">(Acknowledged)</span>' : `<button class=\"small-btn\" onclick=\"ackRareAlertPrompt('${a.alert_id}')\">Acknowledge</button>`}<br><span style="color:#6B705C;">${escapeHtml(a.reason || '')}</span></div>`).join('') : '<div class="seasonal-item">• No rare alerts in recent reports.</div>'}</div></div>`;
     const managerFeedbackControlHtml = `<div class="section-card"><div class="section-header"><h3>${icon('note', 'icon-sm')} Feedback Control Queue</h3></div><div class="seasonal-list">${(managerQueue || []).length ? managerQueue.map((item) => `<div class="seasonal-item"><strong>${escapeHtml(item.category || 'general')}</strong> • ${'★'.repeat(Number(item.rating || 0))} • <em>${escapeHtml(item.improvement_status || 'new')}</em><br>${escapeHtml(item.comment || 'No comment')}<br>${item.response_text ? `<span style=\"color:#2E7D32;\">Response sent</span>` : `<button class=\"small-btn\" onclick=\"respondToFeedbackPrompt('${item.feedback_id}')\">Respond</button>`} <button class=\"small-btn\" onclick=\"updateFeedbackStatusPrompt('${item.feedback_id}')\">Update Status</button></div>`).join('') : '<div class="seasonal-item">• No feedback items in queue.</div>'}</div></div>`;
+    const itOpsShortcutsHtml = `<div class="section-card"><div class="section-header"><h3>${icon('chart', 'icon-sm')} Analytics & backups</h3></div><p class="animals-page-blurb">Quick checks for anomalies, training jobs, bundled reports, and backup index.</p><div class="info-chip-row" style="flex-wrap:wrap;gap:8px;"><button type="button" class="small-btn" onclick="itOpsPeekAnalyticsAnomalies()">${icon('target', 'icon-sm')} Anomalies</button><button type="button" class="small-btn" onclick="itOpsQueueModelRetrain()">${icon('database', 'icon-sm')} Queue retrain</button><button type="button" class="small-btn" onclick="itOpsRunReportBuild()">${icon('note', 'icon-sm')} Build report</button><button type="button" class="small-btn" onclick="itOpsPeekBackupsList()">${icon('download', 'icon-sm')} Backups</button></div></div>`;
     const animals = await Content.getAnimals();
     const itKpis = [
         { label: 'Active Users', value: metrics.activeUsers || 0, hint: 'Current sessions' },
@@ -1292,7 +1849,7 @@ async function renderITManagerDashboard() {
         ],
         seasonalActionLabel: 'View Suggestions',
         animalCount: animals.length
-    })}<div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Current Users (Realtime)</h3><span id="adminLiveUsersStamp" class="status-badge neutral">Updated just now • ${(liveOps.peers || []).length} active now / ${Number(metrics.activeUsers || 0)} total</span></div><div id="adminLiveUsersList">${liveUsersHtml}</div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('chart', 'icon-sm')} Visitor Flow (7 days)</h3></div><div class="analytics-list">${flowBars}</div></div><div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Popular Content</h3></div><div class="analytics-list">${popularRows}</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} User Type Demographics</h3></div><div class="analytics-list">${demographicRows}</div></div><div class="section-card"><div class="section-header"><h3>${icon('map', 'icon-sm')} Congestion Guidance</h3></div><div class="seasonal-list">${(interactive.congestionRecommendations || []).map((r) => `<div class="seasonal-item">• ${escapeHtml(r)}</div>`).join('') || '<div class="seasonal-item">• No congestion recommendations available</div>'}</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('building', 'icon-sm')} Intranet Connectivity</h3></div><div class="analytics-list"><div class="analytics-row"><span>Intranet</span><div class="analytics-bar"><div style="width:${liveOps.intranetStatus?.isIntranet ? 100 : 35}%;"></div></div><strong>${liveOps.intranetStatus?.isIntranet ? 'Connected' : 'External'}</strong></div><div class="analytics-row"><span>Device IP</span><span></span><strong>${escapeHtml(liveOps.intranetStatus?.ip || 'Unknown')}</strong></div><div class="analytics-row"><span>Pending Sync</span><span></span><strong>${liveOps.syncStatus?.pending || liveOps.syncStatus?.pending_items || 0}</strong></div></div></div><div class="section-card"><div class="section-header"><h3>${icon('user', 'icon-sm')} Live Peers / Guests</h3></div><div class="seasonal-list">${(liveOps.peers || []).length ? liveOps.peers.slice(0, 8).map((p) => `<div class="seasonal-item">• ${escapeHtml(p.name || 'Peer')} (${escapeHtml(p.type || 'user')})${p.location ? ` @ ${Number(p.location.lat).toFixed(4)}, ${Number(p.location.lng).toFixed(4)}` : ''}</div>`).join('') : '<div class="seasonal-item">• No live peers detected in last 5 minutes.</div>'}</div></div></div><div class="section-card"><div class="section-header"><h3>${icon('note', 'icon-sm')} Feedback & Improvements (30 days)</h3></div><div class="analytics-list"><div class="analytics-row"><span>Total Feedback</span><span></span><strong>${feedbackInsights.summary?.total_feedback || 0}</strong></div><div class="analytics-row"><span>Average Rating</span><span></span><strong>${feedbackInsights.summary?.avg_rating || 0}</strong></div><div class="analytics-row"><span>Bug Reports</span><span></span><strong>${feedbackInsights.summary?.bug_reports || 0}</strong></div><div class="analytics-row"><span>Feature Requests</span><span></span><strong>${feedbackInsights.summary?.feature_requests || 0}</strong></div><div class="analytics-row"><span>Surveys</span><span></span><strong>${feedbackInsights.summary?.survey_count || 0}</strong></div><div class="analytics-row"><span>Avg NPS</span><span></span><strong>${feedbackInsights.summary?.avg_nps || 0}</strong></div><div class="analytics-row"><span>Responded</span><span></span><strong>${feedbackInsights.summary?.responded_count || 0}</strong></div></div><div class="seasonal-list">${(feedbackInsights.recent || []).slice(0, 5).map((item) => `<div class="seasonal-item">• ${escapeHtml(item.category)} - ${escapeHtml(item.comment || 'No comment')} [${escapeHtml(item.improvement_status || 'new')}] ${item.response_text ? '<span style="color:#2E7D32;">(Responded)</span>' : `<button class=\"small-btn\" onclick=\"respondToFeedbackPrompt('${item.feedback_id}')\">Respond</button>`} <button class=\"small-btn\" onclick=\"updateFeedbackStatusPrompt('${item.feedback_id}')\">Status</button></div>`).join('') || '<div class="seasonal-item">• No recent feedback</div>'}</div></div>${managerFeedbackControlHtml}${rareAlertsHtml}<div class="admin-actions"><button class="admin-action-btn" onclick="handleMFASetup()">${icon('shield', 'icon-sm')} Configure MFA</button><button class="admin-action-btn" onclick="clearAllCache()">Clear Cache</button><button class="admin-action-btn" onclick="exportData()">Export Data</button><button class="admin-action-btn danger" onclick="resetApp()">Reset App</button></div></div>`;}
+    })}<div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Current Users (Realtime)</h3><span id="adminLiveUsersStamp" class="status-badge neutral">Updated just now • ${(liveOps.peers || []).length} active now / ${Number(metrics.activeUsers || 0)} total</span></div><div id="adminLiveUsersList">${liveUsersHtml}</div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('chart', 'icon-sm')} Visitor Flow (7 days)</h3></div><div class="analytics-list">${flowBars}</div></div><div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Popular Content</h3></div><div class="analytics-list">${popularRows}</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} User Type Demographics</h3></div><div class="analytics-list">${demographicRows}</div></div><div class="section-card"><div class="section-header"><h3>${icon('map', 'icon-sm')} Congestion Guidance</h3></div><div class="seasonal-list">${(interactive.congestionRecommendations || []).map((r) => `<div class="seasonal-item">• ${escapeHtml(r)}</div>`).join('') || '<div class="seasonal-item">• No congestion recommendations available</div>'}</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('building', 'icon-sm')} Intranet Connectivity</h3></div><div class="analytics-list"><div class="analytics-row"><span>Intranet</span><div class="analytics-bar"><div style="width:${liveOps.intranetStatus?.isIntranet ? 100 : 35}%;"></div></div><strong>${liveOps.intranetStatus?.isIntranet ? 'Connected' : 'External'}</strong></div><div class="analytics-row"><span>Device IP</span><span></span><strong>${escapeHtml(liveOps.intranetStatus?.ip || 'Unknown')}</strong></div><div class="analytics-row"><span>Pending Sync</span><span></span><strong>${liveOps.syncStatus?.pending || liveOps.syncStatus?.pending_items || 0}</strong></div></div></div><div class="section-card"><div class="section-header"><h3>${icon('user', 'icon-sm')} Live Peers / Guests</h3></div><div class="seasonal-list">${(liveOps.peers || []).length ? liveOps.peers.slice(0, 8).map((p) => `<div class="seasonal-item">• ${escapeHtml(p.name || 'Peer')} (${escapeHtml(p.type || 'user')})${p.location ? ` @ ${Number(p.location.lat).toFixed(4)}, ${Number(p.location.lng).toFixed(4)}` : ''}</div>`).join('') : '<div class="seasonal-item">• No live peers detected in last 5 minutes.</div>'}</div></div></div><div class="section-card"><div class="section-header"><h3>${icon('note', 'icon-sm')} Feedback & Improvements (30 days)</h3></div><div class="analytics-list"><div class="analytics-row"><span>Total Feedback</span><span></span><strong>${feedbackInsights.summary?.total_feedback || 0}</strong></div><div class="analytics-row"><span>Average Rating</span><span></span><strong>${feedbackInsights.summary?.avg_rating || 0}</strong></div><div class="analytics-row"><span>Bug Reports</span><span></span><strong>${feedbackInsights.summary?.bug_reports || 0}</strong></div><div class="analytics-row"><span>Feature Requests</span><span></span><strong>${feedbackInsights.summary?.feature_requests || 0}</strong></div><div class="analytics-row"><span>Surveys</span><span></span><strong>${feedbackInsights.summary?.survey_count || 0}</strong></div><div class="analytics-row"><span>Avg NPS</span><span></span><strong>${feedbackInsights.summary?.avg_nps || 0}</strong></div><div class="analytics-row"><span>Responded</span><span></span><strong>${feedbackInsights.summary?.responded_count || 0}</strong></div></div><div class="seasonal-list">${(feedbackInsights.recent || []).slice(0, 5).map((item) => `<div class="seasonal-item">• ${escapeHtml(item.category)} - ${escapeHtml(item.comment || 'No comment')} [${escapeHtml(item.improvement_status || 'new')}] ${item.response_text ? '<span style="color:#2E7D32;">(Responded)</span>' : `<button class=\"small-btn\" onclick=\"respondToFeedbackPrompt('${item.feedback_id}')\">Respond</button>`} <button class=\"small-btn\" onclick=\"updateFeedbackStatusPrompt('${item.feedback_id}')\">Status</button></div>`).join('') || '<div class="seasonal-item">• No recent feedback</div>'}</div></div>${managerFeedbackControlHtml}${itOpsShortcutsHtml}${rareAlertsHtml}<div class="admin-actions"><button class="admin-action-btn" onclick="handleMFASetup()">${icon('shield', 'icon-sm')} Configure MFA</button><button class="admin-action-btn" onclick="clearAllCache()">Clear Cache</button><button class="admin-action-btn" onclick="exportData()">Export Data</button><button class="admin-action-btn danger" onclick="resetApp()">Reset App</button></div></div>`;}
 
 // =====================================================
 // INTRANET DASHBOARD (HR, Announcements, Inventory)
@@ -1481,8 +2038,162 @@ window.sendAIChatMessage = async function() {
 
     const result = await AI.askQuestion(question);
     const answer = result?.answer || 'No response available.';
-    messages.innerHTML += `<div class="rec-card"><div class="rec-info"><div class="rec-title">Assistant</div><div class="rec-reason">${escapeHtml(answer)}</div></div></div>`;
+    messages.innerHTML += `<div class="rec-card"><div class="rec-info"><div class="rec-title">Park reference reply</div><div class="rec-reason">${escapeHtml(answer)}</div></div></div>`;
     messages.scrollTop = messages.scrollHeight;
+};
+
+window.toggleSpeciesHeatmapLayer = async function () {
+    const cur = localStorage.getItem('sigts_map_species_heat') === '1';
+    localStorage.setItem('sigts_map_species_heat', cur ? '0' : '1');
+    showToast(cur ? 'Species heatmap off.' : 'Species heatmap on (heatmap requires sign-in).', cur ? 'info' : 'success');
+    if (window.currentView === 'map' && typeof refreshLiveMapData === 'function') {
+        await refreshLiveMapData();
+    }
+};
+
+window.startTourHelpVoiceCapture = function () {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const input = document.getElementById('aiChatInput');
+    if (!SR) {
+        showToast('Speech recognition is not supported in this browser.', 'warning');
+        return;
+    }
+    if (window.__sigtsTourHelpRecListening) return;
+    const rec = new SR();
+    const lang = AppState?.userPreferences?.language;
+    rec.lang = lang === 'fr' ? 'fr-FR' : lang === 'sw' ? 'sw-TZ' : lang === 'ruk' ? 'rw-RW' : 'en-US';
+    rec.continuous = false;
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.onresult = (e) => {
+        window.__sigtsTourHelpRecListening = false;
+        const t = e.results[0]?.[0]?.transcript?.trim();
+        if (t && input) input.value = `${(input.value || '').trim()}${input.value ? ' ' : ''}${t}`;
+        showToast(t ? 'Speech added to the Tour help box.' : 'No speech captured.', t ? 'success' : 'warning');
+    };
+    rec.onerror = () => {
+        window.__sigtsTourHelpRecListening = false;
+        showToast('Mic capture failed or was denied.', 'warning');
+    };
+    rec.onend = () => {
+        window.__sigtsTourHelpRecListening = false;
+    };
+    window.__sigtsTourHelpRecListening = true;
+    try {
+        rec.start();
+    } catch (_) {
+        window.__sigtsTourHelpRecListening = false;
+        showToast('Could not start speech recognition.', 'warning');
+    }
+};
+
+window.refreshGuideDeskInbox = async function () {
+    const el = document.getElementById('guideMsgThread');
+    if (!el) return;
+    const raw = await API.request('/guides/messages?box=inbox&limit=60');
+    if (raw?.error) {
+        el.innerHTML = `<div class="seasonal-item">${escapeHtml(raw.error)}</div>`;
+        return;
+    }
+    const rows = Array.isArray(raw?.messages) ? raw.messages : [];
+    if (!rows.length) {
+        el.innerHTML = '<div class="seasonal-item">No messages in inbox.</div>';
+        return;
+    }
+    el.innerHTML = rows
+        .map((m) => {
+            const when = m.created_at ? new Date(m.created_at).toLocaleString() : '';
+            const who = escapeHtml(m.peer_username || m.peer_id || 'Peer');
+            return `<div class="seasonal-item"><strong>${who}</strong> <small>${escapeHtml(when)}</small><br>${escapeHtml(m.body || '')}</div>`;
+        })
+        .join('');
+};
+
+window.sendGuideDeskNote = async function () {
+    const sel = document.getElementById('guideMsgPeerSelect');
+    const bodyEl = document.getElementById('guideMsgBody');
+    const toId = sel?.value;
+    const body = (bodyEl?.value || '').trim();
+    if (!toId) {
+        showToast('Select a peer.', 'warning');
+        return;
+    }
+    if (!body) {
+        showToast('Message is empty.', 'warning');
+        return;
+    }
+    const res = await API.sendGuideMessage(toId, body);
+    if (res?.error || (res?.status && res.status >= 400)) {
+        showToast(res.error || 'Send failed', 'danger');
+        return;
+    }
+    if (bodyEl) bodyEl.value = '';
+    showToast('Message sent.', 'success');
+    await window.refreshGuideDeskInbox();
+};
+
+window.initGuideMessagingPanel = async function () {
+    const sel = document.getElementById('guideMsgPeerSelect');
+    if (!sel) return;
+    const prev = sel.value;
+    const rawPeers = await API.request('/guides/messages/peers');
+    if (rawPeers?.error) {
+        sel.innerHTML = `<option value="">${escapeHtml(rawPeers.error)}</option>`;
+        await window.refreshGuideDeskInbox();
+        return;
+    }
+    const peers = Array.isArray(rawPeers?.peers) ? rawPeers.peers : [];
+    sel.innerHTML =
+        '<option value="">Select peer…</option>' +
+        peers
+            .map((p) => {
+                const id = escapeHtml(p.user_id);
+                const lab = escapeHtml(p.display_name || p.username || id);
+                const role = escapeHtml(p.user_type || '');
+                return `<option value="${id}">${lab} (${role})</option>`;
+            })
+            .join('');
+    if (prev && peers.some((p) => String(p.user_id) === prev)) sel.value = prev;
+    await window.refreshGuideDeskInbox();
+};
+
+window.itOpsPeekAnalyticsAnomalies = async function () {
+    const d = await API.getAnalyticsAnomalies(2.5);
+    if (d?.status >= 400) {
+        showToast(d?.error || 'Anomalies request failed.', 'danger');
+        return;
+    }
+    const n = (d?.anomalies || []).length;
+    showToast(`${n} anomaly row(s); details in console (F12).`, n ? 'info' : 'success');
+    console.info('[SIGTS] analytics anomalies', d);
+};
+
+window.itOpsQueueModelRetrain = async function () {
+    const r = await API.queuePredictiveTrainingJob('congestion_v1');
+    if (r?.error || r?.status >= 400) showToast(r?.error || 'Queue retrain failed', 'danger');
+    else showToast(r?.job?.job_id ? `Job ${r.job.job_id} queued.` : 'Retrain queued.', 'success');
+};
+
+window.itOpsRunReportBuild = async function () {
+    const r = await API.buildAnalyticsReport(['visitor_flow', 'satisfaction', 'sightings_trend', 'popular_content']);
+    if (r?.status >= 400) showToast(r?.error || 'Report build failed', 'danger');
+    else {
+        const keys = r?.sections ? Object.keys(r.sections) : [];
+        const errs = r?.section_errors ? Object.keys(r.section_errors) : [];
+        showToast(`Report built: ${keys.length} section(s); ${errs.length} error(s). See console.`, errs.length ? 'warning' : 'success');
+        console.info('[SIGTS] report build', r);
+    }
+};
+
+window.itOpsPeekBackupsList = async function () {
+    const r = await API.request('/admin/backup/list');
+    if (r?.status >= 400 || r?.error) {
+        showToast(r?.error || 'Backup list failed', 'danger');
+        return;
+    }
+    const n = (r?.backups || []).length;
+    showToast(`${n} backup record(s); see console for list.`, 'info');
+    console.info('[SIGTS] backups', r?.backups);
 };
 
 window.saveLanguagePreference = async function () {
@@ -2287,6 +2998,16 @@ async function renderView(view, options = {}) {
         await initializeLiveMap();
     } else if (safeView === 'profile') {
         await loadRecentFeedback();
+    }
+    if (safeView === 'ai_chat') {
+        applySIGTSAIPrefill();
+    }
+    if (safeView === 'guide_dashboard') {
+        requestAnimationFrame(() => {
+            if (typeof window.initGuideMessagingPanel === 'function') {
+                window.initGuideMessagingPanel();
+            }
+        });
     }
 }
 

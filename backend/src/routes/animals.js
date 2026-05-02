@@ -13,8 +13,9 @@ router.get('/', authenticateJWT, async (req, res) => {
 
     try {
         let query = `
-            SELECT animal_id, name, scientific_name, conservation_status, 
-                   habitat, diet, image_urls, fun_facts
+            SELECT animal_id, name, scientific_name, description,
+                   conservation_status, habitat, diet, lifespan, image_urls,
+                   fun_facts
             FROM animals
             WHERE 1=1
         `;

@@ -53,8 +53,12 @@ function registerServiceWorker() {
 
 function initHashRouting() {
     window.addEventListener('hashchange', () => {
-        const hashView = window.location.hash.replace('#', '');
+        const hashView = window.location.hash.replace('#', '').trim();
         if (!hashView) return;
+        const normalized = typeof window.__SIGTS_normalizeView === 'function'
+            ? window.__SIGTS_normalizeView(hashView)
+            : hashView;
+        if (normalized === window.currentView) return;
         renderView(hashView, { updateHash: false });
     });
 }
@@ -101,62 +105,70 @@ function initLiveAccessStatusHooks() {
 
 async function init() {
     showLoading();
-    registerServiceWorker();
-    initHashRouting();
-    initLiveAccessStatusHooks();
-    initBackgroundAccessContext();
+    try {
+        registerServiceWorker();
+        initHashRouting();
+        initLiveAccessStatusHooks();
+        initBackgroundAccessContext();
 
-    // Never block first paint/login on geofence startup network calls.
-    Geofence.init().catch((error) => {
-        console.warn('Geofence initialization deferred:', error);
-    });
+        // Never block first paint/login on geofence startup network calls.
+        Geofence.init().catch((error) => {
+            console.warn('Geofence initialization deferred:', error);
+        });
 
-    const users = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
+        const users = JSON.parse(localStorage.getItem('registeredUsers') || '[]');
 
-    if (!users.some(user => user.role === 'it_manager')) {
-        users.push(
-            {
-                id: 'admin1',
-                name: 'IT Administrator',
-                email: 'admin@bwindi.com',
-                username: 'admin',
-                role: 'it_manager',
-                department: 'IT',
-                createdAt: new Date().toISOString()
-            },
-            {
-                id: 'guide1',
-                name: 'Demo Guide',
-                email: 'guide@bwindi.com',
-                username: 'guide',
-                role: 'guide',
-                department: 'Tour Operations',
-                createdAt: new Date().toISOString()
-            },
-            {
-                id: 'tourist1',
-                name: 'Demo Tourist',
-                email: 'tourist@example.com',
-                username: 'tourist',
-                role: 'tourist',
-                department: 'Visitor',
-                createdAt: new Date().toISOString()
-            }
-        );
+        if (!users.some(user => user.role === 'it_manager')) {
+            users.push(
+                {
+                    id: 'admin1',
+                    name: 'IT Administrator',
+                    email: 'admin@bwindi.com',
+                    username: 'admin',
+                    role: 'it_manager',
+                    department: 'IT',
+                    createdAt: new Date().toISOString()
+                },
+                {
+                    id: 'guide1',
+                    name: 'Demo Guide',
+                    email: 'guide@bwindi.com',
+                    username: 'guide',
+                    role: 'guide',
+                    department: 'Tour Operations',
+                    createdAt: new Date().toISOString()
+                },
+                {
+                    id: 'tourist1',
+                    name: 'Demo Tourist',
+                    email: 'tourist@example.com',
+                    username: 'tourist',
+                    role: 'tourist',
+                    department: 'Visitor',
+                    createdAt: new Date().toISOString()
+                }
+            );
 
-        localStorage.setItem('registeredUsers', JSON.stringify(users));
+            localStorage.setItem('registeredUsers', JSON.stringify(users));
+        }
+
+        const requestedView = window.location.hash.replace('#', '').trim();
+
+        // Render the first screen directly (and sync hash) to avoid
+        // depending on hashchange event timing for initial paint.
+        if (Auth.isAuthenticated()) {
+            await renderView(requestedView || getLandingViewForUser(Auth.getCurrentUser()), { updateHash: true });
+            return;
+        }
+
+        await renderView(requestedView === 'register' ? 'register' : 'login', { updateHash: true });
+    } catch (err) {
+        console.error('SIGTS init failed:', err);
+        const app = document.getElementById('app');
+        if (app) {
+            app.innerHTML = `<div class="loading-container"><p style="max-width:360px;line-height:1.5;color:#faf7ef;"><strong>Something blocked startup.</strong><br><small>${String(err.message || err)}</small><br><br><button type="button" class="login-btn" onclick="location.reload()">Reload</button></div>`;
+        }
     }
-
-    const requestedView = window.location.hash.replace('#', '');
-
-    // Render the first screen directly (and sync hash) to avoid
-    // depending on hashchange event timing for initial paint.
-    if (Auth.isAuthenticated()) {
-        await renderView(requestedView || getLandingViewForUser(Auth.getCurrentUser()), { updateHash: true });
-        return;
-    }
-
-    await renderView(requestedView === 'register' ? 'register' : 'login', { updateHash: true });
 }
 
 init();

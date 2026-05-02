@@ -3,7 +3,8 @@
 const { Client } = require('pg');
 const { execSync } = require('child_process');
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '../.env') });
+const { loadEnv } = require('../src/config/env');
+loadEnv();
 
 const DB_NAME = process.env.DB_NAME || 'sigts_bwindi';
 const DB_USER = process.env.DB_USER || 'postgres';

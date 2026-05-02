@@ -135,12 +135,45 @@ class AuthManager {
         }
 
         if (result?.success && result.mfaRequired && result.mfaToken) {
+            const mfaTok = result.mfaToken;
+            let useSms = false;
+            if (result.smsMfaAvailable && typeof window.showConfirmDialog === 'function') {
+                useSms = await window.showConfirmDialog(
+                    'MFA required. OK to receive a code by SMS on your registered phone? Cancel to use your authenticator app instead.'
+                );
+            }
+            if (useSms) {
+                const sendRes = await API.request('/auth/mfa/sms/send', {
+                    method: 'POST',
+                    body: JSON.stringify({ mfaToken: mfaTok })
+                });
+                if (!sendRes?.success) {
+                    window.showToast?.(
+                        sendRes?.error || 'SMS code could not be sent. Try your authenticator code instead.',
+                        'warning'
+                    );
+                } else {
+                    if (sendRes.devSmsCode) {
+                        window.showToast?.(`Dev SMS MFA code: ${sendRes.devSmsCode}`, 'info');
+                    }
+                    const smsCode = await window.showPromptDialog('Enter the 6-digit code from SMS');
+                    if (!smsCode?.trim()) return { success: false, error: 'SMS code required' };
+                    const smsDone = await API.request('/auth/mfa/sms/complete', {
+                        method: 'POST',
+                        body: JSON.stringify({ mfaToken: mfaTok, code: smsCode.trim() })
+                    });
+                    if (smsDone?.success && smsDone.token && smsDone.user) {
+                        return this.completeLogin(smsDone.user, smsDone.token, rememberMe);
+                    }
+                    window.showToast?.(smsDone?.error || 'SMS MFA failed.', 'danger');
+                }
+            }
             const code = await window.showPromptDialog('Enter your 6-digit authenticator code');
             if (!code) return { success: false, error: 'MFA code required' };
             const mfaResult = await API.request('/auth/mfa/complete', {
                 method: 'POST',
                 body: JSON.stringify({
-                    mfaToken: result.mfaToken,
+                    mfaToken: mfaTok,
                     code: code.trim()
                 })
             });
@@ -576,6 +609,15 @@ class GeofenceManager {
 // =====================================================
 // 3.1.1.3 CONTENT MANAGER (COMPLETE)
 // =====================================================
+function wildlifeTourThemesEmbedFallbackList() {
+    try {
+        const fb = typeof window !== 'undefined' ? window.__SIGTS_WILDLIFE_TOUR_THEMES_FALLBACK__ : null;
+        return Array.isArray(fb) ? fb : [];
+    } catch (_) {
+        return [];
+    }
+}
+
 class ContentManager {
     constructor() {
         this.initStorage();
@@ -613,7 +655,30 @@ class ContentManager {
             if (animal) return animal;
         }
         const animals = await this.getAnimals();
-        return animals.find(a => a.id == id);
+        return animals.find((a) => a.animal_id == id || a.id == id);
+    }
+
+    async getWildlifeTourThemes() {
+        if (this.useAPI) {
+            const themes = await API.getWildlifeTourThemes();
+            if (themes && themes.length) return themes;
+        }
+        const cached = JSON.parse(localStorage.getItem('offline_wildlife_themes') || '[]');
+        if (Array.isArray(cached) && cached.length) return cached;
+        return wildlifeTourThemesEmbedFallbackList();
+    }
+
+    async getWildlifeTourThemeBySlug(slug) {
+        const s = String(slug || '').trim().toLowerCase();
+        if (this.useAPI) {
+            const row = await API.getWildlifeTourThemeBySlug(s);
+            if (row?.slug || row?.theme_id) return row;
+        }
+        const list = JSON.parse(localStorage.getItem('offline_wildlife_themes') || '[]');
+        const cachedHit = Array.isArray(list) ? list.find((t) => t.slug === s) : null;
+        if (cachedHit?.slug || cachedHit?.theme_id) return cachedHit;
+        const fb = wildlifeTourThemesEmbedFallbackList();
+        return fb.find((t) => t.slug === s) || null;
     }
 
     async getLocations() {
@@ -637,10 +702,12 @@ class ContentManager {
         const animals = await API.getAnimals();
         const locations = await API.getLocations();
         const stories = await API.getCulturalStories();
-        
+        const themes = await API.getWildlifeTourThemes();
+
         if (animals && animals.length) localStorage.setItem('offline_animals', JSON.stringify(animals));
         if (locations && locations.length) localStorage.setItem('offline_locations', JSON.stringify(locations));
         if (stories && stories.length) localStorage.setItem('cultural_stories', JSON.stringify(stories));
+        if (themes && themes.length) localStorage.setItem('offline_wildlife_themes', JSON.stringify(themes));
         
         AppState.cachedContent.version++;
         localStorage.setItem('offline_version', AppState.cachedContent.version);
@@ -914,6 +981,8 @@ class OfflineSyncManager {
 
     async processQueue() {
         if (this.isSyncing || !navigator.onLine) return;
+        const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        if (conn?.saveData) return;
         this.isSyncing = true;
         const items = [...this.pendingItems];
         for (const item of items) {

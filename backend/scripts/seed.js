@@ -7,7 +7,9 @@ const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const { execFileSync } = require('child_process');
-require('dotenv').config({ path: path.join(__dirname, '../.env') });
+const { loadEnv } = require('../src/config/env');
+const WILDLIFE_TOUR_THEME_ROWS = require('./data/wildlifeTourThemesRows');
+loadEnv();
 
 const pool = new Pool({
     host: process.env.DB_HOST || 'localhost',
@@ -35,6 +37,92 @@ async function log(message, color = 'reset') {
 async function isDataSeeded(tableName) {
     const result = await pool.query(`SELECT COUNT(*) FROM ${tableName}`);
     return parseInt(result.rows[0].count) > 0;
+}
+
+/**
+ * Applies database/seeds/003_bwindi_extended_content.sql (UPDATE/INSERT merges).
+ * Splits whole-line SQL comments away, then executes `;`-delimited statements.
+ */
+async function applyBwindiExtendedSeedFile() {
+    const extPath = path.join(SEEDS_DIR, '003_bwindi_extended_content.sql');
+    if (!fs.existsSync(extPath)) {
+        log('  ○ Bwindi extended seed file missing; skipping merge pass', 'yellow');
+        return;
+    }
+    log('\n📚 Merging Bwindi extended species + demo cultural narratives…', 'blue');
+    const raw = fs.readFileSync(extPath, 'utf8');
+    const noLineComments = raw
+        .replace(/\r\n/g, '\n')
+        .split('\n')
+        .filter((line) => !/^\s*--/.test(line))
+        .join('\n');
+
+    const statements = noLineComments
+        .split(';')
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+    for (let i = 0; i < statements.length; i++) {
+        await pool.query(statements[i]);
+    }
+    log(`  ✓ Applied ${statements.length} extended seed statements`, 'green');
+}
+
+async function seedWildlifeTourThemes() {
+    log('\n🎙️ Seeding wildlife tour theme session briefings…', 'blue');
+    let tableMissing = false;
+    try {
+        await pool.query('SELECT 1 FROM wildlife_tour_themes LIMIT 1');
+    } catch (err) {
+        if (String(err.message || '').includes('wildlife_tour_themes')) {
+            tableMissing = true;
+        } else {
+            throw err;
+        }
+    }
+    if (tableMissing) {
+        log('  ○ Table wildlife_tour_themes missing. Run migration 009_wildlife_tour_themes.sql first.', 'yellow');
+        return;
+    }
+
+    const upsertSql = `
+        INSERT INTO wildlife_tour_themes (
+            slug, session_title, subtitle, tourist_summary_en, guide_script_en, talking_points,
+            safety_notes, etiquette_notes, suggested_duration_minutes, unesco_note, image_url, sort_order
+        ) VALUES (
+            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12
+        )
+        ON CONFLICT (slug) DO UPDATE SET
+            session_title = EXCLUDED.session_title,
+            subtitle = EXCLUDED.subtitle,
+            tourist_summary_en = EXCLUDED.tourist_summary_en,
+            guide_script_en = EXCLUDED.guide_script_en,
+            talking_points = EXCLUDED.talking_points,
+            safety_notes = EXCLUDED.safety_notes,
+            etiquette_notes = EXCLUDED.etiquette_notes,
+            suggested_duration_minutes = EXCLUDED.suggested_duration_minutes,
+            unesco_note = EXCLUDED.unesco_note,
+            image_url = EXCLUDED.image_url,
+            sort_order = EXCLUDED.sort_order,
+            updated_at = CURRENT_TIMESTAMP`;
+
+    for (const row of WILDLIFE_TOUR_THEME_ROWS) {
+        await pool.query(upsertSql, [
+            row.slug,
+            row.session_title,
+            row.subtitle,
+            row.tourist_summary_en,
+            row.guide_script_en,
+            row.talking_points,
+            row.safety_notes,
+            row.etiquette_notes,
+            row.suggested_duration_minutes,
+            row.unesco_note,
+            row.image_url,
+            row.sort_order
+        ]);
+    }
+    log(`  ✓ Upserted ${WILDLIFE_TOUR_THEME_ROWS.length} wildlife tour theme briefing rows`, 'green');
 }
 
 // Seed parks data
@@ -68,15 +156,13 @@ async function seedParks() {
     log('  ✓ Parks seeded', 'green');
 }
 
-// Seed animals data
+// Seed animals data (base quartet + merged Bwindi catalogue from 003_* file)
 async function seedAnimals() {
     log('\n🦁 Seeding Animals...', 'blue');
-    
-    if (await isDataSeeded('animals')) {
-        log('  ○ Animals already seeded, skipping...', 'yellow');
-        return;
-    }
-    
+
+    let insertedBaseCount = 0;
+    const needsBaseAnimals = !(await isDataSeeded('animals'));
+
     const animals = [
         {
             name: 'Mountain Gorilla',
@@ -119,17 +205,23 @@ async function seedAnimals() {
             fun_facts: ['Can climb tree trunks like parrots', 'Plays important role in seed dispersal']
         }
     ];
-    
-    for (const animal of animals) {
-        await pool.query(
-            `INSERT INTO animals (animal_id, name, scientific_name, description, conservation_status, habitat, diet, lifespan, fun_facts)
-             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8)`,
-            [animal.name, animal.scientific_name, animal.description, animal.conservation_status,
-             animal.habitat, animal.diet, animal.lifespan, animal.fun_facts]
-        );
+
+    if (needsBaseAnimals) {
+        for (const animal of animals) {
+            await pool.query(
+                `INSERT INTO animals (animal_id, name, scientific_name, description, conservation_status, habitat, diet, lifespan, fun_facts)
+                 VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8)`,
+                [animal.name, animal.scientific_name, animal.description, animal.conservation_status,
+                    animal.habitat, animal.diet, animal.lifespan, animal.fun_facts]
+            );
+            insertedBaseCount++;
+        }
+        log(`  ✓ Inserted ${insertedBaseCount} starter species`, 'green');
+    } else {
+        log('  ○ Base animals rowset already exists; merges will refresh imagery/text', 'yellow');
     }
-    
-    log(`  ✓ Seeded ${animals.length} animals`, 'green');
+
+    await applyBwindiExtendedSeedFile();
 }
 
 // Seed safety tips
@@ -221,6 +313,7 @@ async function seed() {
         
         // Run seeders
         await seedParks();
+        await seedWildlifeTourThemes();
         await seedAnimals();
         await seedSafetyTips();
         await seedFAQs();

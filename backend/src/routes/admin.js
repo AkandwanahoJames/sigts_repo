@@ -290,6 +290,181 @@ router.post('/backup/create', async (req, res) => {
     }
 });
 
+// GET /api/admin/backup/list — recent backup artefacts recorded in ops reports table
+router.get('/backup/list', async (req, res) => {
+    try {
+        const r = await pool.query(
+            `SELECT report_id, report_type, period_start, period_end, metrics, generated_at
+             FROM park_performance_reports
+             WHERE report_type IN ('backup', 'automated_backup')
+             ORDER BY generated_at DESC NULLS LAST
+             LIMIT 40`
+        );
+        res.json({
+            backups: r.rows,
+            ops_note:
+                'Production: point this at pg_dump artefacts (S3/Share) and enforce retention separately.'
+        });
+    } catch (error) {
+        console.error('Backup list error:', error);
+        res.status(500).json({ error: 'Failed to list backups' });
+    }
+});
+
+// POST /api/admin/animals/bulk-json — CSV-style rows as JSON array (§3.1.1.10 bulk upload)
+router.post('/animals/bulk-json', [
+    body('animals').isArray({ min: 1 })
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const rows = req.body.animals;
+    let inserted = 0;
+    let updated = 0;
+    try {
+        for (const raw of rows) {
+            const name = String(raw.name || '').trim();
+            const sci = String(raw.scientific_name || '').trim();
+            if (!name || !sci) continue;
+            const existing = await pool.query(
+                `SELECT animal_id FROM animals WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+                [name]
+            );
+            if (existing.rows[0]?.animal_id) {
+                await pool.query(
+                    `UPDATE animals SET
+                        scientific_name = COALESCE(NULLIF($2::text,''), scientific_name),
+                        description = COALESCE($3::text, description),
+                        conservation_status = COALESCE($4::text, conservation_status),
+                        habitat = COALESCE($5::text, habitat),
+                        updated_at = CURRENT_TIMESTAMP
+                     WHERE animal_id = $1`,
+                    [
+                        existing.rows[0].animal_id,
+                        sci,
+                        raw.description || null,
+                        raw.conservation_status || null,
+                        raw.habitat || null
+                    ]
+                );
+                updated += 1;
+            } else {
+                await pool.query(
+                    `INSERT INTO animals (
+                        name, scientific_name, description, conservation_status,
+                        habitat, image_urls
+                    ) VALUES ($1,$2,$3,$4,$5, COALESCE($6::text[], ARRAY[]::text[]))`,
+                    [
+                        name,
+                        sci,
+                        raw.description || '',
+                        raw.conservation_status || 'least_concern',
+                        raw.habitat || 'Montane forest',
+                        Array.isArray(raw.image_urls) ? raw.image_urls : null
+                    ]
+                );
+                inserted += 1;
+            }
+        }
+        await audit(req, {
+            action: 'animals.bulk_import',
+            table_name: 'animals',
+            record_id: null,
+            new_value: { inserted, updated, attempted: rows.length }
+        });
+        res.json({ success: true, inserted, updated, attempted: rows.length });
+    } catch (error) {
+        console.error('Bulk animals import:', error);
+        res.status(500).json({ error: 'Bulk import failed' });
+    }
+});
+
+async function alertRulesReady() {
+    const r = await pool.query(`
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema='public' AND table_name='system_alert_rules'
+    `);
+    return r.rows.length > 0;
+}
+
+router.get('/alert-rules', async (req, res) => {
+    try {
+        if (!(await alertRulesReady())) {
+            return res.json({ rules: [], note: 'Apply migration 011 for system_alert_rules.' });
+        }
+        const q = await pool.query(
+            `SELECT rule_id, name, metric_key, comparator, threshold_numeric,
+                    severity, notify_email, enabled, created_at
+             FROM system_alert_rules ORDER BY created_at DESC`
+        );
+        res.json({ rules: q.rows });
+    } catch (e) {
+        console.error('alert-rules list', e);
+        res.status(500).json({ error: 'Failed to load alert rules' });
+    }
+});
+
+router.post('/alert-rules', [
+    body('name').isString().trim().isLength({ min: 3 }),
+    body('metric_key').isString().trim(),
+    body('comparator').isIn(['gt', 'gte', 'lt', 'lte', 'eq']),
+    body('threshold_numeric').isFloat(),
+    body('severity').optional().isIn(['info', 'warning', 'critical']),
+    body('notify_email').optional().isEmail(),
+    body('enabled').optional().isBoolean()
+], async (req, res) => {
+    if (!(await alertRulesReady())) {
+        return res.status(503).json({ error: 'system_alert_rules missing; migration 011' });
+    }
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    try {
+        const ins = await pool.query(
+            `INSERT INTO system_alert_rules (
+                name, metric_key, comparator, threshold_numeric, severity, notify_email, enabled, created_by
+            ) VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7,true),$8)
+            RETURNING *`,
+            [
+                req.body.name,
+                req.body.metric_key,
+                req.body.comparator,
+                req.body.threshold_numeric,
+                req.body.severity || 'warning',
+                req.body.notify_email || null,
+                req.body.enabled,
+                req.user.user_id
+            ]
+        );
+        res.status(201).json({ rule: ins.rows[0] });
+    } catch (e) {
+        console.error('alert-rule create', e);
+        res.status(500).json({ error: 'Failed to create rule' });
+    }
+});
+
+router.put('/alert-rules/:id', async (req, res) => {
+    if (!(await alertRulesReady())) return res.status(503).json({ error: 'system_alert_rules missing' });
+    const { id } = req.params;
+    const { enabled, threshold_numeric, notify_email } = req.body;
+    try {
+        const r = await pool.query(
+            `UPDATE system_alert_rules
+             SET enabled = COALESCE($2, enabled),
+                 threshold_numeric = COALESCE($3, threshold_numeric),
+                 notify_email = COALESCE($4, notify_email),
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE rule_id = $1
+             RETURNING *`,
+            [id, enabled ?? null, threshold_numeric ?? null, notify_email ?? null]
+        );
+        if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
+        res.json({ rule: r.rows[0] });
+    } catch (e) {
+        console.error('alert-rule update', e);
+        res.status(500).json({ error: 'Failed to update rule' });
+    }
+});
+
 // =====================================================
 // PUT /api/admin/users/:id/deactivate
 // Deactivate a user account (admin only)

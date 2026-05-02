@@ -58,10 +58,26 @@ class APIService {
             headers['x-user-lng'] = String(coords.lng);
         }
 
+        const opts = { ...options };
+        delete opts.timeoutMs;
+        const isFormData = opts.body instanceof FormData;
+        let timeoutMs = options.timeoutMs;
+        if (timeoutMs === undefined) {
+            timeoutMs = isFormData ? 0 : 15000;
+        }
+
+        let controller;
+        let timer;
+        if (timeoutMs > 0 && typeof AbortController !== 'undefined') {
+            controller = new AbortController();
+            timer = window.setTimeout(() => controller.abort(), timeoutMs);
+        }
+
         try {
             const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-                ...options,
-                headers
+                ...opts,
+                headers,
+                ...(controller ? { signal: controller.signal } : {})
             });
             const raw = await response.text();
             let payload = null;
@@ -81,9 +97,14 @@ class APIService {
 
             return payload;
         } catch (error) {
-            console.error(`API Error (${endpoint}):`, error);
-            // Fallback to localStorage if API fails
+            if (error?.name === 'AbortError') {
+                console.warn(`API timeout (${endpoint}) after ${timeoutMs}ms`);
+            } else {
+                console.error(`API Error (${endpoint}):`, error);
+            }
             return null;
+        } finally {
+            if (timer !== undefined) window.clearTimeout(timer);
         }
     }
 
@@ -195,7 +216,50 @@ class APIService {
         if (result?.animal_id) return result;
         if (result && result.success && result.data) return result.data;
         const animals = await this.getAnimals();
-        return animals.find(a => a.id == id);
+        return animals.find((a) => a.animal_id == id || a.id == id);
+    }
+
+    /** UNESCO wildlife theme tiles: guide session scripts (migration 009 + seed 004). */
+    async getWildlifeTourThemes() {
+        const result = await this.request('/wildlife-tour-themes');
+        if (result?.themes && Array.isArray(result.themes)) {
+            try {
+                localStorage.setItem('offline_wildlife_themes', JSON.stringify(result.themes));
+            } catch (_) {
+                /**/
+            }
+            return result.themes;
+        }
+        return JSON.parse(localStorage.getItem('offline_wildlife_themes') || '[]');
+    }
+
+    async getWildlifeTourThemeBySlug(slug) {
+        const s = String(slug || '').trim().toLowerCase();
+        if (!s) return null;
+        const result = await this.request(`/wildlife-tour-themes/${encodeURIComponent(s)}`);
+        if (result?.theme?.slug || result?.theme?.theme_id) {
+            try {
+                const raw = JSON.parse(localStorage.getItem('offline_wildlife_themes') || '[]');
+                const list = Array.isArray(raw) ? raw : [];
+                const idx = list.findIndex((t) => t.slug === result.theme.slug);
+                if (idx >= 0) list[idx] = result.theme;
+                else list.push(result.theme);
+                localStorage.setItem('offline_wildlife_themes', JSON.stringify(list));
+            } catch (_) {
+                /**/
+            }
+            return result.theme;
+        }
+        const cached = JSON.parse(localStorage.getItem('offline_wildlife_themes') || '[]');
+        return Array.isArray(cached) ? cached.find((t) => t.slug === s) || null : null;
+    }
+
+    /** Full cultural narrative (includes narrative_en narrative_local, etc.). */
+    async getCulturalNarrativeById(id) {
+        const result = await this.request(`/cultural/${id}`);
+        if (result?.narrative_id) return result;
+        if (result && result.success && result.data) return result.data;
+        return null;
     }
 
     // Locations endpoints
@@ -390,6 +454,73 @@ class APIService {
             body: JSON.stringify(payload)
         });
         return result;
+    }
+
+    async getSightingsHeatmap(filters = {}) {
+        const qs = new URLSearchParams();
+        if (filters.animal_id) qs.set('animal_id', filters.animal_id);
+        if (filters.limit) qs.set('limit', String(filters.limit));
+        const result = await this.request(`/sightings/heatmap?${qs.toString()}`);
+        if (result?.points) return result;
+        return { points: [], generated_at: null };
+    }
+
+    async geoDistance(fromLat, fromLng, toLat, toLng) {
+        const q = `from_lat=${encodeURIComponent(fromLat)}&from_lng=${encodeURIComponent(fromLng)}&to_lat=${encodeURIComponent(toLat)}&to_lng=${encodeURIComponent(toLng)}`;
+        return this.request(`/geo/distance?${q}`);
+    }
+
+    async geoBearing(fromLat, fromLng, toLat, toLng) {
+        const q = `from_lat=${encodeURIComponent(fromLat)}&from_lng=${encodeURIComponent(fromLng)}&to_lat=${encodeURIComponent(toLat)}&to_lng=${encodeURIComponent(toLng)}`;
+        return this.request(`/geo/bearing?${q}`);
+    }
+
+    async getGuideMessagePeers() {
+        const result = await this.request('/guides/messages/peers');
+        return Array.isArray(result?.peers) ? result.peers : [];
+    }
+
+    async getGuideMessages(box = 'inbox') {
+        const result = await this.request(`/guides/messages?box=${encodeURIComponent(box)}&limit=60`);
+        return Array.isArray(result?.messages) ? result.messages : [];
+    }
+
+    async sendGuideMessage(toUserId, body) {
+        return this.request('/guides/messages', {
+            method: 'POST',
+            body: JSON.stringify({ to_user_id: toUserId, body })
+        });
+    }
+
+    async getAnalyticsAnomalies(z = 2.5) {
+        const result = await this.request(`/analytics/anomalies?z=${encodeURIComponent(z)}`);
+        return result || { anomalies: [] };
+    }
+
+    async queuePredictiveTrainingJob(modelKey = 'congestion_v1') {
+        return this.request('/analytics/models/retrain-job', {
+            method: 'POST',
+            body: JSON.stringify({ model_key: modelKey })
+        });
+    }
+
+    async buildAnalyticsReport(metrics = []) {
+        return this.request('/analytics/reports/build', {
+            method: 'POST',
+            body: JSON.stringify({ metrics })
+        });
+    }
+
+    async listBackupRecords() {
+        const result = await this.request('/admin/backup/list');
+        return result || { backups: [] };
+    }
+
+    async bulkImportAnimals(animals) {
+        return this.request('/admin/animals/bulk-json', {
+            method: 'POST',
+            body: JSON.stringify({ animals })
+        });
     }
 }
 

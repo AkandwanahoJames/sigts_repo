@@ -981,19 +981,7 @@ body.auth-page {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ----- Sidebar toggle (mobile) ----------------------------- */
-.sidebar-toggle {
-    background: var(--surface-1);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-xs);
-    color: var(--text-900);
-    width: 44px; height: 44px;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer;
-    transition: background var(--motion-fast);
-}
-.sidebar-toggle:hover { background: var(--surface-2); }
+/* Sidebar toggle: single definition in styles.css (surface chip + hover) */
 
 /* ----- Toasts / modals (basic polish) ---------------------- */
 .toast,

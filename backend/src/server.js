@@ -37,6 +37,7 @@ const { correlationId } = require('./middleware/correlationId');
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const animalRoutes = require('./routes/animals');
+const wildlifeTourThemesRoutes = require('./routes/wildlifeTourThemes');
 const locationRoutes = require('./routes/locations');
 const sightingRoutes = require('./routes/sightings');
 const tourRoutes = require('./routes/tours');
@@ -48,6 +49,8 @@ const syncRoutes = require('./routes/sync');
 const aiRoutes = require('./routes/ai');
 const intranetRoutes = require('./routes/intranet');
 const feedbackRoutes = require('./routes/feedback');
+const geoRoutes = require('./routes/geo');
+const guideMessagesRoutes = require('./routes/guideMessages');
 
 // Initialize Express app
 const app = express();
@@ -311,6 +314,7 @@ app.use('/api/auth', authRoutes);
 // Protected routes - route modules already enforce auth/roles.
 app.use('/api/users', userRoutes);
 app.use('/api/animals', animalRoutes);
+app.use('/api/wildlife-tour-themes', wildlifeTourThemesRoutes);
 app.use('/api/locations', locationRoutes);
 app.use('/api/sightings', authenticateJWT, requireInsidePark({ bypassRoles: ['it_manager'] }), sightingRoutes);
 app.use('/api/tours', authenticateJWT, requireInsidePark({ bypassRoles: ['it_manager'] }), tourRoutes);
@@ -318,6 +322,8 @@ app.use('/api/cultural', culturalRoutes);
 app.use('/api/geofence', geofenceRoutes);
 app.use('/api/sync', authenticateJWT, requireInsidePark({ bypassRoles: ['it_manager'] }), syncRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/geo', authenticateJWT, geoRoutes);
+app.use('/api/guides/messages', guideMessagesRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/intranet', intranetRoutes);

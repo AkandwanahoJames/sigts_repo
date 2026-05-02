@@ -321,20 +321,33 @@ svg {
 }
 
 .sidebar-toggle {
-    position: fixed;
-    top: 16px;
-    right: 16px;
-    left: auto;
-    z-index: 1001;
+    position: relative;
+    flex-shrink: 0;
+    z-index: 1;
     width: 44px;
     height: 44px;
     display: none;
-    place-items: center;
-    border: 0;
-    border-radius: 50%;
-    background: var(--green-800);
-    color: white;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    margin: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--surface-1, #fffefa);
+    color: var(--text-900);
+    box-shadow: var(--shadow-xs);
+    cursor: pointer;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sidebar-toggle:hover {
+    background: var(--surface-2, #f2ede2);
     box-shadow: var(--shadow-sm);
+}
+
+.sidebar-toggle:focus-visible {
+    outline: 2px solid var(--green-600, var(--green-500));
+    outline-offset: 2px;
 }
 
 .main-content {
@@ -353,19 +366,27 @@ svg {
     top: 0;
     z-index: 99;
     height: 76px;
-    padding: 0 24px 0 28px;
+    min-height: calc(76px + env(safe-area-inset-top, 0px));
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-left: max(28px, env(safe-area-inset-left, 0px));
+    padding-right: max(24px, env(safe-area-inset-right, 0px));
+    padding-bottom: 0;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
+    gap: 12px;
     background: rgba(255, 255, 255, 0.92);
     border-bottom: 1px solid #E5E1D8;
     backdrop-filter: blur(12px);
 }
 
 .content-header h1 {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
     color: var(--text-900);
     font-size: 23px;
-    line-height: 1;
+    line-height: 1.2;
     font-weight: 900;
     letter-spacing: -0.03em;
 }
@@ -999,7 +1020,361 @@ svg {
 
 .status-endangered { background: #FDE3D0; color: var(--danger); }
 .status-vulnerable { background: #FFF4D8; color: #9A6A10; }
+.status-near-threatened { background: #FFF7E8; color: #9a5b00; }
 .status-least-concern { background: #E7F0DC; color: var(--success); }
+
+.neutral-chip {
+    background: #f5f7f6;
+    color: var(--text-700);
+    text-transform: none;
+}
+
+.animals-page-blurb,
+.park-info-copy {
+    padding: 8px 0 14px;
+    color: var(--text-900);
+    line-height: 1.6;
+    font-size: 14px;
+    overflow: visible;
+}
+
+.info-chip-row {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 10px;
+    padding: 0 0 4px;
+    overflow: visible;
+}
+
+@media (min-width: 520px) {
+    .info-chip-row {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+}
+
+.info-chip-row .small-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    white-space: normal;
+    line-height: 1.35;
+    text-align: center;
+    width: 100%;
+    padding: 10px 14px;
+    min-height: 44px;
+}
+
+@media (min-width: 520px) {
+    .info-chip-row .small-btn {
+        width: auto;
+        flex: 1 1 220px;
+        min-height: unset;
+        text-align: left;
+        justify-content: flex-start;
+    }
+}
+
+/* UNESCO dossier-aligned tour themes (Animals tab) */
+.section-card.tour-focus-section {
+    overflow: visible;
+}
+
+.tour-focus-explainer {
+    padding-top: 0;
+}
+
+.tour-focus-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+    padding: 0 0 4px;
+}
+
+.tour-focus-cell {
+    display: flex;
+}
+
+.tour-focus-card {
+    flex: 1;
+    width: 100%;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+    background: linear-gradient(180deg, rgba(255, 255, 252, 0.98), var(--cream-50, #fcfbf8));
+    border: 2px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xs);
+    transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+    overflow: hidden;
+}
+
+.tour-focus-thumb {
+    margin: -14px -14px 12px -14px;
+    height: 88px;
+    overflow: hidden;
+    background: var(--cream-50, #fcfbf8);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.tour-focus-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.tour-focus-thumb--placeholder {
+    display: grid;
+    place-items: center;
+    background: linear-gradient(135deg, rgba(46, 125, 50, 0.1), rgba(46, 125, 50, 0.02));
+    color: var(--green-600);
+}
+
+.tour-focus-card-main {
+    padding: 14px;
+    cursor: pointer;
+    flex: 1;
+}
+
+.tour-focus-card-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0 14px 12px;
+    border-top: 1px solid var(--line, #e8e9e8);
+}
+
+.tour-focus-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sm);
+}
+
+.tour-focus-card-main:focus-visible {
+    outline: 2px solid var(--green-600);
+    outline-offset: -4px;
+    border-radius: var(--radius-md);
+}
+
+.tour-focus-open-hint {
+    margin-top: 10px;
+    font-size: 11px;
+    font-weight: 750;
+    color: var(--green-700);
+    letter-spacing: 0.02em;
+}
+
+.tour-focus-filter-btn {
+    width: 100%;
+}
+
+.tour-focus-card .tour-focus-ai {
+    width: 100%;
+    margin-top: 0;
+}
+
+.tour-focus-card--active {
+    border-color: var(--green-600);
+    box-shadow: 0 8px 20px rgba(46, 125, 50, 0.12);
+}
+
+.tour-focus-card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.tour-focus-icon {
+    display: grid;
+    place-items: center;
+    color: var(--green-700);
+}
+
+.tour-focus-count {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--green-800);
+    background: rgba(46, 125, 50, 0.1);
+    border-radius: 999px;
+    padding: 3px 9px;
+    white-space: nowrap;
+}
+
+.tour-focus-title {
+    font-weight: 900;
+    font-size: 14px;
+    color: var(--green-900);
+    line-height: 1.35;
+}
+
+.tour-focus-sub {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-700);
+    line-height: 1.45;
+}
+
+.tour-focus-ai {
+    margin-top: 10px;
+    width: 100%;
+}
+
+.tour-filter-note {
+    margin: 14px 0 8px;
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--line);
+    background: var(--cream-50);
+    color: var(--text-800);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.tour-filter-note strong {
+    color: var(--green-900);
+}
+
+.tour-filter-note--fallback {
+    border-color: #e6b894;
+    background: #fff7f0;
+}
+
+/* Intro / explainer cards: avoid clipping body + action chips (globals use overflow:hidden on .section-card) */
+.section-card.animals-page-intro,
+.section-card.culture-page-intro,
+.section-card:has(.info-chip-row) {
+    overflow: visible;
+}
+
+.main-container > .section-card.animals-page-intro {
+    overflow: visible;
+}
+
+.main-container > .animals-list.animals-list--responsive {
+    align-self: start;
+    overflow: visible;
+}
+
+.ai-prefill-banner {
+    margin: 0 16px 10px;
+    font-size: 13px;
+    color: var(--text-600, var(--text-700));
+}
+
+.ghost-btn {
+    background: rgba(31, 47, 36, 0.04);
+}
+
+.animal-card--interactive {
+    cursor: pointer;
+    align-items: stretch;
+}
+
+.animal-card--interactive:focus-visible {
+    outline: 2px solid var(--green-600);
+    outline-offset: 2px;
+}
+
+.animal-card-thumb {
+    width: clamp(112px, 38%, 150px);
+    min-height: 120px;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    flex-shrink: 0;
+    background: var(--cream-200);
+    display: flex;
+    align-items: stretch;
+}
+
+.animal-card-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.animal-card-thumb--fallback {
+    display: grid;
+    place-items: center;
+    color: var(--green-700);
+}
+
+.animal-teaser {
+    margin: 8px 0 12px;
+    font-size: 13px;
+    color: var(--text-700);
+    line-height: 1.45;
+}
+
+.animal-card-actions {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.animals-list--responsive {
+    grid-template-columns: repeat(auto-fill, minmax(286px, 1fr));
+}
+
+.culture-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(288px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.culture-card-mini {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    padding: 0;
+}
+
+.culture-card-mini .story-content {
+    flex: 1;
+    padding: 16px;
+}
+
+.culture-card-thumb {
+    width: 120px;
+    flex-shrink: 0;
+    min-height: 120px;
+    border-right: 1px solid var(--line);
+}
+
+.culture-card-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.culture-card-thumb--fallback {
+    display: grid;
+    place-items: center;
+    color: var(--green-700);
+    background: var(--cream-100);
+}
+
+.story-card--interactive {
+    cursor: pointer;
+}
+
+.story-card--interactive:focus-visible {
+    outline: 2px solid var(--green-600);
+    outline-offset: 3px;
+}
+
+body.detail-modal-open {
+    overflow: hidden;
+}
 
 .story-card {
     margin-bottom: 18px;
@@ -1716,7 +2091,7 @@ textarea:focus-visible {
     }
 
     .sidebar-toggle {
-        display: grid;
+        display: inline-flex;
     }
 
     .main-content {
@@ -1725,8 +2100,12 @@ textarea:focus-visible {
     }
 
     .content-header {
-        padding-left: 20px;
-        padding-right: 72px;
+        padding-left: max(16px, env(safe-area-inset-left, 0px));
+        padding-right: max(16px, env(safe-area-inset-right, 0px));
+    }
+
+    .header-right {
+        flex-shrink: 0;
     }
 
     .header-left p,
@@ -1773,10 +2152,6 @@ textarea:focus-visible {
 
     .content-header h1 {
         font-size: 19px;
-    }
-
-    .content-header {
-        padding-right: 14px;
     }
 
     .header-profile-copy {
@@ -2905,6 +3280,83 @@ body.auth-page {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+}
+
+.ui-modal-overlay-rich {
+    padding: clamp(14px, 4vw, 28px);
+    align-items: center;
+}
+
+.ui-modal-rich {
+    width: min(640px, 100%);
+    max-height: calc(100dvh - 32px);
+    display: flex;
+    flex-direction: column;
+    padding: clamp(14px, 3vw, 22px);
+    position: relative;
+}
+
+.ui-modal-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.96);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    color: var(--text-900);
+}
+
+.ui-modal-hero img {
+    width: 100%;
+    display: block;
+    max-height: 240px;
+    object-fit: cover;
+    border-radius: var(--radius-md);
+}
+
+.ui-modal-rich-body {
+    margin-top: 12px;
+    overflow-y: auto;
+    flex: 1;
+    padding-right: 4px;
+    font-size: 14px;
+    line-height: 1.52;
+}
+
+.ui-modal-section-title {
+    margin: 12px 0 6px;
+    font-size: 14px;
+    color: var(--green-900);
+}
+
+.ui-modal-muted {
+    color: var(--text-500);
+    margin: 0 0 8px;
+}
+
+.ui-modal-chip-row {
+    margin: 6px 0 12px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.ui-modal-facts {
+    margin: 0;
+    padding-left: 18px;
+    color: var(--text-700);
+}
+
+.ui-modal-actions-rich {
+    margin-top: 16px;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-start;
 }
 
 .ui-btn {

@@ -313,10 +313,12 @@ router.post('/login', [
                     { expiresIn: '10m' }
                 );
 
+                const phoneRow = await pool.query(`SELECT phone FROM users WHERE user_id = $1`, [user.user_id]);
                 return res.json({
                     success: true,
                     mfaRequired: true,
                     mfaToken,
+                    smsMfaAvailable: Boolean((phoneRow.rows[0]?.phone || '').trim()),
                     user: {
                         id: user.user_id,
                         username: user.username,
@@ -658,6 +660,148 @@ router.post('/mfa/complete', [
             }
         });
     } catch (error) {
+        return res.status(401).json({ error: 'Invalid or expired MFA session' });
+    }
+});
+
+// =====================================================
+// POST /api/auth/mfa/sms/send — optional SMS ladder for IT managers (§3.1.1.1)
+// Requires phone on profile; integrates with Twilio when env vars provided.
+// =====================================================
+router.post('/mfa/sms/send', [body('mfaToken').notEmpty()], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    try {
+        const decoded = jwt.verify(req.body.mfaToken, MFA_JWT_SECRET);
+        if (decoded.typ !== 'mfa_pending') {
+            return res.status(401).json({ error: 'Invalid MFA session' });
+        }
+        const u = await pool.query(
+            `SELECT user_id, phone, user_type FROM users WHERE user_id = $1 AND is_active = true`,
+            [decoded.userId]
+        );
+        if (!u.rows.length || u.rows[0].user_type !== 'it_manager') {
+            return res.status(403).json({ error: 'SMS MFA is only offered for pending IT sessions' });
+        }
+        const rawPhone = String(u.rows[0].phone || '').trim();
+        if (!rawPhone) {
+            return res.status(400).json({ error: 'Add a mobile phone number to your profile before using SMS MFA.' });
+        }
+
+        let tableReady = false;
+        try {
+            const chk = await pool.query(`
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema='public' AND table_name='sms_mfa_challenges'
+            `);
+            tableReady = chk.rows.length > 0;
+        } catch (_) {
+            tableReady = false;
+        }
+        if (!tableReady) {
+            return res.status(503).json({ error: 'SMS MFA storage missing; apply migration 011_capability_extensions.sql' });
+        }
+
+        const code = String(Math.floor(100000 + Math.random() * 900000));
+        const hash = await bcrypt.hash(code, BCRYPT_ROUNDS);
+        await pool.query(
+            `UPDATE sms_mfa_challenges SET consumed = true WHERE user_id = $1 AND consumed = false`,
+            [decoded.userId]
+        );
+        await pool.query(
+            `INSERT INTO sms_mfa_challenges (user_id, code_hash, expires_at)
+             VALUES ($1, $2, NOW() + INTERVAL '12 minutes')`,
+            [decoded.userId, hash]
+        );
+
+        if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM_NUMBER) {
+            try {
+                // eslint-disable-next-line global-require, import/no-extraneous-dependencies
+                const twilio = require('twilio');
+                const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+                await client.messages.create({
+                    body: `SIGTS MFA code: ${code}. Expires in 12 minutes.`,
+                    from: process.env.TWILIO_FROM_NUMBER,
+                    to: rawPhone.startsWith('+') ? rawPhone : `+${rawPhone}`
+                });
+            } catch (twErr) {
+                logger.warn('Twilio SMS send failed', twErr.message);
+                return res.status(502).json({ error: 'SMS provider refused the message. Use authenticator OTP or try again.' });
+            }
+        } else {
+            logger.info(`SMS MFA stub: code for IT user ${decoded.userId} digits=${code}`);
+        }
+
+        const devReturn = process.env.NODE_ENV !== 'production' && process.env.SMS_MFA_DEV_RETURN === 'true';
+
+        return res.json({
+            success: true,
+            sent: Boolean(process.env.TWILIO_ACCOUNT_SID) || devReturn || process.env.NODE_ENV !== 'production',
+            message: devReturn ? 'Returning code because SMS_MFA_DEV_RETURN=true (non-production).' : 'Code dispatched per provider logs.',
+            devSmsCode: devReturn ? code : undefined
+        });
+    } catch (err) {
+        logger.warn('SMS MFA send rejected', err.message);
+        return res.status(401).json({ error: 'Invalid MFA session token' });
+    }
+});
+
+router.post('/mfa/sms/complete', [
+    body('mfaToken').notEmpty(),
+    body('code').matches(/^\d{6}$/)
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    try {
+        const decoded = jwt.verify(req.body.mfaToken, MFA_JWT_SECRET);
+        if (decoded.typ !== 'mfa_pending') {
+            return res.status(401).json({ error: 'Invalid MFA session' });
+        }
+        const chk = await pool.query(`
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema='public' AND table_name='sms_mfa_challenges'
+        `);
+        if (!chk.rows.length) {
+            return res.status(503).json({ error: 'sms_mfa_challenges missing' });
+        }
+        const rows = await pool.query(
+            `SELECT challenge_id, code_hash FROM sms_mfa_challenges
+             WHERE user_id = $1 AND consumed = false AND expires_at > NOW()
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [decoded.userId]
+        );
+        const row = rows.rows[0];
+        if (!row || !(await bcrypt.compare(String(req.body.code).trim(), row.code_hash))) {
+            return res.status(401).json({ error: 'Invalid or expired SMS code' });
+        }
+        await pool.query(`UPDATE sms_mfa_challenges SET consumed = true WHERE challenge_id = $1`, [row.challenge_id]);
+
+        const userResult = await pool.query(
+            `SELECT user_id, username, first_name, last_name, user_type
+             FROM users WHERE user_id = $1`,
+            [decoded.userId]
+        );
+        const user = userResult.rows[0];
+        const accessToken = createAccessToken(user.user_id, user.user_type);
+        const { token: refreshToken } = await refreshTokenService.issueNewFamily(
+            user.user_id,
+            user.user_type,
+            clientContext(req)
+        );
+        return res.json({
+            success: true,
+            token: accessToken,
+            accessToken,
+            refreshToken,
+            user: {
+                id: user.user_id,
+                username: user.username,
+                name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+                role: user.user_type
+            }
+        });
+    } catch (err) {
         return res.status(401).json({ error: 'Invalid or expired MFA session' });
     }
 });

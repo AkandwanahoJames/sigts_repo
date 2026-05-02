@@ -282,6 +282,48 @@ router.get('/stats', authenticateJWT, async (req, res) => {
 });
 
 // =====================================================
+// GET /api/sightings/heatmap — aggregate counts by location for map layers (§3.1.1.8)
+// =====================================================
+router.get('/heatmap', authenticateJWT, async (req, res) => {
+    const animalId = req.query.animal_id ? String(req.query.animal_id).trim() : null;
+    const limit = Math.min(500, Math.max(10, Number(req.query.limit) || 120));
+    try {
+        const params = [];
+        let p = 1;
+        let animalClause = '';
+        if (animalId && /^[0-9a-f-]{36}$/i.test(animalId)) {
+            animalClause = ` AND s.animal_id = $${p++} `;
+            params.push(animalId);
+        }
+        params.push(limit);
+        const result = await pool.query(
+            `SELECT a.animal_id,
+                    a.name AS animal_name,
+                    ST_Y(l.coordinates) AS lat,
+                    ST_X(l.coordinates) AS lng,
+                    SUM(GREATEST(1, s.number_observed))::int AS weight,
+                    COUNT(*)::int AS reports
+             FROM sightings s
+             JOIN locations l ON l.location_id = s.location_id
+             JOIN animals a ON a.animal_id = s.animal_id
+             WHERE s.verification_status = 'verified'
+             ${animalClause}
+             GROUP BY a.animal_id, a.name, l.coordinates
+             ORDER BY weight DESC
+             LIMIT $${p}`,
+            params
+        );
+        return res.json({
+            generated_at: new Date().toISOString(),
+            points: result.rows
+        });
+    } catch (error) {
+        console.error('sightings heatmap error:', error);
+        return res.status(500).json({ error: 'Failed to build sightings heat layer' });
+    }
+});
+
+// =====================================================
 // GET /api/sightings/alerts/rare
 // Get latest rare sighting alerts
 // =====================================================
