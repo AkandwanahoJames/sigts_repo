@@ -319,6 +319,26 @@ h2, h3 { font-weight: 600; }
     padding: 16px 24px 24px;
 }
 
+/* Tour help: outer column does not scroll — only the transcript does; composer stays visible */
+.main-container--tour-help {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    padding-bottom: 16px;
+}
+
+.main-container--tour-help .park-access-panel {
+    flex-shrink: 0;
+}
+
+.main-container--tour-help .section-card.ai-chat-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+}
+
 /* ----- Cards & sections (flat, compact) -------------------- */
 .section-card {
     background: var(--surface-1);
@@ -496,7 +516,7 @@ h2, h3 { font-weight: 600; }
 
 .ai-chat-messages {
     flex: 1 1 auto;
-    min-height: 200px;
+    min-height: 0;
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -550,6 +570,9 @@ h2, h3 { font-weight: 600; }
 
 .ai-chat-composer {
     flex-shrink: 0;
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto auto;
     gap: 10px;
@@ -558,6 +581,7 @@ h2, h3 { font-weight: 600; }
     border-top: 1px solid var(--line);
     background: var(--surface-0);
     min-width: 0;
+    box-shadow: 0 -6px 18px rgba(15, 61, 37, 0.08);
 }
 
 /* .auth-input is globally width:100%; that steals the whole row in flex — keep field in first column only */
@@ -590,10 +614,41 @@ h2, h3 { font-weight: 600; }
     white-space: nowrap;
 }
 
+.ai-chat-meta-block {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--line);
+    font-size: 0.8rem;
+    color: var(--text-600);
+}
+
+.ai-chat-sources-ul {
+    margin: 6px 0 0 18px;
+    padding: 0;
+}
+
+.ai-chat-feedback-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.ai-chat-offline-flag {
+    margin: 0;
+    color: var(--green-700);
+    font-weight: 600;
+}
+
 @media (max-width: 600px) {
     .section-card.ai-chat-panel {
         min-height: min(52dvh, 420px);
         max-height: min(88dvh, 820px);
+    }
+    .main-container--tour-help .section-card.ai-chat-panel {
+        min-height: 0;
+        max-height: none;
     }
 }
 
@@ -990,6 +1045,52 @@ body.auth-page {
 /* Hard guard: when an input sits in icon shell, always reserve icon space. */
 .auth-input-shell > .auth-input {
     padding-left: 46px !important;
+}
+
+.auth-input-shell--has-password-toggle > .auth-input.auth-input-with-icon {
+    padding-right: 48px !important;
+}
+
+.auth-password-toggle {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-500);
+    cursor: pointer;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.auth-password-toggle:hover {
+    color: var(--text-900);
+    background: rgba(15, 61, 37, 0.06);
+}
+
+.auth-password-toggle:focus-visible {
+    outline: 2px solid var(--green-500);
+    outline-offset: 2px;
+}
+
+.auth-password-toggle.active {
+    color: var(--green-700);
+}
+
+.auth-password-toggle .auth-password-toggle-icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
 }
 
 .auth-check {

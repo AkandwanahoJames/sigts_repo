@@ -1225,27 +1225,202 @@ class AIRecommendationEngine {
         }
     }
 
+    _defaultInterests() {
+        return ['wildlife', 'nature'];
+    }
+
+    _loadProfileDoc() {
+        const doc = sigtsAiReadJson(SIGTS_AI_PROFILE_KEY, {});
+        const legacy = localStorage.getItem('userInterests');
+        let interests = Array.isArray(doc.interests) && doc.interests.length ? doc.interests : this._defaultInterests();
+        if ((!doc.interests || !doc.interests.length) && legacy) {
+            try {
+                const p = JSON.parse(legacy);
+                if (Array.isArray(p) && p.length) interests = p;
+            } catch (_) {
+                /**/
+            }
+        }
+        interests = interests.map((x) => String(x || '').trim().toLowerCase()).filter(Boolean);
+        if (!interests.length) interests = this._defaultInterests();
+        return {
+            interests,
+            viewCounts: doc.viewCounts && typeof doc.viewCounts === 'object' ? doc.viewCounts : {},
+            searchHistory: Array.isArray(doc.searchHistory) ? doc.searchHistory.slice(-80) : [],
+            topicWeights: doc.topicWeights && typeof doc.topicWeights === 'object' ? doc.topicWeights : {}
+        };
+    }
+
+    _saveProfileDoc(doc) {
+        sigtsAiWriteJson(SIGTS_AI_PROFILE_KEY, { ...doc, updatedAt: new Date().toISOString() });
+        try {
+            localStorage.setItem('userInterests', JSON.stringify(doc.interests || this._defaultInterests()));
+        } catch (_) {
+            /**/
+        }
+    }
+
+    saveTourInterestsForAi(interests) {
+        const list = (Array.isArray(interests) ? interests : [])
+            .map((t) => String(t || '').trim().toLowerCase())
+            .filter(Boolean);
+        const doc = this._loadProfileDoc();
+        doc.interests = list.length ? list : this._defaultInterests();
+        this._saveProfileDoc(doc);
+        return doc.interests;
+    }
+
+    recordContentView(contentType, contentId, tags = []) {
+        const key = `${String(contentType || 'view')}:${String(contentId || 'unknown')}`;
+        const doc = this._loadProfileDoc();
+        doc.viewCounts[key] = (Number(doc.viewCounts[key]) || 0) + 1;
+        const tagList = Array.isArray(tags) ? tags : [];
+        tagList.forEach((t) => {
+            const k = String(t || '').trim().toLowerCase();
+            if (!k) return;
+            doc.topicWeights[k] = (Number(doc.topicWeights[k]) || 0) + 0.35;
+        });
+        this._saveProfileDoc(doc);
+
+        const pop = sigtsAiReadJson(SIGTS_AI_POPULARITY_KEY, {});
+        const pKey = key;
+        const prev = pop[pKey] && typeof pop[pKey] === 'object' ? pop[pKey] : { count: 0 };
+        pop[pKey] = { count: (Number(prev.count) || 0) + 1, lastAt: Date.now(), type: contentType, id: String(contentId || '') };
+        sigtsAiWriteJson(SIGTS_AI_POPULARITY_KEY, pop);
+    }
+
+    recordSearchQuery(text) {
+        const q = String(text || '').trim();
+        if (q.length < 2 || q.length > 400) return;
+        const doc = this._loadProfileDoc();
+        doc.searchHistory.push({ q, at: Date.now() });
+        doc.searchHistory = doc.searchHistory.slice(-80);
+        this._saveProfileDoc(doc);
+    }
+
     async getUserProfile() {
-        const interests = localStorage.getItem('userInterests');
-        return { interests: interests ? JSON.parse(interests) : ['wildlife', 'nature'] };
+        const doc = this._loadProfileDoc();
+        const interestVector = {};
+        doc.interests.forEach((i) => {
+            interestVector[i] = (Number(interestVector[i]) || 0) + 1;
+        });
+        Object.keys(doc.topicWeights).forEach((k) => {
+            interestVector[k] = (Number(interestVector[k]) || 0) + Number(doc.topicWeights[k]) || 0;
+        });
+        const pref = Object.values(interestVector).reduce((a, b) => a + b, 0);
+        const preferenceScore = Math.min(1, pref / (pref + 4));
+        return {
+            interests: doc.interests,
+            interestVector,
+            preferenceScore: Number(preferenceScore.toFixed(3)),
+            viewCounts: doc.viewCounts,
+            searchHistory: doc.searchHistory.slice(-12)
+        };
+    }
+
+    _recoFeedbackMap() {
+        return sigtsAiReadJson(SIGTS_AI_RECO_FEEDBACK_KEY, {});
+    }
+
+    recordRecommendationFeedback(tourId, rating) {
+        const id = String(tourId || '').trim();
+        if (!id) return;
+        const r = Math.max(1, Math.min(5, Number(rating) || 3));
+        const map = this._recoFeedbackMap();
+        const prev = map[id] && typeof map[id] === 'object' ? map[id] : { sum: 0, n: 0 };
+        map[id] = { sum: prev.sum + r, n: prev.n + 1, lastAt: Date.now() };
+        sigtsAiWriteJson(SIGTS_AI_RECO_FEEDBACK_KEY, map);
+        const train = sigtsAiReadJson(SIGTS_AI_TRAINING_SIGNAL_KEY, []);
+        train.push({ kind: 'recommendation_rating', tourId: id, rating: r, at: Date.now() });
+        sigtsAiWriteJson(SIGTS_AI_TRAINING_SIGNAL_KEY, train.slice(-200));
+    }
+
+    recordChatReplyFeedback(helpful, questionSnippet = '') {
+        const list = sigtsAiReadJson(SIGTS_AI_CHAT_FEEDBACK_KEY, []);
+        list.push({ helpful: Boolean(helpful), q: String(questionSnippet || '').slice(0, 200), at: Date.now() });
+        sigtsAiWriteJson(SIGTS_AI_CHAT_FEEDBACK_KEY, list.slice(-200));
+        const train = sigtsAiReadJson(SIGTS_AI_TRAINING_SIGNAL_KEY, []);
+        train.push({ kind: 'chat_helpfulness', helpful: Boolean(helpful), at: Date.now() });
+        sigtsAiWriteJson(SIGTS_AI_TRAINING_SIGNAL_KEY, train.slice(-200));
+    }
+
+    getLastTrainingSignals(limit = 20) {
+        return sigtsAiReadJson(SIGTS_AI_TRAINING_SIGNAL_KEY, []).slice(-limit);
+    }
+
+    getOfflineQueryLog(limit = 30) {
+        return sigtsAiReadJson(SIGTS_AI_QUERY_LOG_KEY, []).slice(-limit);
+    }
+
+    _logQueryEntry(entry) {
+        const log = sigtsAiReadJson(SIGTS_AI_QUERY_LOG_KEY, []);
+        log.push({ ...entry, at: Date.now() });
+        sigtsAiWriteJson(SIGTS_AI_QUERY_LOG_KEY, log.slice(-120));
+    }
+
+    buildTimeContextNote() {
+        const h = new Date().getHours();
+        const loc = AppState?.currentLocation;
+        const hasLoc = loc && Number.isFinite(Number(loc.lat)) && Number.isFinite(Number(loc.lng));
+        let t = '';
+        if (h < 11) t = 'Local time note: morning forest treks often start cool with heavy dew—grip footwear and rain shell.';
+        else if (h >= 17) t = 'Local time note: light fades early under canopy—plan headlamps for exits and lodge transfers.';
+        else t = 'Local time note: midday heat in clearings can contrast with cool forest core—carry water.';
+        if (hasLoc) t += ' GPS context is available for map-aware replies when online.';
+        return t;
+    }
+
+    _deriveLocalSources(trimmed, appContext) {
+        const s = ['SIGTS on-device interpreter (rule stack + Bwindi knowledge base)'];
+        if (appContext?.animals?.length) s.push(`Animals catalogue snapshot (${appContext.animals.length} species)`);
+        if (appContext?.themes?.length) s.push(`UNESCO tour theme briefings (${appContext.themes.length} tiles)`);
+        if (trimmed.length) s.push(`User question (${trimmed.length} chars)`);
+        return s;
     }
 
     async getRecommendations(limit = 6) {
-        return [
-            { id: 1, name: 'Gorilla Trekking Experience', score: 0.94, reason: 'Matches your wildlife interest' },
-            { id: 2, name: 'Bird Watching Trail', score: 0.89, reason: 'Perfect for nature photography' },
-            { id: 3, name: 'Batwa Cultural Experience', score: 0.86, reason: 'Cultural interest match' },
-            { id: 4, name: 'Forest Nature Walk', score: 0.84, reason: 'Moss forest ecology without a primate permit' },
-            { id: 5, name: 'Community Coffee & Crafts', score: 0.81, reason: 'Buffer-zone livelihoods beside the park' },
-            { id: 6, name: 'Photography & Etiquette Briefing', score: 0.79, reason: 'Low-flash protocols and distance rules' }
-        ].slice(0, limit);
+        const profile = await this.getUserProfile();
+        const seasonal = await this.getSeasonalRecommendations();
+        const fb = this._recoFeedbackMap();
+        const scored = BWINDI_TOUR_CATALOG.map((tour) => {
+            let score = 0.55;
+            const tagHits = tour.tags.filter((tag) => profile.interests.includes(tag)).length;
+            score += tagHits * 0.12;
+            tour.tags.forEach((tag) => {
+                score += (Number(profile.interestVector[tag]) || 0) * 0.04;
+            });
+            if (tour.seasonBoost && tour.seasonBoost.includes(seasonal.season)) {
+                score += 0.06;
+            }
+            const f = fb[tour.id];
+            if (f && f.n > 0) {
+                score += ((f.sum / f.n) - 3) * 0.04;
+            }
+            const reasonParts = [];
+            if (tagHits) reasonParts.push(`${tagHits} tag match(es) to your interests`);
+            if (f && f.n >= 2) reasonParts.push(`avg rating ${(f.sum / f.n).toFixed(1)}/5 from your feedback`);
+            else reasonParts.push('popularity-weighted default for BINP visitors');
+            if (tour.seasonBoost && tour.seasonBoost.includes(seasonal.season)) reasonParts.push(`fits ${seasonal.season} season pacing`);
+            return {
+                id: tour.id,
+                name: tour.name,
+                score: Math.min(0.99, Math.max(0.35, score)),
+                reason: reasonParts.join(' • ')
+            };
+        });
+        scored.sort((a, b) => b.score - a.score);
+        return scored.slice(0, limit);
     }
 
     async askQuestion(question) {
         const trimmed = (question || '').trim();
         if (!trimmed) {
-            return { answer: 'Please enter a question.' };
+            return { answer: 'Please enter a question.', meta: {} };
         }
+
+        this.recordSearchQuery(trimmed);
+        this.queryHistory.push({ q: trimmed, at: Date.now() });
+        if (this.queryHistory.length > 40) this.queryHistory.shift();
 
         let appContext = null;
         try {
@@ -1256,7 +1431,8 @@ class AIRecommendationEngine {
 
         const payload = {
             question: trimmed,
-            language: AppState.userPreferences?.language || 'en'
+            language: AppState.userPreferences?.language || 'en',
+            client_time: new Date().toISOString()
         };
 
         if (appContext) {
@@ -1270,6 +1446,8 @@ class AIRecommendationEngine {
             };
         }
 
+        const timeHint = this.buildTimeContextNote();
+
         try {
             if (navigator.onLine) {
                 const result = await API.request('/ai/chat', {
@@ -1277,39 +1455,202 @@ class AIRecommendationEngine {
                     body: JSON.stringify(payload)
                 });
                 if (result && result.success && result.answer) {
+                    const meta = { ...(result.meta || {}), knowledge_base: 'BINP + SIGTS curated rules' };
+                    if (!meta.sources || !meta.sources.length) {
+                        meta.sources = [
+                            'Server park interpreter',
+                            ...(appContext?.animals?.length ? [`Animals snapshot (${appContext.animals.length})`] : []),
+                            ...(appContext?.themes?.length ? [`Tour themes (${appContext.themes.length})`] : []),
+                            ...(meta.location_name ? [`Nearest POI label: ${meta.location_name}`] : [])
+                        ];
+                    }
+                    if (timeHint && !meta.time_context) meta.time_context = timeHint;
+                    this._logQueryEntry({ channel: 'online', question: trimmed, responseChars: String(result.answer).length });
                     return {
                         answer: result.answer,
-                        meta: result.meta || {}
+                        meta
                     };
                 }
             }
         } catch (error) {
-            // Fall back to local rules below.
+            /**/
         }
 
         const locName = null;
         const localAnswer = sigtsLocalTourHelpCompose(trimmed, appContext, locName);
+        const meta = {
+            local_fallback: true,
+            offline: typeof navigator !== 'undefined' ? !navigator.onLine : false,
+            sources: this._deriveLocalSources(trimmed, appContext),
+            time_context: timeHint,
+            knowledge_base: 'Offline SIGTS interpreter + cached catalogue'
+        };
+        this._logQueryEntry({ channel: 'offline', question: trimmed, responseChars: String(localAnswer).length });
         return {
             answer: localAnswer,
-            meta: {
-                local_fallback: true,
-                offline: typeof navigator !== 'undefined' ? !navigator.onLine : false
-            }
+            meta
+        };
+    }
+
+    /** Voice path: browser supplies transcript (Web Speech API); optional server STT can wrap this later. */
+    async askQuestionFromVoiceTranscript(transcript) {
+        const t = String(transcript || '').trim();
+        if (!t) {
+            return { answer: 'No transcribed speech to answer yet.', meta: { voice: true, empty_transcript: true } };
+        }
+        const out = await this.askQuestion(t);
+        return {
+            ...out,
+            meta: { ...(out.meta || {}), voice: true, voice_transcript: t }
         };
     }
 
     async getPersonalizedContentFeed(limit = 4) {
-        return [
-            { id: '1', name: 'Mountain Gorilla', type: 'animal', tags: ['wildlife'], relevanceScore: 0.95 },
-            { id: '2', name: 'Batwa Heritage', type: 'cultural', tags: ['culture'], relevanceScore: 0.88 },
-            { id: '3', name: 'Buhoma Waterhole', type: 'location', tags: ['wildlife'], relevanceScore: 0.85 }
-        ].slice(0, limit);
+        if (typeof Content === 'undefined') return [];
+        const profile = await this.getUserProfile();
+        const pop = sigtsAiReadJson(SIGTS_AI_POPULARITY_KEY, {});
+        const popScore = (type, id) => {
+            const k = `${type}:${id}`;
+            const row = pop[k];
+            return row && typeof row === 'object' ? Number(row.count) || 0 : 0;
+        };
+
+        let animals = [];
+        let stories = [];
+        try {
+            [animals, stories] = await Promise.all([Content.getAnimals(), Content.getCulturalStories()]);
+        } catch (_) {
+            return [];
+        }
+        animals = Array.isArray(animals) ? animals : [];
+        stories = Array.isArray(stories) ? stories : [];
+
+        const scoredAnimals = animals.slice(0, 120).map((a) => {
+            const name = String(a.name || '').toLowerCase();
+            const status = String(a.conservation_status || a.status || '').toLowerCase();
+            let rel = 0.5;
+            profile.interests.forEach((tag) => {
+                if (tag === 'wildlife' && /(gorilla|monkey|ape|elephant|bird|butterfly|frog)/.test(name)) rel += 0.08;
+                if (tag === 'bird' && /(bird|eagle|turaco|robin|sunbird|crane)/.test(name)) rel += 0.12;
+                if (tag === 'culture' && /(batwa|human)/.test(name)) rel += 0.05;
+            });
+            rel += Math.min(0.2, popScore('animal', a.animal_id || a.id) * 0.02);
+            if (/endangered|vulnerable|critically/.test(status)) rel += 0.05;
+            return {
+                id: String(a.animal_id || a.id),
+                name: a.name || 'Species',
+                type: 'animal',
+                tags: ['wildlife'],
+                relevanceScore: Math.min(0.99, rel)
+            };
+        });
+        const scoredStories = stories.slice(0, 40).map((s) => {
+            let rel = 0.52;
+            if (profile.interests.includes('culture')) rel += 0.15;
+            rel += Math.min(0.15, popScore('story', s.narrative_id || s.id) * 0.02);
+            return {
+                id: String(s.narrative_id || s.id),
+                name: s.title_en || s.title_local || 'Story',
+                type: 'cultural',
+                tags: ['culture'],
+                relevanceScore: Math.min(0.99, rel)
+            };
+        });
+        return [...scoredAnimals, ...scoredStories].sort((a, b) => b.relevanceScore - a.relevanceScore).slice(0, limit);
+    }
+
+    async getTrendingContent(limit = 6) {
+        const pop = sigtsAiReadJson(SIGTS_AI_POPULARITY_KEY, {});
+        const rows = Object.entries(pop)
+            .map(([k, v]) => {
+                const parts = k.split(':');
+                const type = parts[0] || 'view';
+                const id = parts.slice(1).join(':') || '';
+                const c = v && typeof v === 'object' ? Number(v.count) || 0 : 0;
+                const lastAt = v && typeof v === 'object' ? Number(v.lastAt) || 0 : 0;
+                return { key: k, type, id, count: c, lastAt, trendScore: c + (lastAt > Date.now() - 86400000 * 7 ? 0.5 : 0) };
+            })
+            .filter((r) => r.count > 0)
+            .sort((a, b) => b.trendScore - a.trendScore)
+            .slice(0, limit);
+        return rows.map((r) => ({
+            id: r.id,
+            type: r.type,
+            name: r.id === 'dashboard' || r.type === 'tab' ? `Tab: ${r.id}` : `${r.type} ${r.id}`,
+            trendScore: r.trendScore,
+            reason: `${r.count} recent views in this app install (anonymous aggregate)`
+        }));
+    }
+
+    async getSimilarContent(contentType, contentId, limit = 6) {
+        if (typeof Content === 'undefined' || !contentId) return [];
+        const id = String(contentId);
+        const animals = await Content.getAnimals().catch(() => []);
+        if (contentType === 'animal' && Array.isArray(animals)) {
+            const cur = animals.find((a) => String(a.animal_id || a.id) === id);
+            if (!cur) return [];
+            const status = String(cur.conservation_status || cur.status || '').toLowerCase();
+            const tokens = String(cur.name || '')
+                .toLowerCase()
+                .split(/\s+/)
+                .filter((w) => w.length > 2);
+            return animals
+                .filter((a) => String(a.animal_id || a.id) !== id)
+                .map((a) => {
+                    let s = 0.3;
+                    const an = String(a.name || '').toLowerCase();
+                    if (String(a.conservation_status || a.status || '').toLowerCase() === status) s += 0.25;
+                    tokens.forEach((t) => {
+                        if (an.includes(t)) s += 0.12;
+                    });
+                    const popRow = sigtsAiReadJson(SIGTS_AI_POPULARITY_KEY, {})[`animal:${a.animal_id || a.id}`];
+                    const pc = popRow && Number(popRow.count) ? Number(popRow.count) : 0;
+                    s += Math.min(0.2, pc * 0.02);
+                    return { id: String(a.animal_id || a.id), name: a.name, type: 'animal', similarity: Math.min(0.99, s) };
+                })
+                .sort((a, b) => b.similarity - a.similarity)
+                .slice(0, limit);
+        }
+        if (contentType === 'location' && Content.getLocations) {
+            const locs = await Content.getLocations().catch(() => []);
+            return (Array.isArray(locs) ? locs : [])
+                .filter((l) => String(l.location_id || l.id) !== id)
+                .slice(0, limit)
+                .map((l) => ({
+                    id: String(l.location_id || l.id),
+                    name: l.name || 'Location',
+                    type: 'location',
+                    similarity: 0.55
+                }));
+        }
+        return [];
     }
 
     async getSeasonalRecommendations() {
         const month = new Date().getMonth();
+        const hour = new Date().getHours();
         const isDry = (month >= 5 && month <= 7) || (month >= 11 || month <= 1);
-        return { season: isDry ? 'dry' : 'wet', recommendations: isDry ? ['Gorilla Trekking', 'Bird Watching'] : ['Cultural Experiences', 'Forest Walks'] };
+        const season = isDry ? 'dry' : 'wet';
+        const recs =
+            season === 'dry'
+                ? ['Gorilla trekking (firmer trails)', 'Albertine birding', 'Photography decks']
+                : ['Forest nature walks', 'Cultural indoor sessions', 'Moss ecology interpretation'];
+        let timeBand = 'midday';
+        if (hour < 6) timeBand = 'night';
+        else if (hour < 12) timeBand = 'morning';
+        else if (hour < 17) timeBand = 'afternoon';
+        else timeBand = 'evening';
+        return {
+            season,
+            recommendations: recs,
+            hour,
+            timeBand,
+            month,
+            conditionNote:
+                season === 'wet'
+                    ? 'Wet-season pacing: expect slower trail segments; plan rain layers.'
+                    : 'Dry-season pacing: dustier ridges; carry extra water on exposed climbs.'
+        };
     }
 }
 

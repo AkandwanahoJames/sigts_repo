@@ -39,6 +39,29 @@ function escapeHtml(input) {
     return str.replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m] || m));
 }
 
+function buildTourHelpMetaHtml(meta) {
+    if (!meta || typeof meta !== 'object') return '';
+    const parts = [];
+    if (Array.isArray(meta.sources) && meta.sources.length) {
+        parts.push(
+            `<div class="ai-chat-sources"><strong>Sources</strong><ul class="ai-chat-sources-ul">${meta.sources.map((s) => `<li>${escapeHtml(s)}</li>`).join('')}</ul></div>`
+        );
+    }
+    if (meta.time_context) {
+        parts.push(`<p class="ai-chat-timectx"><strong>Time / context</strong> ${escapeHtml(meta.time_context)}</p>`);
+    }
+    if (meta.voice_transcript) {
+        parts.push(`<p class="ai-chat-voice"><strong>Voice transcript</strong> ${escapeHtml(meta.voice_transcript)}</p>`);
+    }
+    if (meta.nlp_mode) {
+        parts.push(`<p class="ai-chat-nlp"><span class="ui-modal-muted">NLP mode</span> ${escapeHtml(meta.nlp_mode)}</p>`);
+    }
+    if (meta.local_fallback) {
+        parts.push('<p class="ai-chat-offline-flag">Offline AI mode: cached rules and catalogue on this device.</p>');
+    }
+    return parts.length ? `<div class="ai-chat-meta-block">${parts.join('')}</div>` : '';
+}
+
 function icon(name, className = '') {
     const classes = `ui-icon ${className}`.trim();
     const icons = {
@@ -76,6 +99,8 @@ function icon(name, className = '') {
         note: '<path d="M6 3h9l3 3v15H6z"/><path d="M15 3v4h4"/><path d="M9 11h6M9 15h6"/>',
         mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
         lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+        eye: '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/>',
+        eyeOff: '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M1 1l22 22"/>',
         key: '<circle cx="7.5" cy="12" r="3.5"/><path d="M11 12h10"/><path d="M18 12v3"/><path d="M15 12v2"/>',
         userPlus: '<circle cx="10" cy="8" r="4"/><path d="M3 21a7 7 0 0 1 14 0"/><path d="M19 8v6M16 11h6"/>',
         smile: '<circle cx="12" cy="12" r="9"/><path d="M8 10h.01M16 10h.01"/><path d="M8 15c1.2 1.2 2.3 1.8 4 1.8s2.8-.6 4-1.8"/>',
@@ -183,6 +208,13 @@ function getLandingViewForUser(user) {
 
 function navigateTo(view, options = {}) {
     const targetView = normalizeView(view);
+    try {
+        if (typeof AI !== 'undefined' && AI.recordContentView) {
+            AI.recordContentView('tab', targetView, [targetView]);
+        }
+    } catch (_) {
+        /**/
+    }
     const shouldUpdateHash = options.updateHash !== false;
 
     if (shouldUpdateHash) {
@@ -407,7 +439,9 @@ function renderMainLayout(content) {
     const isOffline = !accessState.online;
     const pending = OfflineSync?.getPendingCount?.() || 0;
     const statusText = isOffline ? `Offline mode • ${pending} pending` : (pending ? `Online • ${pending} pending sync` : 'Online');
-    return `<div class="app-container"><div id="app-sidebar" class="sidebar"><div class="sidebar-header"><div class="sidebar-brand"><div class="sidebar-logo"><img src="/icons/icon-192.svg" alt="SIGTS logo"></div><div class="sidebar-title">Bwindi SIGTS</div></div></div><div class="sidebar-nav">${navItems.map(item => `<div class="nav-item-vertical ${window.currentView === item.id ? 'active' : ''}" onclick="navigateTo('${item.id}'); closeSidebar();"><div class="nav-icon-vertical">${icon(item.icon, 'icon-md')}</div><div class="nav-label-vertical">${item.label}</div></div>`).join('')}</div><div class="sidebar-logout" onclick="Auth.logout(); closeSidebar();">${icon('logout', 'icon-md')} Logout</div></div><div class="sidebar-backdrop" aria-hidden="true" onclick="closeSidebar()"></div><div class="main-content"><div class="content-header"><button type="button" class="sidebar-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="app-sidebar" onclick="event.stopPropagation(); toggleSidebar();">${icon('menu', 'icon-md')}</button><h1>${getPageTitle(window.currentView)}</h1><div class="header-right"><span id="networkStatusBadge" class="net-status ${isOffline ? 'offline' : 'online'}">${statusText}</span>${renderNotificationBell(user)}<button type="button" class="header-profile" onclick="navigateTo('profile')"><div class="header-avatar ${isITManager ? 'role-it' : (isGuide ? 'role-guide' : 'role-tourist')}">${avatarIcon}</div><div class="header-user-info"><div class="header-user-name">${escapeHtml(user.name)}</div><div class="header-user-role">${escapeHtml(roleLabel)}</div></div></button></div></div><div class="main-container" onclick="closeSidebar()">${renderParkAccessPanel()}${content}</div></div></div>`;}
+    const mainContainerClass =
+        window.currentView === 'ai_chat' ? 'main-container main-container--tour-help' : 'main-container';
+    return `<div class="app-container"><div id="app-sidebar" class="sidebar"><div class="sidebar-header"><div class="sidebar-brand"><div class="sidebar-logo"><img src="/icons/icon-192.svg" alt="SIGTS logo"></div><div class="sidebar-title">Bwindi SIGTS</div></div></div><div class="sidebar-nav">${navItems.map(item => `<div class="nav-item-vertical ${window.currentView === item.id ? 'active' : ''}" onclick="navigateTo('${item.id}'); closeSidebar();"><div class="nav-icon-vertical">${icon(item.icon, 'icon-md')}</div><div class="nav-label-vertical">${item.label}</div></div>`).join('')}</div><div class="sidebar-logout" onclick="Auth.logout(); closeSidebar();">${icon('logout', 'icon-md')} Logout</div></div><div class="sidebar-backdrop" aria-hidden="true" onclick="closeSidebar()"></div><div class="main-content"><div class="content-header"><button type="button" class="sidebar-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="app-sidebar" onclick="event.stopPropagation(); toggleSidebar();">${icon('menu', 'icon-md')}</button><h1>${getPageTitle(window.currentView)}</h1><div class="header-right"><span id="networkStatusBadge" class="net-status ${isOffline ? 'offline' : 'online'}">${statusText}</span>${renderNotificationBell(user)}<button type="button" class="header-profile" onclick="navigateTo('profile')"><div class="header-avatar ${isITManager ? 'role-it' : (isGuide ? 'role-guide' : 'role-tourist')}">${avatarIcon}</div><div class="header-user-info"><div class="header-user-name">${escapeHtml(user.name)}</div><div class="header-user-role">${escapeHtml(roleLabel)}</div></div></button></div></div><div class="${mainContainerClass}" onclick="closeSidebar()">${renderParkAccessPanel()}${content}</div></div></div>`;}
 
 function getAnimalIconName(animalName = '') {
     const value = animalName.toLowerCase();
@@ -926,6 +960,26 @@ window.openAnimalSpeciesDetail = async function openAnimalSpeciesDetail(animalId
     const animal = await Content.getAnimalById(id);
     if (!animal?.name) return showToast('Unable to load that species.', 'danger');
 
+    try {
+        if (typeof AI !== 'undefined' && AI.recordContentView) {
+            const tags = ['wildlife', String(animal.conservation_status || animal.status || '').toLowerCase()];
+            AI.recordContentView('animal', id, tags);
+        }
+    } catch (_) {
+        /**/
+    }
+
+    const similar = typeof AI !== 'undefined' && AI.getSimilarContent ? await AI.getSimilarContent('animal', id, 5).catch(() => []) : [];
+    const similarHtml =
+        similar.length > 0
+            ? `<h4 class="ui-modal-section-title">${icon('grid', 'icon-sm')} Similar species</h4><ul class="ui-modal-facts">${similar
+                  .map(
+                      (s) =>
+                          `<li><button type="button" class="small-btn ghost-btn" onclick="(function(){document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();openAnimalSpeciesDetail('${escapeHtml(String(s.id))}');})()">${escapeHtml(s.name)}</button> <span class="ui-modal-muted">${Math.round(Number(s.similarity || 0) * 100)}% match</span></li>`
+                  )
+                  .join('')}</ul>`
+            : '';
+
     const facts = coerceStringArray(animal.fun_facts);
     const hero = firstSpeciesImage(animal);
     const factList = facts.length
@@ -942,6 +996,7 @@ window.openAnimalSpeciesDetail = async function openAnimalSpeciesDetail(animalId
         <p>${escapeHtml(animal.description || 'Description coming soon via rangers.')}</p>
         <p><strong>${icon('leaf', 'icon-sm')} Habitat</strong><br>${escapeHtml(animal.habitat || 'Montane rainforest mosaic')}</p>
         ${joinMaybeList(animal.common_locations) ? `<p><strong>${icon('map', 'icon-sm')} Often near</strong><br>${escapeHtml(joinMaybeList(animal.common_locations))}</p>` : ''}
+        ${similarHtml}
         <h4 class="ui-modal-section-title">${icon('target', 'icon-sm')} Field notes</h4>
         ${factList}`;
 
@@ -975,6 +1030,14 @@ window.openCulturalStoryDetail = async function openCulturalStoryDetail(narrativ
     if (!story?.narrative_id) {
         showToast('Could not load that cultural story.', 'danger');
         return;
+    }
+
+    try {
+        if (typeof AI !== 'undefined' && AI.recordContentView) {
+            AI.recordContentView('story', String(story.narrative_id), ['culture']);
+        }
+    } catch (_) {
+        /**/
     }
 
     const hero = firstStoryImage(story);
@@ -1013,6 +1076,9 @@ async function renderDashboardContent() {
     const animals = await Content.getAnimals();
     const recommendations = await AI.getRecommendations(6);
     const seasonal = await AI.getSeasonalRecommendations();
+    const personalized = await AI.getPersonalizedContentFeed(4).catch(() => []);
+    const trending = await AI.getTrendingContent(5).catch(() => []);
+    const profile = await AI.getUserProfile().catch(() => ({}));
     const shell = renderDashboardShell({
         primaryTitle: 'Suggested for you',
         primaryIcon: 'target',
@@ -1024,10 +1090,12 @@ async function renderDashboardContent() {
         quote: '"The best view comes after the hardest climb."',
         seasonalTitle: seasonal.season === 'dry' ? `${icon('sun', 'icon-sm')} Dry Season` : `${icon('rain', 'icon-sm')} Wet Season`,
         seasonalItems: seasonal.recommendations,
-        seasonalActionLabel: 'View Suggestions',
+        seasonalActionLabel: 'Open tour help',
+        seasonalFootnote: seasonal.conditionNote || '',
         animalCount: animals.length
     });
-    return `${shell}${renderDashboardSpeciesSpotlight(animals)}`;
+    const aiStrip = renderDashboardAiModuleStrip(recommendations, personalized, trending, profile);
+    return `${shell}${aiStrip}${renderDashboardSpeciesSpotlight(animals)}`;
 }
 
 function renderDashboardQuickGrid(animalCount = 0) {
@@ -1042,6 +1110,7 @@ function renderDashboardShell({
     seasonalTitle,
     seasonalItems,
     seasonalActionLabel,
+    seasonalFootnote = '',
     animalCount
 }) {
     return `${renderDashboardQuickGrid(animalCount)}<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon(primaryIcon, 'icon-sm')} ${primaryTitle}</h3></div><div id="recList">${primaryItems.map((item, index) => {
@@ -1050,7 +1119,31 @@ function renderDashboardShell({
             ? `<div class="rec-avatar metric-avatar metric-avatar-${escapeHtml(item.metricColor || 'default')}" aria-hidden="true"><span class="metric-avatar-icon">${icon(item.iconName || 'info', 'icon-md')}</span></div>`
             : `<div class="rec-avatar ${item.avatarClass || getRecommendationPhotoClass(item, index)}" aria-hidden="true">${item.iconName ? `<span class="rec-symbol">${icon(item.iconName, 'icon-md')}</span>` : ''}</div>`;
         return `<div class="${recClass}">${iconOnlyAvatar}<div class="rec-info"><div class="rec-title">${escapeHtml(item.title)}</div>${item.match ? `<div class="rec-match">${escapeHtml(item.match)}</div>` : ''}<div class="rec-reason">${escapeHtml(item.reason)}</div></div><button class="rec-go" aria-label="Open">${icon(item.goIcon || 'map', 'icon-sm')}</button></div>`;
-    }).join('') || '<div class="empty-state">No items available.</div>'}</div></div><div class="dashboard-quote-card"><blockquote>${escapeHtml(quote)}</blockquote></div></div><div class="section-card seasonal-card"><div class="section-header"><h3>${icon('leaf', 'icon-sm')} Seasonal: ${seasonalTitle}</h3></div><div class="seasonal-list">${seasonalItems.map((a) => `<div class="seasonal-item">• ${escapeHtml(a)}</div>`).join('') || '<div class="seasonal-item">• No seasonal updates available</div>'}</div><div class="seasonal-bottom"><div class="seasonal-image-strip photo-leaf" aria-hidden="true"></div><button class="seasonal-action-btn">${escapeHtml(seasonalActionLabel || 'View Suggestions')}</button></div></div>`;}
+    }).join('') || '<div class="empty-state">No items available.</div>'}</div></div><div class="dashboard-quote-card"><blockquote>${escapeHtml(quote)}</blockquote></div></div><div class="section-card seasonal-card"><div class="section-header"><h3>${icon('leaf', 'icon-sm')} Seasonal: ${seasonalTitle}</h3></div><div class="seasonal-list">${seasonalItems.map((a) => `<div class="seasonal-item">• ${escapeHtml(a)}</div>`).join('') || '<div class="seasonal-item">• No seasonal updates available</div>'}</div>${seasonalFootnote ? `<p class="animals-page-blurb" style="padding:0 18px 12px;margin:0;">${escapeHtml(seasonalFootnote)}</p>` : ''}<div class="seasonal-bottom"><div class="seasonal-image-strip photo-leaf" aria-hidden="true"></div><button type="button" class="seasonal-action-btn" onclick="navigateTo('ai_chat')">${escapeHtml(seasonalActionLabel || 'View Suggestions')}</button></div></div>`;}
+
+function renderDashboardAiModuleStrip(recommendations, personalized, trending, profile) {
+    const pref =
+        profile && typeof profile.preferenceScore === 'number'
+            ? `<span class="status-badge neutral" style="margin-left:8px;">Interest signal ${(profile.preferenceScore * 100).toFixed(0)}%</span>`
+            : '';
+    const boosted = (recommendations || [])
+        .slice(0, 4)
+        .map(
+            (r) =>
+                `<button type="button" class="small-btn" onclick="window.sigtsBoostReco && window.sigtsBoostReco('${escapeHtml(String(r.id))}')">${icon('target', 'icon-sm')} ${escapeHtml(r.name)}</button>`
+        )
+        .join(' ');
+    const pLines = (personalized || [])
+        .map(
+            (p) =>
+                `<div class="seasonal-item"><strong>${escapeHtml(p.name)}</strong> <span class="tour-focus-count">${Math.round(Number(p.relevanceScore || 0) * 100)}%</span> — ${escapeHtml(p.type || '')}</div>`
+        )
+        .join('');
+    const tLines = (trending || [])
+        .map((t) => `<div class="seasonal-item">${escapeHtml(t.name)} — ${escapeHtml(t.reason || '')}</div>`)
+        .join('');
+    return `<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('paw', 'icon-sm')} Personalized content</h3>${pref}</div><div class="seasonal-list">${pLines || '<div class="seasonal-item">Browse Animals and Culture to train this list.</div>'}</div></div><div class="section-card"><div class="section-header"><h3>${icon('chart', 'icon-sm')} Popularity (this device)</h3></div><div class="seasonal-list">${tLines || '<div class="seasonal-item">Opens and catalogue views fill trending.</div>'}</div><div class="info-chip-row" style="padding:12px 16px 16px;flex-wrap:wrap;gap:8px;">${boosted}<button type="button" class="small-btn ghost-btn" onclick="navigateTo('ai_chat')">${icon('note', 'icon-sm')} Ask a question (NLP)</button></div></div></div>`;
+}
 
 async function renderAnimalsContent() {
     const animals = await Content.getAnimals();
@@ -1791,13 +1884,37 @@ async function renderSightingsContent() {
         </div>`).join('') : '<div class="empty-state">No verified sightings available yet.</div>'}</div></div>`;
 }
 
-function renderProfileContent() {
+async function renderProfileContent() {
     const user = Auth.getCurrentUser() || { name: 'Tourist' };
     const isITManager = user?.role === 'it_manager' || user?.userType === 'it_manager';
     const isGuide = user?.role === 'guide' || user?.userType === 'guide';
     const currentLanguage = AppState.userPreferences?.language || 'en';
+    let interestSet = ['wildlife', 'nature'];
+    try {
+        if (typeof AI !== 'undefined' && AI.getUserProfile) {
+            const p = await AI.getUserProfile();
+            if (Array.isArray(p.interests) && p.interests.length) interestSet = p.interests;
+        }
+    } catch (_) {
+        /**/
+    }
+    const interestChips = [
+        { id: 'wildlife', label: 'Wildlife' },
+        { id: 'bird', label: 'Birding' },
+        { id: 'culture', label: 'Culture' },
+        { id: 'photography', label: 'Photography' },
+        { id: 'trek', label: 'Trekking' },
+        { id: 'primate', label: 'Primates' },
+        { id: 'nature', label: 'Nature walks' }
+    ]
+        .map(
+            (c) =>
+                `<label class="auth-check" style="display:flex;align-items:center;gap:8px;"><input type="checkbox" class="sigts-ai-interest-cb" value="${escapeHtml(c.id)}" ${interestSet.includes(c.id) ? 'checked' : ''}/> ${escapeHtml(c.label)}</label>`
+        )
+        .join('');
     return `<div class="profile-header"><div class="profile-avatar">${icon('user', 'icon-xl')}</div><div class="profile-name">${escapeHtml(user.name)}</div><div class="profile-role">${user.role || 'tourist'}</div><div class="profile-dept">${user.department || ''}</div></div>
     <div class="section-card"><div class="section-header"><h3>${icon('note', 'icon-sm')} Experience Settings</h3></div><div style="padding:16px; display:grid; gap:12px;"><label class="auth-field"><span class="auth-field-label">Language</span><select id="profileLanguage" class="auth-select"><option value="en" ${currentLanguage === 'en' ? 'selected' : ''}>English</option><option value="fr" ${currentLanguage === 'fr' ? 'selected' : ''}>French</option><option value="sw" ${currentLanguage === 'sw' ? 'selected' : ''}>Swahili</option><option value="ruk" ${currentLanguage === 'ruk' ? 'selected' : ''}>Rukiga</option></select></label><button class="small-btn" onclick="saveLanguagePreference()">Save Language</button></div></div>
+    <div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} AI tour interests</h3></div><div style="padding:16px; display:grid; gap:12px;"><p class="animals-page-blurb">Used for tour ranking, the personalized dashboard strip, and content suggestions. Stored on this device and synced with general profile interests.</p><div class="info-chip-row" style="flex-wrap:wrap;">${interestChips}</div><button type="button" class="login-btn" onclick="saveAiTourInterestsFromProfile()">${icon('target', 'icon-sm')} Save AI interests</button><p class="ui-modal-muted" style="margin:0;">Voice: use Mic on Tour help — speech is transcribed in-browser, then answered like typed text.</p></div></div>
     <div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Feedback Loop</h3></div><div style="padding:16px; display:grid; gap:12px;">
         <label class="auth-field"><span class="auth-field-label">Rate your recent experience</span><select id="feedbackRating" class="auth-select"><option value="5">5 - Excellent</option><option value="4">4 - Good</option><option value="3">3 - Average</option><option value="2">2 - Poor</option><option value="1">1 - Very Poor</option></select></label>
         <label class="auth-field"><span class="auth-field-label">Category</span><select id="feedbackCategory" class="auth-select"><option value="tour">Tour</option><option value="guide">Guide</option><option value="content">Content</option><option value="app">App</option><option value="general">General</option><option value="bug_report">Bug Report</option><option value="feature_suggestion">Feature Suggestion</option><option value="survey">Survey</option><option value="nps">NPS</option></select></label>
@@ -1839,7 +1956,7 @@ function renderAIChatContent() {
             <div class="rec-card ai-chat-message">
                 <div class="rec-info">
                     <div class="rec-title">How this works</div>
-                    <div class="rec-reason">Ask about Bwindi / BINP, sectors, Albertine forest wildlife, UWA and trekking etiquette, maps, weather, culture, tour themes, or catalogue species. Replies use park-reference rules and on-device digests when your wording matches. Not a substitute for your guide or signposted rules.</div>
+                    <div class="rec-reason">This module covers profiling (Profile → AI interests), ranked tour ideas, a personalized dashboard strip, trending views on this device, similar species from the catalogue, seasonal notes, NLP answers with listed sources, optional voice-to-text via Mic, GPS-aware replies when online, feedback to retune scores, and an offline query log. Not a substitute for your guide or UWA rules.</div>
                 </div>
             </div>
         </div>
@@ -2184,12 +2301,35 @@ window.sendAIChatMessage = async function() {
     messages.innerHTML += `<div class="rec-card ai-chat-message"><div class="rec-info"><div class="rec-title">You</div><div class="rec-reason">${escapeHtml(question)}</div></div></div>`;
     input.value = '';
 
+    window.__sigtsLastTourHelpQuestion = question;
     const result = await AI.askQuestion(question);
     const answer = result?.answer || 'No response available.';
-    messages.innerHTML += `<div class="rec-card ai-chat-message"><div class="rec-info"><div class="rec-title">Park reference reply</div><div class="rec-reason">${escapeHtml(answer)}</div></div></div>`;
+    const metaBlock = buildTourHelpMetaHtml(result?.meta);
+    const feedbackRow = `<div class="ai-chat-feedback-row"><span class="ui-modal-muted">Was this helpful?</span><button type="button" class="small-btn" onclick="submitTourHelpFeedback(true)">${icon('target', 'icon-sm')} Yes</button><button type="button" class="small-btn ghost-btn" onclick="submitTourHelpFeedback(false)">No</button></div>`;
+    messages.innerHTML += `<div class="rec-card ai-chat-message"><div class="rec-info"><div class="rec-title">Park reference reply</div><div class="rec-reason">${escapeHtml(answer)}</div>${metaBlock}${feedbackRow}</div></div>`;
     requestAnimationFrame(() => {
         messages.scrollTop = messages.scrollHeight;
     });
+};
+
+window.sigtsBoostReco = function (tourId) {
+    if (typeof AI === 'undefined' || !tourId || !AI.recordRecommendationFeedback) return;
+    AI.recordRecommendationFeedback(String(tourId), 5);
+    showToast('Thanks — this device will weight that tour higher.', 'success');
+};
+
+window.saveAiTourInterestsFromProfile = function () {
+    if (typeof AI === 'undefined' || !AI.saveTourInterestsForAi) return;
+    const boxes = document.querySelectorAll('.sigts-ai-interest-cb:checked');
+    const tags = Array.from(boxes).map((b) => b.value);
+    AI.saveTourInterestsForAi(tags);
+    showToast('AI interests saved for recommendations on this device.', 'success');
+};
+
+window.submitTourHelpFeedback = function (helpful) {
+    if (typeof AI === 'undefined' || !AI.recordChatReplyFeedback) return;
+    AI.recordChatReplyFeedback(Boolean(helpful), window.__sigtsLastTourHelpQuestion || '');
+    showToast(helpful ? 'Thanks — feedback logged for ranking tweaks.' : 'Thanks — we noted this reply missed the mark.', 'info');
 };
 
 window.toggleSpeciesHeatmapLayer = async function () {
@@ -2696,6 +2836,7 @@ function showConfirmDialog(message) {
 }
 
 window.showToast = showToast;
+window.togglePasswordVisibility = togglePasswordVisibility;
 window.showPromptDialog = showPromptDialog;
 window.showConfirmDialog = showConfirmDialog;
 
@@ -2790,8 +2931,18 @@ function togglePasswordVisibility(inputId, button) {
     if (!input) return;
     const shouldShow = input.type === 'password';
     input.type = shouldShow ? 'text' : 'password';
-    button?.setAttribute('aria-label', shouldShow ? 'Hide password' : 'Show password');
-    button?.classList.toggle('active', shouldShow);
+    if (button) {
+        button.setAttribute('aria-label', shouldShow ? 'Hide password' : 'Show password');
+        button.setAttribute('aria-pressed', shouldShow ? 'true' : 'false');
+        button.classList.toggle('active', shouldShow);
+        button.innerHTML = icon(shouldShow ? 'eyeOff' : 'eye', 'auth-password-toggle-icon');
+    }
+}
+
+/** Password row with lock icon and reveal control (keeps text clear of the eye button). */
+function renderAuthPasswordField(inputId, label, placeholder, autocomplete) {
+    const ac = autocomplete === 'current-password' ? 'current-password' : 'new-password';
+    return `<label class="auth-field"><span class="auth-field-label">${escapeHtml(label)}</span><span class="auth-input-shell auth-input-shell--has-password-toggle">${icon('lock', 'auth-input-icon')}<input type="password" id="${escapeHtml(inputId)}" class="auth-input auth-input-with-icon auth-input--password-toggle" placeholder="${escapeHtml(placeholder)}" autocomplete="${ac}"><button type="button" class="auth-password-toggle" aria-label="Show password" aria-pressed="false" onclick="togglePasswordVisibility('${inputId}', this)">${icon('eye', 'auth-password-toggle-icon')}</button></span></label>`;
 }
 
 async function handleForgotPassword() {
@@ -3043,7 +3194,7 @@ function renderAuthMergedScreen(activePanel = 'login') {
                 ${isLogin ? `
                 <form class="auth-form" onsubmit="event.preventDefault(); handleLogin();">
                     <label class="auth-field"><span class="auth-field-label">Email or Username</span><span class="auth-input-shell">${icon('mail', 'auth-input-icon')}<input type="text" id="loginUsername" class="auth-input auth-input-with-icon" placeholder="Enter your email or username"></span></label>
-                    <label class="auth-field"><span class="auth-field-label">Password</span><span class="auth-input-shell">${icon('lock', 'auth-input-icon')}<input type="password" id="loginPassword" class="auth-input auth-input-with-icon" placeholder="Enter your password"></span></label>
+                    ${renderAuthPasswordField('loginPassword', 'Password', 'Enter your password', 'current-password')}
                     <label class="auth-check"><input type="checkbox" id="rememberMe" checked><span>Remember me</span></label>
                     <button type="submit" class="auth-primary-btn">${icon('user', 'icon-sm')} Sign In</button>
                     <button type="button" class="auth-link-btn" onclick="handleForgotPassword()">${icon('key', 'icon-sm')} Forgot password?</button>
@@ -3056,8 +3207,8 @@ function renderAuthMergedScreen(activePanel = 'login') {
                         <label class="auth-field"><span class="auth-field-label">Username</span><span class="auth-input-shell">${icon('user', 'auth-input-icon')}<input type="text" id="regUsername" class="auth-input auth-input-with-icon" placeholder="Choose a username"></span></label>
                     </div>
                     <label class="auth-field"><span class="auth-field-label">Email</span><span class="auth-input-shell">${icon('mail', 'auth-input-icon')}<input type="email" id="regEmail" class="auth-input auth-input-with-icon" placeholder="name@example.com"></span></label>
-                    <label class="auth-field"><span class="auth-field-label">Password</span><span class="auth-input-shell">${icon('lock', 'auth-input-icon')}<input type="password" id="regPassword" class="auth-input auth-input-with-icon" placeholder="Create a password"></span></label>
-                    <label class="auth-field"><span class="auth-field-label">Confirm Password</span><span class="auth-input-shell">${icon('lock', 'auth-input-icon')}<input type="password" id="regConfirmPassword" class="auth-input auth-input-with-icon" placeholder="Repeat your password"></span></label>
+                    ${renderAuthPasswordField('regPassword', 'Password', 'Create a password', 'new-password')}
+                    ${renderAuthPasswordField('regConfirmPassword', 'Confirm Password', 'Repeat your password', 'new-password')}
                     <label class="auth-field"><span class="auth-field-label">Role</span><select id="regUserType" class="auth-select"><option value="tourist">Tourist</option><option value="guide">Tour Guide</option><option value="it_manager">IT Manager</option></select></label>
                     <button type="submit" class="auth-primary-btn">${icon('userPlus', 'icon-sm')} Create Account</button>
                     <div id="authFeedback" class="auth-feedback" hidden></div>
@@ -3129,7 +3280,7 @@ async function renderView(view, options = {}) {
         case 'map': content = renderMapContent(); break;
         case 'culture': content = await renderCultureContent(); break;
         case 'sightings': content = await renderSightingsContent(); break;
-        case 'profile': content = renderProfileContent(); break;
+        case 'profile': content = await renderProfileContent(); break;
         case 'info': content = renderInfoContent(); break;
         case 'ai_chat': content = renderAIChatContent(); break;
         case 'guide_dashboard': content = await renderGuideDashboard(); break;

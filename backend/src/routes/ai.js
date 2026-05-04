@@ -261,6 +261,32 @@ function buildRuleBasedAnswer(question, context = {}) {
     return `Ask about Bwindi or BINP (sectors like Buhoma or Rushaga), Uganda forest trekking, UWA rules, maps, weather, culture, or species—the assistant is tuned for that park context. Add a place name or topic so the reply can latch on.${locationName ? ` Nearby label in data: ${locationName}. Confirm with your guide.` : ''}`;
 }
 
+function buildServerTimeContextNote() {
+    const h = new Date().getUTCHours();
+    if (h < 6) return 'UTC night window: confirm local briefing times with your lodge and UWA schedule.';
+    if (h < 12) return 'UTC morning: early gates and mist layers are common—sync boots and rain shells before leaving.';
+    if (h < 17) return 'UTC midday: pace hydration on climbs; canopy shade vs ridge sun can differ sharply.';
+    return 'UTC evening: plan margin for slower exits on muddy descents.';
+}
+
+function deriveAnswerSources(question, answer, appContext, locationName) {
+    const sources = ['SIGTS curated Bwindi interpreter (rule + knowledge paths)'];
+    if (locationName) {
+        sources.push(`Locations dataset — nearest mapped label: ${locationName}`);
+    }
+    if (appContext?.animals?.length) {
+        sources.push(`Client Animals catalogue snapshot (${appContext.animals.length} species)`);
+    }
+    if (appContext?.themes?.length) {
+        sources.push(`Client wildlife tour theme briefings (${appContext.themes.length} sessions)`);
+    }
+    const a = String(answer || '').toLowerCase();
+    if (a.includes('unesco') || a.includes('heritage')) sources.push('UNESCO list 682 framing (public summary)');
+    if (a.includes('uwa') || a.includes('permit')) sources.push('Uganda Wildlife Authority visitor conduct norms (general)');
+    if (a.includes('catalogue') || a.includes('species')) sources.push('On-device biodiversity catalogue');
+    return sources;
+}
+
 async function resolveLocationName(lat, lng) {
     if (typeof lat !== 'number' || typeof lng !== 'number') {
         return null;
@@ -284,7 +310,8 @@ router.post('/chat', [
     body('question').isString().isLength({ min: 2, max: 2000 }),
     body('location.lat').optional().isFloat({ min: -90, max: 90 }),
     body('location.lng').optional().isFloat({ min: -180, max: 180 }),
-    body('language').optional().isString().isLength({ min: 2, max: 5 })
+    body('language').optional().isString().isLength({ min: 2, max: 5 }),
+    body('client_time').optional().isString().isLength({ max: 64 })
 ], async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -296,11 +323,14 @@ router.post('/chat', [
     const lng = req.body?.location?.lng;
     const language = req.body.language || req.user.language_pref || 'en';
     const appContext = sanitizeAppContext(req.body.app_context);
+    const clientTime = typeof req.body.client_time === 'string' ? req.body.client_time.trim().slice(0, 40) : null;
 
     const startedAt = Date.now();
     const locationName = await resolveLocationName(lat, lng);
     const answer = buildRuleBasedAnswer(question, { locationName, appContext });
     const responseTimeMs = Date.now() - startedAt;
+    const sources = deriveAnswerSources(question, answer, appContext, locationName);
+    const timeContext = buildServerTimeContextNote();
 
     try {
         let touristId = null;
@@ -327,7 +357,12 @@ router.post('/chat', [
         meta: {
             response_time_ms: responseTimeMs,
             context_aware: Boolean(locationName),
-            location_name: locationName
+            location_name: locationName,
+            sources,
+            server_time: new Date().toISOString(),
+            client_time: clientTime,
+            time_context: timeContext,
+            nlp_mode: 'rule_kb_v1'
         }
     });
 });

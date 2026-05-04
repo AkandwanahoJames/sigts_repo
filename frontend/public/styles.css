@@ -1925,6 +1925,52 @@ select:focus {
     z-index: 2;
 }
 
+.auth-input-shell--has-password-toggle > .auth-input.auth-input-with-icon {
+    padding-right: 48px !important;
+}
+
+.auth-password-toggle {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    color: #6d756c;
+    cursor: pointer;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.auth-password-toggle:hover {
+    color: #1f2f24;
+    background: rgba(31, 47, 36, 0.08);
+}
+
+.auth-password-toggle:focus-visible {
+    outline: 2px solid var(--primary, #1f6b3a);
+    outline-offset: 2px;
+}
+
+.auth-password-toggle.active {
+    color: var(--primary, #1f6b3a);
+}
+
+.auth-password-toggle .auth-password-toggle-icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
 .auth-actions {
     display: grid;
     gap: 10px;
