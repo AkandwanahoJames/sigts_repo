@@ -629,9 +629,18 @@ class ContentManager {
         // Only seed if empty AND API is not available
         if (!localStorage.getItem('offline_animals') && !this.useAPI) {
             localStorage.setItem('offline_animals', JSON.stringify([
-                { id: 1, name: 'Mountain Gorilla', scientific: 'Gorilla beringei', status: 'Endangered', fun_facts: ['Share 98% DNA with humans', 'Silverbacks can weigh 500lbs'] },
-                { id: 2, name: 'African Elephant', scientific: 'Loxodonta africana', status: 'Vulnerable', fun_facts: ['Can communicate over 10km'] },
-                { id: 3, name: 'Great Blue Turaco', scientific: 'Corythaeola cristata', status: 'Least Concern', fun_facts: ['Largest turaco species'] }
+                { animal_id: '00000000-0000-4000-8000-000000000001', name: 'Mountain Gorilla', scientific_name: 'Gorilla beringei beringei', conservation_status: 'endangered', description: 'Mountain gorillas anchor Bwindi and Virunga conservation — roughly half the global population uses these Afromontane forests. Habituated groups are tracked daily with strict viewing distances, disease precautions, and ranger-led interpretation of silverback behaviour, nesting cycles, and how permit revenue funds anti-poaching and community schools.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/3/3d/066_Silverback_mountain_gorilla_eating_at_Bwindi_Impenetrable_Forest_National_Park_Photo_by_Giles_Laurent.jpg/960px-066_Silverback_mountain_gorilla_eating_at_Bwindi_Impenetrable_Forest_National_Park_Photo_by_Giles_Laurent.jpg'], fun_facts: ['Share about 98% DNA with humans', 'Silverbacks lead stable family groups'] },
+                { animal_id: '00000000-0000-4000-8000-000000000002', name: 'Chimpanzee', scientific_name: 'Pan troglodytes', conservation_status: 'endangered', description: 'Eastern chimpanzees range at low density across Bwindi ridges. Pant-hoots, night nests, and knuckle prints often provide the only evidence on busy trekking days. Guides stress no feeding, no imitation calls, and hygiene overlap rules that mirror gorilla protocols to reduce disease transmission.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/A_group_of_imp_chimps.jpg/960px-A_group_of_imp_chimps.jpg'], fun_facts: ['Tool use varies by community', 'Pant-hoot choruses carry far'] },
+                { animal_id: '00000000-0000-4000-8000-000000000003', name: 'African Forest Elephant', scientific_name: 'Loxodonta cyclotis', conservation_status: 'endangered', description: 'Forest elephants engineer seed dispersal and mineral-lick circuits through closed canopy. They are smaller and rounder-eared than savanna elephants and typically vanish before tourists see whole herds — guides read snapped branches, fresh dung, and shoulder prints on muddy poles instead.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/9/92/African_forest_elephant_%28Loxodonta_cyclotis%29_calf.jpg/960px-African_forest_elephant_%28Loxodonta_cyclotis%29_calf.jpg'], fun_facts: ['Smaller ears than savanna relatives', 'Mineral licks draw night visits'] },
+                { animal_id: '00000000-0000-4000-8000-000000000004', name: 'Black-and-white Colobus', scientific_name: 'Colobus guereza', conservation_status: 'least_concern', description: 'Colobus stream white tail banners across canopy gaps while digesting tough leaves with specialized gut microbes. Newborns are pure white — a favourite teaching moment for linking primate behaviour to quiet trail etiquette and intact upper-forest structure.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Black-and-white_Colobus_Monkeys.jpg/960px-Black-and-white_Colobus_Monkeys.jpg'], fun_facts: ['Newborns are pure white', 'Leaves fermented by gut microbes'] },
+                { animal_id: '00000000-0000-4000-8000-000000000005', name: 'Blue Monkey', scientific_name: 'Cercopithecus mitis', conservation_status: 'least_concern', description: 'Sykes or blue monkeys form mid-canopy troops that stitch fruit masts to insect pulses. Alarm barks coordinate escapes when crowned eagles or noisy trekking lines approach — a practical cue for guides to pace groups and modulate voices.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Zanzibar_Sykes%27_monkey_%28Cercopithecus_mitis%29_female_and_juveniles.jpg/960px-Zanzibar_Sykes%27_monkey_%28Cercopithecus_mitis%29_female_and_juveniles.jpg'], fun_facts: ['Also called Sykes monkey regionally', 'Alarm barks coordinate escapes'] },
+                { animal_id: '00000000-0000-4000-8000-000000000006', name: 'Great Blue Turaco', scientific_name: 'Corythaeola cristata', conservation_status: 'least_concern', description: 'Africa\'s largest turaco glides between fruiting figs with heavy wingbeats and loud calls. It flags healthy canopy fruiting and seed-dispersal webs that gorillas and butterflies also rely on — best enjoyed with binoculars and without playback harassment at nests.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Great_Blue_Turaco.jpg/960px-Great_Blue_Turaco.jpg'], fun_facts: ['Cow-like calls at dawn', 'Important fig seed disperser'] },
+                { animal_id: '00000000-0000-4000-8000-000000000007', name: 'African Fish Eagle', scientific_name: 'Haliaeetus vocifer', conservation_status: 'least_concern', description: 'Fish eagles tie Bwindi visitors to Great Lakes soundscapes — whistled duets carry even when birds commute along forest-edge rivers. They anchor lessons on watershed health, riparian buffers, and how interior forests connect to regional water security.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/AfricanFishEagle.jpeg/960px-AfricanFishEagle.jpeg'], fun_facts: ['Piercing call is an African soundmark', 'Pairs reuse huge stick nests'] },
+                { animal_id: '00000000-0000-4000-8000-000000000008', name: 'Rwenzori Turaco', scientific_name: 'Ruwenzorornis johnstoni', conservation_status: 'least_concern', description: 'This Albertine endemic flashes ruby primaries between moss-forest crowns. Croaking duets carry through mist, so listening skills matter as much as optics — guides pair sightings with elevation and bamboo transitions to explain micro-endemism.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Ruwenzori_Turaco.jpg/960px-Ruwenzori_Turaco.jpg'], fun_facts: ['Croaks in dripping moss forest', 'Frugivore of canopy masts'] },
+                { animal_id: '00000000-0000-4000-8000-000000000009', name: 'African Green Broadbill', scientific_name: 'Pseudocalyptomena graueri', conservation_status: 'vulnerable', description: 'A chunky Albertine endemic tied to mossy crowns and canopy fruiting pulses. Guides cherish its nasal whistle drifting through dripping forest — a flagship species for explaining playback ethics, boardwalk pacing, and why understorey trampling harms breeders.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/African_Green_Broadbill.jpg/960px-African_Green_Broadbill.jpg'], fun_facts: ['Gleans along mossy limbs', 'Sensitive to playback pressure'] },
+                { animal_id: '00000000-0000-4000-8000-00000000000a', name: 'Handsome Francolin', scientific_name: 'Pternistis nobilis', conservation_status: 'vulnerable', description: 'Albertine endemic partridge duetting at first light on bamboo-fern ridges. Pairs call across ravines before trekking lines arrive — a soundtrack species for discussing buffer-zone hunting regulations and why dogs are excluded from park trails.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/6/65/Handsome_spurfowl_%28Pternistis_nobilis%29.jpg/960px-Handsome_spurfowl_%28Pternistis_nobilis%29.jpg'], fun_facts: ['Pairs call across ravines', 'Bamboo-fern understory specialist'] },
+                { animal_id: '00000000-0000-4000-8000-00000000000b', name: 'Bar-tailed Trogon', scientific_name: 'Apaloderma vittatum', conservation_status: 'least_concern', description: 'Jewel-like trogon of mid-canopy perches — tail bars flash when it pivots. A favourite Albertine photo target that lets guides discuss fig masts, mixed-flock etiquette, and why flash photography stays off on sensitive species.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Bar-tailed_Trogon_%28Apaloderma_vittatum%29_%2845634509165%29.jpg/960px-Bar-tailed_Trogon_%28Apaloderma_vittatum%29_%2845634509165%29.jpg'], fun_facts: ['Tail bars flash when it turns', 'Nests in tree holes'] },
+                { animal_id: '00000000-0000-4000-8000-00000000000c', name: "Johnston's Chameleon", scientific_name: 'Trioceros johnstoni', conservation_status: 'least_concern', description: 'Three-horned chameleon of Bwindi shrubs — photographed in situ on park trails. Rangers ask guests not to touch because skin oils and handling stress dehydrate animals quickly. Independent eye rotation makes them superb ambush hunters on mid-level branches.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/d/db/Camale%C3%B3n_%28Trioceros_johnstoni%29%2C_parque_nacional_de_la_Selva_Impenetrable_de_Bwindi%2C_Uganda%2C_2024-02-01%2C_DD_89.jpg/960px-Camale%C3%B3n_%28Trioceros_johnstoni%29%2C_parque_nacional_de_la_Selva_Impenetrable_de_Bwindi%2C_Uganda%2C_2024-02-01%2C_DD_89.jpg'], fun_facts: ['Eyes move independently', 'Do not touch—skin stress harms quickly'] }
             ]));
         }
         if (!localStorage.getItem('offline_locations') && !this.useAPI) {
@@ -642,11 +651,69 @@ class ContentManager {
     }
 
     async getAnimals() {
+        const readOffline = () => {
+            try {
+                const raw = localStorage.getItem('offline_animals');
+                const parsed = raw ? JSON.parse(raw) : [];
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (_) {
+                return [];
+            }
+        };
+
         if (this.useAPI) {
             const apiAnimals = await API.getAnimals();
-            if (apiAnimals && apiAnimals.length) return apiAnimals;
+            if (Array.isArray(apiAnimals) && apiAnimals.length) {
+                try {
+                    localStorage.setItem('offline_animals', JSON.stringify(apiAnimals));
+                } catch (_) {
+                    /**/
+                }
+                return apiAnimals;
+            }
+
+            // Stale partial offline packs (e.g. old 3-species demo) hid the full catalogue after API errors.
+            let offline = readOffline();
+            const online = typeof navigator === 'undefined' || navigator.onLine;
+            const cacheEpochKey = 'sigts_animal_cache_epoch';
+            const cacheEpoch = '20260504';
+            if (
+                online
+                && offline.length > 0
+                && offline.length < 8
+                && localStorage.getItem(cacheEpochKey) !== cacheEpoch
+            ) {
+                try {
+                    localStorage.setItem(cacheEpochKey, cacheEpoch);
+                } catch (_) {
+                    /**/
+                }
+                const backup = offline.slice();
+                try {
+                    localStorage.removeItem('offline_animals');
+                } catch (_) {
+                    /**/
+                }
+                const retry = await API.getAnimals();
+                if (Array.isArray(retry) && retry.length) {
+                    try {
+                        localStorage.setItem('offline_animals', JSON.stringify(retry));
+                    } catch (_) {
+                        /**/
+                    }
+                    return retry;
+                }
+                try {
+                    localStorage.setItem('offline_animals', JSON.stringify(backup));
+                } catch (_) {
+                    /**/
+                }
+                offline = backup;
+            }
+            return offline;
         }
-        return JSON.parse(localStorage.getItem('offline_animals') || '[]');
+
+        return readOffline();
     }
 
     async getAnimalById(id) {
@@ -885,11 +952,14 @@ class AIRecommendationEngine {
         return { interests: interests ? JSON.parse(interests) : ['wildlife', 'nature'] };
     }
 
-    async getRecommendations(limit = 3) {
+    async getRecommendations(limit = 6) {
         return [
             { id: 1, name: 'Gorilla Trekking Experience', score: 0.94, reason: 'Matches your wildlife interest' },
             { id: 2, name: 'Bird Watching Trail', score: 0.89, reason: 'Perfect for nature photography' },
-            { id: 3, name: 'Batwa Cultural Experience', score: 0.86, reason: 'Cultural interest match' }
+            { id: 3, name: 'Batwa Cultural Experience', score: 0.86, reason: 'Cultural interest match' },
+            { id: 4, name: 'Forest Nature Walk', score: 0.84, reason: 'Moss forest ecology without a primate permit' },
+            { id: 5, name: 'Community Coffee & Crafts', score: 0.81, reason: 'Buffer-zone livelihoods beside the park' },
+            { id: 6, name: 'Photography & Etiquette Briefing', score: 0.79, reason: 'Low-flash protocols and distance rules' }
         ].slice(0, limit);
     }
 

@@ -6,11 +6,12 @@ const { logger } = require('../utils/logger');
  * Get all animals
  */
 async function getAnimals(req, res) {
-    const { category, search, limit = 50, offset = 0 } = req.query;
+    const { category, search, limit = 300, offset = 0 } = req.query;
 
     try {
         let query = `
-            SELECT animal_id, name, scientific_name, conservation_status, 
+            SELECT animal_id, name, scientific_name, conservation_status,
+                   description, lifespan,
                    habitat, diet, image_urls, audio_call_url, fun_facts,
                    (SELECT COUNT(*) FROM sightings WHERE animal_id = a.animal_id AND verification_status = 'verified') as sighting_count
             FROM animals a

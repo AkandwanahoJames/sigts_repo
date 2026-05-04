@@ -9,7 +9,7 @@ UPDATE animals SET
   description = 'Mountain gorillas (eastern gorilla subspecies) are Bwindi''s headline species and a global conservation emblem. Guided habituated groups attract regulated trekking. Visitors must keep distance and follow ranger instructions.',
   habitat = 'Afromontane and montane rainforest in Bwindi (roughly 1,160 to 2,607 m), dense undergrowth',
   conservation_status = 'endangered',
-  image_urls = ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Mountains_gorrila.jpg/960px-Mountains_gorrila.jpg']
+  image_urls = ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/3/3d/066_Silverback_mountain_gorilla_eating_at_Bwindi_Impenetrable_Forest_National_Park_Photo_by_Giles_Laurent.jpg/960px-066_Silverback_mountain_gorilla_eating_at_Bwindi_Impenetrable_Forest_National_Park_Photo_by_Giles_Laurent.jpg']
 WHERE name = 'Mountain Gorilla';
 
 UPDATE animals SET
@@ -138,20 +138,20 @@ SELECT
   'Granivore / fruit',
   'Long-lived in captivity. Wild span poorly known.',
   ARRAY['Bright crimson flank panels flush when pairs reunite', 'Pairs stay low, so bring patience and binocular stability'],
-  ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Common_Crimson-wing.JPG/640px-Common_Crimson-wing.JPG']
+  ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/Cryptospiza_shelleyi.jpg/960px-Cryptospiza_shelleyi.jpg']
 WHERE NOT EXISTS (SELECT 1 FROM animals WHERE name = 'Shelley''s Crimsonwing');
 
 INSERT INTO animals (name, scientific_name, description, conservation_status, habitat, diet, lifespan, fun_facts, image_urls)
 SELECT
   'Chapin''s Flycatcher',
-  'Muscicapa lendu',
+  'Fraseria lendu',
   'Rare flycatcher associated with humid interior canopy pockets. Listed among Bwindi''s emblematic passerines within the Albertine endemic complex highlighted on the World Heritage citation.',
   'endangered',
   'Lower-to-mid canopy along ridge-top forest with high humidity',
   'Insectivore (sallying for airborne prey)',
   'Territories span multiple seasons (refs vary)',
   ARRAY['Easiest cue is repeated soft chip notes post-dawn', 'Pairs defend fruiting corridors seasonally'],
-  ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Pied-flycatchers_%28crop%29.jpg/640px-Pied-flycatchers_%28crop%29.jpg']
+  ARRAY['https://upload.wikimedia.org/wikipedia/commons/4/44/Chapin%27s_Flycatcher_%28Muscicapa_lendu%29_JM.jpg']
 WHERE NOT EXISTS (SELECT 1 FROM animals WHERE name = 'Chapin''s Flycatcher');
 
 INSERT INTO animals (name, scientific_name, description, conservation_status, habitat, diet, lifespan, fun_facts, image_urls)
@@ -164,7 +164,7 @@ SELECT
   'Insectivore / nectar opportunist',
   'Typical passerine lifespan ~4 to 8 years inferred',
   ARRAY['Feeds in mixed flocks alongside sunbirds near flowering trees', 'Easy to overlook, so listen before looking'],
-  ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Grey-backed_Camaroptera_%28Camaroptera_brevicaudata%29.jpg/640px-Grey-backed_Camaroptera_%28Camaroptera_brevicaudata%29.jpg']
+  ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/d/d9/Range_Turner%27s_eremomela.png/960px-Range_Turner%27s_eremomela.png']
 WHERE NOT EXISTS (SELECT 1 FROM animals WHERE name = 'Turner''s Eremomela');
 
 INSERT INTO animals (name, scientific_name, description, conservation_status, habitat, diet, lifespan, fun_facts, image_urls)
@@ -177,7 +177,7 @@ SELECT
   'Insectivore gleaning arthropods in rank growth',
   'Limited data. Can live many years in captivity.',
   ARRAY['Responds softly to imitation pishes. Guides avoid overuse.', 'Requires boardwalk etiquette to protect bog soils'],
-  ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/6/61/Acrocephalus_arundinaceus_%28crop%29.jpg/640px-Acrocephalus_arundinaceus_%28crop%29.jpg']
+  ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/e/ed/Bradypterus_grandis_-_bureaubenjamin_-_119616564.jpeg/960px-Bradypterus_grandis_-_bureaubenjamin_-_119616564.jpeg']
 WHERE NOT EXISTS (SELECT 1 FROM animals WHERE name = 'Grauer''s Swamp Warbler');
 
 INSERT INTO animals (name, scientific_name, description, conservation_status, habitat, diet, lifespan, fun_facts, image_urls)
@@ -203,8 +203,16 @@ SELECT
   'Larvae on vines. Nectar at forest edge.',
   'Several broods during wet pulses',
   ARRAY['Courtship arcs highlight UV bands unseen to many predators', 'Photographers cooperate with pacing groups to minimise flash stress'],
-  ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Papilio_dardanus_female.jpg/640px-Papilio_dardanus_female.jpg']
+  ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/8/89/RebelAnnalendkkNaturhof1914TafXVII.jpg/960px-RebelAnnalendkkNaturhof1914TafXVII.jpg']
 WHERE NOT EXISTS (SELECT 1 FROM animals WHERE name = 'Cream-banded Swallowtail');
+
+-- Refresh media (and Chapin taxonomy) when rows already exist from an older seed pass
+UPDATE animals SET image_urls = ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/Cryptospiza_shelleyi.jpg/960px-Cryptospiza_shelleyi.jpg'] WHERE name = 'Shelley''s Crimsonwing';
+UPDATE animals SET scientific_name = 'Fraseria lendu', image_urls = ARRAY['https://upload.wikimedia.org/wikipedia/commons/4/44/Chapin%27s_Flycatcher_%28Muscicapa_lendu%29_JM.jpg'] WHERE name = 'Chapin''s Flycatcher';
+-- No free-licence Turner's Eremomela portrait on Commons; range map is species-accurate.
+UPDATE animals SET image_urls = ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/d/d9/Range_Turner%27s_eremomela.png/960px-Range_Turner%27s_eremomela.png'] WHERE name = 'Turner''s Eremomela';
+UPDATE animals SET image_urls = ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/e/ed/Bradypterus_grandis_-_bureaubenjamin_-_119616564.jpeg/960px-Bradypterus_grandis_-_bureaubenjamin_-_119616564.jpeg'] WHERE name = 'Grauer''s Swamp Warbler';
+UPDATE animals SET image_urls = ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/8/89/RebelAnnalendkkNaturhof1914TafXVII.jpg/960px-RebelAnnalendkkNaturhof1914TafXVII.jpg'] WHERE name = 'Cream-banded Swallowtail';
 
 INSERT INTO cultural_narratives (
     title_en, title_local, narrative_en, storyteller_name, community, story_type,

@@ -39,33 +39,41 @@ async function isDataSeeded(tableName) {
     return parseInt(result.rows[0].count) > 0;
 }
 
+const BWINDI_SQL_SEED_FILES = [
+    { file: '003_bwindi_extended_content.sql', label: 'Bwindi extended species + demo cultural narratives' },
+    { file: '004_bwindi_biodiversity_catalog.sql', label: 'Bwindi biodiversity tour-guide catalogue' },
+    { file: '005_bwindi_animal_field_guides.sql', label: 'Bwindi species field-guide copy + catalogue imagery refresh' },
+];
+
 /**
- * Applies database/seeds/003_bwindi_extended_content.sql (UPDATE/INSERT merges).
- * Splits whole-line SQL comments away, then executes `;`-delimited statements.
+ * Applies SQL merge files under database/seeds/ (UPDATE/INSERT).
+ * Strips whole-line `--` comments, then runs `;`-delimited statements.
  */
-async function applyBwindiExtendedSeedFile() {
-    const extPath = path.join(SEEDS_DIR, '003_bwindi_extended_content.sql');
-    if (!fs.existsSync(extPath)) {
-        log('  ○ Bwindi extended seed file missing; skipping merge pass', 'yellow');
-        return;
-    }
-    log('\n📚 Merging Bwindi extended species + demo cultural narratives…', 'blue');
-    const raw = fs.readFileSync(extPath, 'utf8');
-    const noLineComments = raw
-        .replace(/\r\n/g, '\n')
-        .split('\n')
-        .filter((line) => !/^\s*--/.test(line))
-        .join('\n');
+async function applyBwindiSeedSqlFiles() {
+    for (const { file, label } of BWINDI_SQL_SEED_FILES) {
+        const extPath = path.join(SEEDS_DIR, file);
+        if (!fs.existsSync(extPath)) {
+            log(`  ○ ${file} missing; skipping`, 'yellow');
+            continue;
+        }
+        log(`\n📚 ${label} (${file})…`, 'blue');
+        const raw = fs.readFileSync(extPath, 'utf8');
+        const noLineComments = raw
+            .replace(/\r\n/g, '\n')
+            .split('\n')
+            .filter((line) => !/^\s*--/.test(line))
+            .join('\n');
 
-    const statements = noLineComments
-        .split(';')
-        .map((s) => s.trim())
-        .filter(Boolean);
+        const statements = noLineComments
+            .split(';')
+            .map((s) => s.trim())
+            .filter(Boolean);
 
-    for (let i = 0; i < statements.length; i++) {
-        await pool.query(statements[i]);
+        for (let i = 0; i < statements.length; i++) {
+            await pool.query(statements[i]);
+        }
+        log(`  ✓ Applied ${statements.length} statements from ${file}`, 'green');
     }
-    log(`  ✓ Applied ${statements.length} extended seed statements`, 'green');
 }
 
 async function seedWildlifeTourThemes() {
@@ -221,7 +229,7 @@ async function seedAnimals() {
         log('  ○ Base animals rowset already exists; merges will refresh imagery/text', 'yellow');
     }
 
-    await applyBwindiExtendedSeedFile();
+    await applyBwindiSeedSqlFiles();
 }
 
 // Seed safety tips

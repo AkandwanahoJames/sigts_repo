@@ -1,10 +1,26 @@
+/** Drawer + hamburger layout matches `styles.css` `@media (max-width: …)`. */
+const SIGTS_NAV_DRAWER_MAX_PX = 960;
+
 function syncSidebarToggleA11y() {
     const sidebar = document.querySelector('.sidebar');
     const btn = document.querySelector('.sidebar-toggle');
-    if (!sidebar || !btn) return;
+    if (sidebar && btn) {
+        const open = sidebar.classList.contains('open');
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        btn.setAttribute('aria-label', open ? 'Close navigation menu' : 'Open navigation menu');
+    }
+    syncNavDrawerBodyLock();
+}
+
+function syncNavDrawerBodyLock() {
+    const sidebar = document.querySelector('.sidebar');
+    if (!sidebar) {
+        document.body.classList.remove('sigts-nav-drawer-open');
+        return;
+    }
     const open = sidebar.classList.contains('open');
-    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    btn.setAttribute('aria-label', open ? 'Close navigation menu' : 'Open navigation menu');
+    const drawer = window.innerWidth <= SIGTS_NAV_DRAWER_MAX_PX;
+    document.body.classList.toggle('sigts-nav-drawer-open', Boolean(open && drawer));
 }
 
 function toggleSidebar() {
@@ -13,7 +29,7 @@ function toggleSidebar() {
 }
 
 function closeSidebar() {
-    if (window.innerWidth <= 860) document.querySelector('.sidebar')?.classList.remove('open');
+    if (window.innerWidth <= SIGTS_NAV_DRAWER_MAX_PX) document.querySelector('.sidebar')?.classList.remove('open');
     syncSidebarToggleA11y();
 }
 
@@ -391,7 +407,7 @@ function renderMainLayout(content) {
     const isOffline = !accessState.online;
     const pending = OfflineSync?.getPendingCount?.() || 0;
     const statusText = isOffline ? `Offline mode • ${pending} pending` : (pending ? `Online • ${pending} pending sync` : 'Online');
-    return `<div class="app-container"><div id="app-sidebar" class="sidebar"><div class="sidebar-header"><div class="sidebar-brand"><div class="sidebar-logo"><img src="/icons/icon-192.svg" alt="SIGTS logo"></div><div class="sidebar-title">Bwindi SIGTS</div></div></div><div class="sidebar-nav">${navItems.map(item => `<div class="nav-item-vertical ${window.currentView === item.id ? 'active' : ''}" onclick="navigateTo('${item.id}')"><div class="nav-icon-vertical">${icon(item.icon, 'icon-md')}</div><div class="nav-label-vertical">${item.label}</div></div>`).join('')}</div><div class="sidebar-logout" onclick="Auth.logout()">${icon('logout', 'icon-md')} Logout</div></div><div class="main-content" onclick="closeSidebar()"><div class="content-header"><button type="button" class="sidebar-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="app-sidebar" onclick="toggleSidebar()">${icon('menu', 'icon-sm')}</button><h1>${getPageTitle(window.currentView)}</h1><div class="header-right"><span id="networkStatusBadge" class="net-status ${isOffline ? 'offline' : 'online'}">${statusText}</span>${renderNotificationBell(user)}<button type="button" class="header-profile" onclick="navigateTo('profile')"><div class="header-avatar ${isITManager ? 'role-it' : (isGuide ? 'role-guide' : 'role-tourist')}">${avatarIcon}</div><div class="header-user-info"><div class="header-user-name">${escapeHtml(user.name)}</div><div class="header-user-role">${escapeHtml(roleLabel)}</div></div></button></div></div><div class="main-container">${renderParkAccessPanel()}${content}</div></div></div>`;}
+    return `<div class="app-container"><div id="app-sidebar" class="sidebar"><div class="sidebar-header"><div class="sidebar-brand"><div class="sidebar-logo"><img src="/icons/icon-192.svg" alt="SIGTS logo"></div><div class="sidebar-title">Bwindi SIGTS</div></div></div><div class="sidebar-nav">${navItems.map(item => `<div class="nav-item-vertical ${window.currentView === item.id ? 'active' : ''}" onclick="navigateTo('${item.id}'); closeSidebar();"><div class="nav-icon-vertical">${icon(item.icon, 'icon-md')}</div><div class="nav-label-vertical">${item.label}</div></div>`).join('')}</div><div class="sidebar-logout" onclick="Auth.logout(); closeSidebar();">${icon('logout', 'icon-md')} Logout</div></div><div class="sidebar-backdrop" aria-hidden="true" onclick="closeSidebar()"></div><div class="main-content"><div class="content-header"><button type="button" class="sidebar-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="app-sidebar" onclick="event.stopPropagation(); toggleSidebar();">${icon('menu', 'icon-md')}</button><h1>${getPageTitle(window.currentView)}</h1><div class="header-right"><span id="networkStatusBadge" class="net-status ${isOffline ? 'offline' : 'online'}">${statusText}</span>${renderNotificationBell(user)}<button type="button" class="header-profile" onclick="navigateTo('profile')"><div class="header-avatar ${isITManager ? 'role-it' : (isGuide ? 'role-guide' : 'role-tourist')}">${avatarIcon}</div><div class="header-user-info"><div class="header-user-name">${escapeHtml(user.name)}</div><div class="header-user-role">${escapeHtml(roleLabel)}</div></div></button></div></div><div class="main-container" onclick="closeSidebar()">${renderParkAccessPanel()}${content}</div></div></div>`;}
 
 function getAnimalIconName(animalName = '') {
     const value = animalName.toLowerCase();
@@ -437,19 +453,107 @@ function coerceStringArray(raw) {
     return [];
 }
 
-function firstSpeciesImage(animal = {}) {
-    const urls = animal.image_urls ?? animal.primary_image_urls;
-    if (Array.isArray(urls) && urls[0]) return String(urls[0]);
-    if (typeof urls === 'string') {
-        const s = urls.trim();
+/** Normalises image_urls from API/pg (array, JSON string, or Postgres text[] string). */
+function parseImageUrlsField(raw) {
+    if (raw == null) return [];
+    if (Array.isArray(raw)) return raw.map((u) => String(u || '').trim()).filter(Boolean);
+    if (typeof raw === 'string') {
+        const s = raw.trim();
+        if (!s) return [];
+        if (s.startsWith('{') && s.endsWith('}')) {
+            const inner = s.slice(1, -1).trim();
+            if (!inner) return [];
+            const parts = [];
+            let buf = '';
+            let inQ = false;
+            for (let i = 0; i < inner.length; i++) {
+                const c = inner[i];
+                if (c === '"') {
+                    inQ = !inQ;
+                    continue;
+                }
+                if (!inQ && c === ',') {
+                    if (buf.trim()) parts.push(buf.trim());
+                    buf = '';
+                    continue;
+                }
+                buf += c;
+            }
+            if (buf.trim()) parts.push(buf.trim());
+            return parts.map((p) => p.replace(/^"|"$/g, '').trim()).filter(Boolean);
+        }
         try {
             const parsed = JSON.parse(s);
-            if (Array.isArray(parsed) && parsed[0]) return String(parsed[0]);
+            if (Array.isArray(parsed)) return parsed.map((u) => String(u || '').trim()).filter(Boolean);
         } catch (_) {
-            if (s.startsWith('http')) return s.split(/[|,]/)[0]?.trim();
+            if (s.startsWith('http')) return [s.split(/[|,]/)[0]?.trim()].filter(Boolean);
         }
     }
-    return '';
+    return [];
+}
+
+/** Last-resort Wikimedia thumbnails when DB or offline cache lacks image_urls (exact display name, lowercased). */
+const SPECIES_IMAGE_FALLBACK_BY_NAME = {
+    'mountain gorilla': 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3d/066_Silverback_mountain_gorilla_eating_at_Bwindi_Impenetrable_Forest_National_Park_Photo_by_Giles_Laurent.jpg/960px-066_Silverback_mountain_gorilla_eating_at_Bwindi_Impenetrable_Forest_National_Park_Photo_by_Giles_Laurent.jpg',
+    'african forest elephant': 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/92/African_forest_elephant_%28Loxodonta_cyclotis%29_calf.jpg/960px-African_forest_elephant_%28Loxodonta_cyclotis%29_calf.jpg',
+    'african elephant': 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/63/African_elephants_%28Loxodonta_africana%29_in_water.jpg/960px-African_elephants_%28Loxodonta_africana%29_in_water.jpg',
+    'great blue turaco': 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Great_Blue_Turaco.jpg/960px-Great_Blue_Turaco.jpg',
+    'chimpanzee': 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/A_group_of_imp_chimps.jpg/960px-A_group_of_imp_chimps.jpg',
+    'black-and-white colobus': 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Black-and-white_Colobus_Monkeys.jpg/960px-Black-and-white_Colobus_Monkeys.jpg',
+    'african fish eagle': 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/AfricanFishEagle.jpeg/960px-AfricanFishEagle.jpeg',
+    'rwenzori turaco': 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Ruwenzori_Turaco.jpg/960px-Ruwenzori_Turaco.jpg',
+    "l'hoest's monkey": 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/LHoests_monkey_%28Cercopithecus_lhoesti%29_captive.jpg/960px-LHoests_monkey_%28Cercopithecus_lhoesti%29_captive.jpg',
+    'blue monkey': 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Zanzibar_Sykes%27_monkey_%28Cercopithecus_mitis%29_female_and_juveniles.jpg/960px-Zanzibar_Sykes%27_monkey_%28Cercopithecus_mitis%29_female_and_juveniles.jpg',
+    'african green broadbill': 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/African_Green_Broadbill.jpg/960px-African_Green_Broadbill.jpg',
+    'black bee-eater': 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/24/Black_Bee-eater_%28Merops_gularis%29_Photo_by_Giles_Laurent.jpg/960px-Black_Bee-eater_%28Merops_gularis%29_Photo_by_Giles_Laurent.jpg',
+    'handsome francolin': 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/65/Handsome_spurfowl_%28Pternistis_nobilis%29.jpg/960px-Handsome_spurfowl_%28Pternistis_nobilis%29.jpg',
+    'bar-tailed trogon': 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Bar-tailed_Trogon_%28Apaloderma_vittatum%29_%2845634509165%29.jpg/960px-Bar-tailed_Trogon_%28Apaloderma_vittatum%29_%2845634509165%29.jpg',
+    "johnston's chameleon": 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/db/Camale%C3%B3n_%28Trioceros_johnstoni%29%2C_parque_nacional_de_la_Selva_Impenetrable_de_Bwindi%2C_Uganda%2C_2024-02-01%2C_DD_89.jpg/960px-Camale%C3%B3n_%28Trioceros_johnstoni%29%2C_parque_nacional_de_la_Selva_Impenetrable_de_Bwindi%2C_Uganda%2C_2024-02-01%2C_DD_89.jpg',
+    'olive baboon': 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Papio_anubis.jpg/960px-Papio_anubis.jpg',
+    'african leopard': 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/03/Panthera_pardus_close_up.jpg/960px-Panthera_pardus_close_up.jpg',
+    'african golden cat': 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c4/Caracal_aurata_2.jpg/960px-Caracal_aurata_2.jpg',
+    'african civet': 'https://upload.wikimedia.org/wikipedia/commons/a/a2/Civettictis_civetta_11.jpg',
+    'african forest buffalo': 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5d/Syncerus_caffer_nanus_-_01.jpg/960px-Syncerus_caffer_nanus_-_01.jpg',
+    'bushbuck': 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/82/Tragelaphus_scriptus.jpg/960px-Tragelaphus_scriptus.jpg',
+    'crowned eagle': 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/70/Stephanoaetus_coronatus.jpg/960px-Stephanoaetus_coronatus.jpg',
+    'giant forest hog': 'https://upload.wikimedia.org/wikipedia/commons/3/3b/Hylochoerus_meinertzhageni.jpg',
+    'mocker swallowtail': 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/31/Mocker_swallowtail_%28Papilio_dardanus_cenea%29_female_form_cenea_Maputo.jpg/960px-Mocker_swallowtail_%28Papilio_dardanus_cenea%29_female_form_cenea_Maputo.jpg',
+    'yellow-backed duiker': 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Cephalophus_silvicultor_154622618.jpg/960px-Cephalophus_silvicultor_154622618.jpg',
+    'black-fronted duiker': 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Cephalophus_nigrifrons.jpg/960px-Cephalophus_nigrifrons.jpg',
+    "peter's duiker": 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Peters_Duiker_%28Cephalophus_callipygus%29_from_behind%2C_Campo_Maan_National_Park.jpg/960px-Peters_Duiker_%28Cephalophus_callipygus%29_from_behind%2C_Campo_Maan_National_Park.jpg',
+    'bushpig': 'https://upload.wikimedia.org/wikipedia/commons/0/0e/Potamochoerus_larvatus_43594615.jpg',
+    'potto': 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Potto.jpg/960px-Potto.jpg',
+    'black-and-white-casqued hornbill': 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/Bycanistes_subcylindricus_-_Forst_-_01.jpg/960px-Bycanistes_subcylindricus_-_Forst_-_01.jpg',
+    'ruwenzori batis': 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Ruwenzori_Batis_RWD.jpg/960px-Ruwenzori_Batis_RWD.jpg',
+    "archer's robin-chat": 'https://upload.wikimedia.org/wikipedia/commons/2/2d/Archersrobinchat.jpg',
+    'regal sunbird': 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4b/Regal_sunbird_%28Cinnyris_regius_regius%29_male_moulting.jpg/960px-Regal_sunbird_%28Cinnyris_regius_regius%29_male_moulting.jpg',
+    'montane oriole': 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/Oriolus_percivali_-_avocat_-_602207636.jpeg/960px-Oriolus_percivali_-_avocat_-_602207636.jpeg',
+    'strange weaver': 'https://upload.wikimedia.org/wikipedia/commons/8/85/Strange_weaver.jpg',
+    "lagden's bush-shrike": 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/MalaconotusLagdeniKeulemans_%28cropped%29.jpg/960px-MalaconotusLagdeniKeulemans_%28cropped%29.jpg',
+    'chestnut-throated apalis': 'https://upload.wikimedia.org/wikipedia/commons/6/60/Chestnut_throated_apalis1.jpg',
+    'dusky crimsonwing': 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/79/Cryptospiza_jacksoni_2.jpg/960px-Cryptospiza_jacksoni_2.jpg',
+    "shelley's crimsonwing": 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/Cryptospiza_shelleyi.jpg/960px-Cryptospiza_shelleyi.jpg',
+    "chapin's flycatcher": 'https://upload.wikimedia.org/wikipedia/commons/4/44/Chapin%27s_Flycatcher_%28Muscicapa_lendu%29_JM.jpg',
+    "grauer's swamp warbler": 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ed/Bradypterus_grandis_-_bureaubenjamin_-_119616564.jpeg/960px-Bradypterus_grandis_-_bureaubenjamin_-_119616564.jpeg',
+    'african giant swallowtail': 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Papilio_antimachus.jpg/640px-Papilio_antimachus.jpg',
+    'cream-banded swallowtail': 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/89/RebelAnnalendkkNaturhof1914TafXVII.jpg/960px-RebelAnnalendkkNaturhof1914TafXVII.jpg',
+    "turner's eremomela": 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d9/Range_Turner%27s_eremomela.png/960px-Range_Turner%27s_eremomela.png'
+};
+
+function speciesWikimediaFallbackUrl(name) {
+    const k = String(name || '').trim().toLowerCase();
+    return SPECIES_IMAGE_FALLBACK_BY_NAME[k] || '';
+}
+
+function speciesHasDbImage(animal = {}) {
+    return parseImageUrlsField(animal.image_urls ?? animal.primary_image_urls).length > 0;
+}
+
+function firstSpeciesImage(animal = {}) {
+    const fromDb = parseImageUrlsField(animal.image_urls ?? animal.primary_image_urls);
+    if (fromDb.length) return String(fromDb[0]);
+    const fb = speciesWikimediaFallbackUrl(animal.name);
+    return fb ? String(fb) : '';
 }
 
 function firstStoryImage(story = {}) {
@@ -465,9 +569,70 @@ function joinMaybeList(value) {
 }
 
 function speciesAIPromptFromRecord(animal = {}) {
-    const sci = animal.scientific_name ? String(animal.scientific_name).trim() : '';
+    const sci = String(animal.scientific_name || animal.scientific || '').trim();
     const name = animal.name || 'this species';
     return `Field brief for Bwindi: ${name}${sci ? ` (${sci})` : ''}. Usual trail zones, habitat, visitor rules, seasonality, status, one rumor to correct. Rangers’ safety line comes first.`;
+}
+
+/** One catalogue tile (Animals tab + dashboard spotlight). */
+function renderAnimalSpeciesCardHtml(animal) {
+    const rawId = animal.animal_id || animal.id || '';
+    const id = escapeHtml(String(rawId));
+    const thumb = firstSpeciesImage(animal);
+    const teaserSource = animal.description ? String(animal.description) : 'Tap for field notes from the catalogue.';
+    const teaser = escapeHtml(truncateSnippet(teaserSource, 280));
+    const sci = escapeHtml(String(animal.scientific_name || animal.scientific || 'Scientific name unavailable'));
+    const status = String(animal.conservation_status || animal.status || 'least_concern').toLowerCase().replace(/\s+/g, '_');
+    const statusLabel = escapeHtml(String(animal.conservation_status || animal.status || 'least_concern').replace(/_/g, ' '));
+    const thumbHtml = thumb
+        ? `<div class="animal-card-thumb"><img src="${escapeHtml(thumb)}" alt="${escapeHtml(animal.name || 'Species')}" loading="lazy" decoding="async" /></div>`
+        : `<div class="animal-card-thumb animal-card-thumb--fallback">${icon(getAnimalIconName(animal.name), 'icon-xl')}</div>`;
+    const aiPrompt = speciesAIPromptFromRecord(animal);
+    return `<article class="animal-card animal-card--interactive" tabindex="0" aria-label="${escapeHtml(animal.name)} details" onclick="openAnimalSpeciesDetail('${id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAnimalSpeciesDetail('${id}');}">
+            ${thumbHtml}
+            <div class="animal-info">
+                <div class="animal-name">${escapeHtml(animal.name)}</div>
+                <div class="animal-scientific">${sci}</div>
+                <p class="animal-teaser">${teaser}</p>
+                <span class="animal-status status-${escapeHtml(status.replace(/_/g, '-'))}">${statusLabel}</span>
+                <div class="animal-card-actions">
+                    <button type="button" class="small-btn" onclick="event.stopPropagation(); navigateToAIWithPrompt(${JSON.stringify(aiPrompt)});">${icon('target', 'icon-sm')} Tour help</button>
+                    <button type="button" class="small-btn ghost-btn" onclick="event.stopPropagation(); submitContentHelpfulness('animal', '${id}', ${JSON.stringify(animal.name || '')});">${icon('target', 'icon-sm')} Helpful?</button>
+                </div>
+            </div>
+        </article>`;
+}
+
+function pickDashboardSpotlightAnimals(animals, limit = 24) {
+    if (!Array.isArray(animals) || !animals.length) return [];
+    const rank = (name) => {
+        const n = String(name || '').toLowerCase();
+        if (n.includes('gorilla')) return 0;
+        if (n.includes('chimp')) return 1;
+        if (n.includes('elephant')) return 2;
+        if (n.includes('turaco')) return 3;
+        if (n.includes('colobus')) return 4;
+        if (n.includes('crimson') || n.includes('broadbill') || n.includes('golden cat') || n.includes('leopard')) return 5;
+        return 20;
+    };
+    return [...animals]
+        .filter((a) => a && a.name && (a.animal_id || a.id))
+        .sort((a, b) => {
+            const d = rank(a.name) - rank(b.name);
+            if (d !== 0) return d;
+            const ia = speciesHasDbImage(a) ? 1 : 0;
+            const ib = speciesHasDbImage(b) ? 1 : 0;
+            if (ib !== ia) return ib - ia;
+            return String(a.name).localeCompare(String(b.name));
+        })
+        .slice(0, limit);
+}
+
+function renderDashboardSpeciesSpotlight(animals) {
+    const picks = pickDashboardSpotlightAnimals(animals, 24);
+    if (!picks.length) return '';
+    const cards = picks.map((a) => renderAnimalSpeciesCardHtml(a)).join('');
+    return `<div class="section-card dashboard-species-spotlight"><div class="section-header"><h3>${icon('paw', 'icon-sm')} Species to explore</h3></div><p class="animals-page-blurb">A sample from the Bwindi catalogue on this device. Tap a card for ranger-style notes, or browse the full list.</p><div class="info-chip-row" style="margin-bottom:12px;"><button type="button" class="small-btn" onclick="navigateTo('animals')">${icon('grid', 'icon-sm')} Open full biodiversity list</button></div><div class="animals-list animals-list--responsive">${cards}</div></div>`;
 }
 
 function culturalAIPromptFromRecord(story = {}) {
@@ -593,24 +758,28 @@ function animalMatchesBwindiTourFocus(animal, focusKey = 'all') {
         case 'unesco_primates': {
             if (/bird|broadbill|flycatcher|warbler|swallowtail|butterfly|turaco|\bbee-eagle\b|\beagle\b/.test(blob)) return false;
             return (
-                /\b(monkey|gorilla|chimp|chimpan|baboon|colobus|mangabey|guenon)\b/i.test(blob)
+                /\b(monkey|gorilla|chimp|chimpan|baboon|colobus|mangabey|guenon|potto|galago)\b/i.test(blob)
                 || /hoest|'s monkey|golden monkey/i.test(blob)
-                || /\b(pan gorilla|cercopithecus|chlorocebus|alophocebus|lophocebus|papio|papionini)\b/.test(blob)
+                || /\b(pan gorilla|cercopithecus|chlorocebus|alophocebus|lophocebus|papio|papionini|perodicticus)\b/.test(blob)
             );
         }
         case 'unesco_large_mammals': {
             if (animalMatchesBwindiTourFocus(animal, 'unesco_primates')) return false;
             if (/bird|flycatcher|warbler|broadbill|swallowtail|butterfly|\bbat\b/.test(blob)) return false;
             if (/\b(mouse|rat|shrew|squirrel|dormouse)\b/i.test(blob)) return false;
-            return /elephant|duiker|buffalo|cape buffalo|bushpig|hog|hyaena|civet|leopard/i.test(blob);
+            return /elephant|duiker|buffalo|bushbuck|tragelaphus|cape buffalo|bushpig|hog|hyaena|civet|leopard|golden cat|caracal|forest hog|hylochoerus/i.test(blob);
         }
         case 'unesco_albertine_birds': {
             if (/swallowtail|butterfly|papilio\b/.test(blob)) return false;
-            const needles = ['broadbill', 'green broadbill', 'grauer', 'warbler', 'turner', 'eremomela', 'chapin', 'flycatcher', 'shelley', 'crimsonwing'];
+            const needles = [
+                'broadbill', 'green broadbill', 'grauer', 'warbler', 'turner', 'eremomela', 'chapin', 'flycatcher',
+                'shelley', 'crimsonwing', 'francolin', 'trogon', 'hornbill', 'crowned', 'batis', 'robin',
+                'sunbird', 'oriole', 'weaver', 'shrike', 'apalis', 'fish eagle', 'turaco', 'bee-eater'
+            ];
             return needles.some((n) => name.includes(n));
         }
         case 'unesco_swallowtails':
-            return /swallowtail|papilio\b/.test(blob);
+            return /swallowtail|papilio\b|dardanus/i.test(blob);
         case 'globally_threatened': {
             const s = String(animal.conservation_status || '').toLowerCase().replace(/\s+/g, '_');
             return ['endangered', 'vulnerable', 'near_threatened'].includes(s);
@@ -842,9 +1011,9 @@ window.openCulturalStoryDetail = async function openCulturalStoryDetail(narrativ
 // =====================================================
 async function renderDashboardContent() {
     const animals = await Content.getAnimals();
-    const recommendations = await AI.getRecommendations(3);
+    const recommendations = await AI.getRecommendations(6);
     const seasonal = await AI.getSeasonalRecommendations();
-    return renderDashboardShell({
+    const shell = renderDashboardShell({
         primaryTitle: 'Suggested for you',
         primaryIcon: 'target',
         primaryItems: recommendations.map((r) => ({
@@ -858,6 +1027,7 @@ async function renderDashboardContent() {
         seasonalActionLabel: 'View Suggestions',
         animalCount: animals.length
     });
+    return `${shell}${renderDashboardSpeciesSpotlight(animals)}`;
 }
 
 function renderDashboardQuickGrid(animalCount = 0) {
@@ -912,29 +1082,7 @@ async function renderAnimalsContent() {
 
     const intro = `<div class="section-card animals-page-intro"><div class="section-header"><h3>${icon('leaf', 'icon-sm')} Bwindi biodiversity</h3></div><div class="animals-page-blurb">Use the UNESCO theme tiles to match the block your guide is running, or stay on <strong>All species</strong>. Gorillas get the limelight, but primates, Albertine forest birds, elephants, butterflies, and other Red List taxa are why this forest is on the World Heritage list. Open a species card for ranger-style notes. Tour help is optional if you want to expand a topic in your own words.</div><div class="info-chip-row"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${JSON.stringify('Bwindi newcomer checklist: main sectors, wet vs dry pacing, gorilla visit etiquette (short bullets).')})">${icon('target', 'icon-sm')} Tour help: first trek</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${JSON.stringify('Birding from main Bwindi trailheads: which Albertine specialties are realistic without playback or nest pressure?')})">${icon('bird', 'icon-sm')} Tour help: birding</button></div></div>`;
 
-    const cards = filtered.map((animal) => {
-        const id = escapeHtml(animal.animal_id || animal.id || '');
-        const thumb = firstSpeciesImage(animal);
-        const teaserSource = animal.description ? String(animal.description) : 'Tap for field notes from the catalogue.';
-        const teaser = escapeHtml(truncateSnippet(teaserSource, 164));
-        const thumbHtml = thumb
-            ? `<div class="animal-card-thumb"><img src="${escapeHtml(thumb)}" alt="" loading="lazy" decoding="async" /></div>`
-            : `<div class="animal-card-thumb animal-card-thumb--fallback">${icon(getAnimalIconName(animal.name), 'icon-xl')}</div>`;
-
-        return `<article class="animal-card animal-card--interactive" tabindex="0" aria-label="${escapeHtml(animal.name)} details" onclick="openAnimalSpeciesDetail('${id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAnimalSpeciesDetail('${id}');}">
-            ${thumbHtml}
-            <div class="animal-info">
-                <div class="animal-name">${escapeHtml(animal.name)}</div>
-                <div class="animal-scientific">${escapeHtml(animal.scientific_name || 'Scientific name unavailable')}</div>
-                <p class="animal-teaser">${teaser}</p>
-                <span class="animal-status status-${escapeHtml(String(animal.conservation_status || 'least_concern').replace(/_/g, '-'))}">${escapeHtml(String(animal.conservation_status || 'least_concern').replace(/_/g, ' '))}</span>
-                <div class="animal-card-actions">
-                    <button type="button" class="small-btn" onclick="event.stopPropagation(); navigateToAIWithPrompt(${JSON.stringify(speciesAIPromptFromRecord(animal))});">${icon('target', 'icon-sm')} Tour help</button>
-                    <button type="button" class="small-btn ghost-btn" onclick="event.stopPropagation(); submitContentHelpfulness('animal', '${id}', '${escapeHtml(animal.name)}');">${icon('target', 'icon-sm')} Helpful?</button>
-                </div>
-            </div>
-        </article>`;
-    }).join('');
+    const cards = filtered.map((animal) => renderAnimalSpeciesCardHtml(animal)).join('');
 
     return `${tourStrip}${intro}${filterBanner}<div class="animals-list animals-list--responsive">${cards}</div>`;
 }
@@ -1590,7 +1738,7 @@ async function renderCultureContent() {
             <div class="story-content">
                 <span class="story-community">${escapeHtml(featured.community || 'Community story')}</span>
                 <div class="story-title">${escapeHtml(featured.title_en || featured.title_local || 'Untitled story')}</div>
-                <div class="animal-teaser">${escapeHtml(truncateSnippet(featured.duration ? `About ${featured.duration}-minute listen.` : 'Tap for full stewardship notes.', 140))}</div>
+                <div class="animal-teaser">${escapeHtml(truncateSnippet(featured.narrative_en || (featured.duration ? `About ${featured.duration}-minute listen.` : '') || 'Tap for full stewardship notes.', 140))}</div>
                 <div class="animal-card-actions">
                     <button type="button" class="small-btn" onclick="event.stopPropagation(); navigateToAIWithPrompt(${JSON.stringify(culturalAIPromptFromRecord(featured))});">${icon('target', 'icon-sm')} Tour help</button>
                     <button type="button" class="small-btn ghost-btn" onclick="event.stopPropagation(); submitContentHelpfulness('cultural', '${featId}', '${escapeHtml(featured.title_en || featured.title_local || 'story')}');">${icon('target', 'icon-sm')} Helpful?</button>
@@ -1611,7 +1759,7 @@ async function renderCultureContent() {
             <div class="story-content">
                 <span class="story-community">${escapeHtml(story.community || 'Community story')}</span>
                 <div class="story-title">${escapeHtml(story.title_en || story.title_local || 'Untitled story')}</div>
-                <div class="animal-teaser">${escapeHtml(truncateSnippet(story.verification_badge || 'Tap for narrative + etiquette prompts.', 120))}</div>
+                <div class="animal-teaser">${escapeHtml(truncateSnippet(story.narrative_en || story.cultural_significance || story.verification_badge || 'Tap for narrative + etiquette prompts.', 120))}</div>
                 <div class="animal-card-actions">
                     <button type="button" class="small-btn" onclick="event.stopPropagation(); navigateToAIWithPrompt(${JSON.stringify(culturalAIPromptFromRecord(story))});">${icon('target', 'icon-sm')} Tour help</button>
                     <button type="button" class="small-btn ghost-btn" onclick="event.stopPropagation(); submitContentHelpfulness('cultural', '${sid}', '${escapeHtml(story.title_en || story.title_local || 'story')}');">${icon('target', 'icon-sm')} Helpful?</button>
@@ -2972,8 +3120,8 @@ async function renderView(view, options = {}) {
 
     let content = '';
     switch (safeView) {
-        case 'login': app.innerHTML = renderLoginScreen(); return;
-        case 'register': app.innerHTML = renderRegisterScreen(); return;
+        case 'login': app.innerHTML = renderLoginScreen(); syncNavDrawerBodyLock(); return;
+        case 'register': app.innerHTML = renderRegisterScreen(); syncNavDrawerBodyLock(); return;
         case 'dashboard': content = await renderDashboardContent(); break;
         case 'animals': content = await renderAnimalsContent(); break;
         case 'map': content = renderMapContent(); break;
@@ -2989,6 +3137,7 @@ async function renderView(view, options = {}) {
     }
 
     app.innerHTML = renderMainLayout(content);
+    syncSidebarToggleA11y();
     refreshNetworkStatusBadge();
     await refreshRareAlertBadge();
     if (safeView === 'it_dashboard') {
@@ -3074,3 +3223,23 @@ async function refreshRareAlertBadge() {
 }
 
 window.refreshRareAlertBadge = refreshRareAlertBadge;
+
+(function initResponsiveNavigationChrome() {
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+            if (window.innerWidth > SIGTS_NAV_DRAWER_MAX_PX) {
+                document.querySelector('.sidebar')?.classList.remove('open');
+            }
+            syncSidebarToggleA11y();
+        }, 120);
+    });
+    window.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        if (window.innerWidth > SIGTS_NAV_DRAWER_MAX_PX) return;
+        if (!document.querySelector('.sidebar')?.classList.contains('open')) return;
+        e.preventDefault();
+        closeSidebar();
+    });
+})();

@@ -23,7 +23,8 @@ router.get('/', authenticateJWT, [
         const isITManager = req.user?.user_type === 'it_manager';
 
         let query = `
-            SELECT narrative_id, title_en, title_local, community, story_type,
+            SELECT narrative_id, title_en, title_local, narrative_en, cultural_significance,
+                   community, story_type,
                    storyteller_name, storyteller_photo_url, audio_url, image_urls,
                    verified_by_community, duration, published_at,
                    CASE

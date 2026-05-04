@@ -2,14 +2,14 @@
 const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
-const { authenticateJWT } = require('../middleware/auth');
 
 // =====================================================
 // GET /api/animals
 // Get all animals
 // =====================================================
-router.get('/', authenticateJWT, async (req, res) => {
-    const { search, limit = 50, offset = 0 } = req.query;
+// Public read: catalogue must load for tourists without fragile token timing on first paint.
+router.get('/', async (req, res) => {
+    const { search, limit = 300, offset = 0 } = req.query;
 
     try {
         let query = `
@@ -49,7 +49,7 @@ router.get('/', authenticateJWT, async (req, res) => {
 // GET /api/animals/:id
 // Get animal by ID
 // =====================================================
-router.get('/:id', authenticateJWT, async (req, res) => {
+router.get('/:id', async (req, res) => {
     const { id } = req.params;
 
     try {
