@@ -1832,21 +1832,21 @@ function renderInfoContent() {
 }
 
 function renderAIChatContent() {
-    return `<div class="section-card">
+    return `<div class="section-card ai-chat-panel">
         <div class="section-header"><h3>${icon('target', 'icon-sm')} Tour help</h3></div>
         <p id="aiPrefillBanner" class="ai-prefill-banner" aria-live="polite">Animals, Culture, or Info may drop starter text here. Always edit before sending.</p>
-        <div id="aiChatMessages" style="padding:16px; max-height: 50vh; overflow-y: auto;">
-            <div class="rec-card">
+        <div id="aiChatMessages" class="ai-chat-messages" role="log" aria-relevant="additions text" aria-live="polite">
+            <div class="rec-card ai-chat-message">
                 <div class="rec-info">
                     <div class="rec-title">How this works</div>
-                    <div class="rec-reason">Draft a question about wildlife, safety, culture, routes, or weather. Replies follow simple park-reference rules. Not a substitute for your guide or signposted rules.</div>
+                    <div class="rec-reason">Ask about Bwindi / BINP, sectors, Albertine forest wildlife, UWA and trekking etiquette, maps, weather, culture, tour themes, or catalogue species. Replies use park-reference rules and on-device digests when your wording matches. Not a substitute for your guide or signposted rules.</div>
                 </div>
             </div>
         </div>
-        <div style="padding:16px; border-top: 1px solid #E8EDDF; display:flex; gap:10px;">
-            <input id="aiChatInput" class="auth-input" style="height:44px; flex:1;" placeholder="Your question (edit any pre-filled draft)..." />
-            <button type="button" class="small-btn" style="margin:0;" title="Speak your question (browser Speech Recognition)" onclick="startTourHelpVoiceCapture()">${icon('target', 'icon-sm')} Mic</button>
-            <button class="login-btn" style="margin:0; white-space:nowrap;" onclick="sendAIChatMessage()">Send</button>
+        <div class="ai-chat-composer">
+            <input id="aiChatInput" class="auth-input" placeholder="Your question (edit any pre-filled draft)..." />
+            <button type="button" class="small-btn" title="Speak your question (browser Speech Recognition)" onclick="startTourHelpVoiceCapture()">${icon('target', 'icon-sm')} Mic</button>
+            <button class="login-btn" onclick="sendAIChatMessage()">Send</button>
         </div>
     </div>`;
 }
@@ -2181,13 +2181,15 @@ window.sendAIChatMessage = async function() {
     const question = input.value.trim();
     if (!question) return;
 
-    messages.innerHTML += `<div class="rec-card"><div class="rec-info"><div class="rec-title">You</div><div class="rec-reason">${escapeHtml(question)}</div></div></div>`;
+    messages.innerHTML += `<div class="rec-card ai-chat-message"><div class="rec-info"><div class="rec-title">You</div><div class="rec-reason">${escapeHtml(question)}</div></div></div>`;
     input.value = '';
 
     const result = await AI.askQuestion(question);
     const answer = result?.answer || 'No response available.';
-    messages.innerHTML += `<div class="rec-card"><div class="rec-info"><div class="rec-title">Park reference reply</div><div class="rec-reason">${escapeHtml(answer)}</div></div></div>`;
-    messages.scrollTop = messages.scrollHeight;
+    messages.innerHTML += `<div class="rec-card ai-chat-message"><div class="rec-info"><div class="rec-title">Park reference reply</div><div class="rec-reason">${escapeHtml(answer)}</div></div></div>`;
+    requestAnimationFrame(() => {
+        messages.scrollTop = messages.scrollHeight;
+    });
 };
 
 window.toggleSpeciesHeatmapLayer = async function () {

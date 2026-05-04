@@ -1251,6 +1251,43 @@ svg {
     background: #fff7f0;
 }
 
+/* Tour help: transcript bubbles must not use dashboard line-clamps / grid avatar layout */
+.section-card.ai-chat-panel .rec-card.ai-chat-message {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    overflow: visible;
+    min-height: unset;
+    grid-template-columns: unset;
+}
+
+.section-card.ai-chat-panel .rec-info,
+.section-card.ai-chat-panel .rec-title,
+.section-card.ai-chat-panel .rec-reason {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+}
+
+.section-card.ai-chat-panel .rec-title {
+    text-overflow: unset;
+}
+
+.section-card.ai-chat-panel .rec-reason {
+    display: block;
+    -webkit-line-clamp: unset;
+    line-clamp: unset;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* Tour help composer: global .auth-input { width:100% } must not hide Mic / Send */
+.section-card.ai-chat-panel .ai-chat-composer .auth-input {
+    width: auto !important;
+    max-width: 100%;
+    min-width: 0;
+}
+
 /* Intro / explainer cards: avoid clipping body + action chips (globals use overflow:hidden on .section-card) */
 .section-card.animals-page-intro,
 .section-card.culture-page-intro,

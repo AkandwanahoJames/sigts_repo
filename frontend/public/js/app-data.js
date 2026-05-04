@@ -205,7 +205,7 @@ class APIService {
     // Animals endpoints
     async getAnimals() {
         const result = await this.request('/animals?limit=300');
-        if (result?.animals) return result.animals;
+        if (result && Array.isArray(result.animals)) return result.animals;
         if (Array.isArray(result)) return result;
         if (result && result.success && result.data) return result.data;
         return JSON.parse(localStorage.getItem('offline_animals') || '[]');

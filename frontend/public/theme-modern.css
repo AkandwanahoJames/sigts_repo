@@ -476,6 +476,127 @@ h2, h3 { font-weight: 600; }
     color: #fff;
 }
 
+/* ----- Tour help / AI chat (full message bodies, stable scroll) ----- */
+.section-card.ai-chat-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: min(72vh, 760px);
+    max-height: min(85vh, 900px);
+    overflow: hidden;
+}
+
+.section-card.ai-chat-panel .section-header {
+    flex-shrink: 0;
+}
+
+.section-card.ai-chat-panel .ai-prefill-banner {
+    flex-shrink: 0;
+    margin: 0 16px 8px;
+}
+
+.ai-chat-messages {
+    flex: 1 1 auto;
+    min-height: 200px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 12px 16px 16px;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+}
+
+.ai-chat-panel .rec-card.ai-chat-message {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    cursor: default;
+    align-self: stretch;
+    width: 100%;
+    overflow: visible;
+    margin-bottom: 10px;
+}
+
+.ai-chat-panel .rec-card.ai-chat-message:last-child {
+    margin-bottom: 0;
+}
+
+.ai-chat-panel .rec-card.ai-chat-message:hover {
+    border-color: var(--line);
+}
+
+.ai-chat-panel .rec-info {
+    overflow: visible;
+    min-width: 0;
+}
+
+.ai-chat-panel .rec-title {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+}
+
+.ai-chat-panel .rec-reason {
+    display: block;
+    overflow: visible;
+    text-overflow: clip;
+    -webkit-line-clamp: unset;
+    line-clamp: unset;
+    -webkit-box-orient: unset;
+    white-space: normal;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    margin-top: 4px;
+}
+
+.ai-chat-composer {
+    flex-shrink: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 10px;
+    align-items: center;
+    padding: 14px 16px;
+    border-top: 1px solid var(--line);
+    background: var(--surface-0);
+    min-width: 0;
+}
+
+/* .auth-input is globally width:100%; that steals the whole row in flex — keep field in first column only */
+.ai-chat-composer .auth-input {
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
+    height: 44px;
+    box-sizing: border-box;
+}
+
+.ai-chat-composer .small-btn,
+.ai-chat-composer .login-btn {
+    margin: 0;
+    flex-shrink: 0;
+    justify-self: stretch;
+    align-self: stretch;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    padding-inline: 14px;
+    visibility: visible;
+    opacity: 1;
+    z-index: 1;
+}
+
+.ai-chat-composer .login-btn {
+    white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+    .section-card.ai-chat-panel {
+        min-height: min(52dvh, 420px);
+        max-height: min(88dvh, 820px);
+    }
+}
+
 /* ----- Dashboard quote card (compact) ---------------------- */
 .dashboard-quote-card {
     background: var(--green-700);

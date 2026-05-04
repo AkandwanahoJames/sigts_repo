@@ -942,9 +942,287 @@ class TourGuideManager {
 // =====================================================
 // 3.1.1.6 AI RECOMMENDATION ENGINE (COMPLETE)
 // =====================================================
+
+function sigtsClampStr(value, max) {
+    if (value == null) return '';
+    const t = String(value).replace(/\s+/g, ' ').trim();
+    if (!t) return '';
+    return t.length <= max ? t : `${t.slice(0, Math.max(0, max - 1))}…`;
+}
+
+function sigtsNormalizeQuestion(question) {
+    try {
+        return String(question || '')
+            .normalize('NFKC')
+            .replace(/[\u200b-\u200d\ufeff]/g, '')
+            .toLowerCase()
+            .replace(/\s+/g, ' ')
+            .trim();
+    } catch (_) {
+        return String(question || '')
+            .toLowerCase()
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+}
+
+function sigtsWantsAnimalCatalogContext(q) {
+    return (
+        /\b(animals?|species|biodiversity|catalogues?|catalogs?|catalogue|catalog|present|listed|grid|field brief|which|how many)\b/.test(q) ||
+        q.includes('species to')
+    );
+}
+
+function sigtsWantsTourThemeContext(q) {
+    return /\b(tours?|activities?|activity|theme|themes|briefing|session|guided|unesco|tile|tiles)\b/.test(q);
+}
+
+function sigtsFindMentionedAnimal(qLower, animals) {
+    if (!Array.isArray(animals) || !animals.length) return null;
+    const sorted = [...animals].sort((a, b) => (b.name || '').length - (a.name || '').length);
+    for (const a of sorted) {
+        const n = String(a.name || '').toLowerCase().trim();
+        if (n.length >= 3 && qLower.includes(n)) {
+            return a;
+        }
+    }
+    return null;
+}
+
+/** Mirrors backend `buildAnswerFromAppContext` for offline / failed API. */
+function sigtsLocalAnswerFromAppContext(question, appContext, locationName) {
+    if (!appContext) return null;
+    const q = sigtsNormalizeQuestion(question);
+    const mentioned = sigtsFindMentionedAnimal(q, appContext.animals);
+    const wantAnimals = Boolean(appContext.animals?.length && (sigtsWantsAnimalCatalogContext(q) || mentioned));
+    const wantThemes = Boolean(appContext.themes?.length && sigtsWantsTourThemeContext(q));
+    if (!wantAnimals && !wantThemes) return null;
+
+    const parts = [];
+    if (wantThemes && appContext.themes.length) {
+        parts.push(
+            'Here is what this SIGTS install currently carries under UNESCO-style tour session briefings (Animals tab tiles). Use the in-app modal for the full script; this is a short digest:'
+        );
+        for (const t of appContext.themes.slice(0, 10)) {
+            const head = t.session_title || t.slug || 'Tour session';
+            const sub = t.subtitle ? ` (${t.subtitle})` : '';
+            const body = sigtsClampStr(t.tourist_summary_en, 420);
+            parts.push(`• ${head}${sub}: ${body || 'Open the theme card in the app for the full briefing.'}`);
+        }
+        if (appContext.themes.length > 10) {
+            parts.push(`(${appContext.themes.length - 10} additional themes are in the Animals tab—open each tile for the full script.)`);
+        }
+    }
+    if (wantAnimals && appContext.animals.length) {
+        const n = appContext.animals.length;
+        const sample = appContext.animals.slice(0, 28).map((a) => a.name);
+        const extra = n > sample.length ? ` …and ${n - sample.length} more in the full Animals list` : '';
+        parts.push(
+            `Animals catalogue on this device: ${n} species. Examples: ${sample.join(', ')}.${extra} Open each species card for ranger-style notes, status, and etiquette—always defer to your guide and posted park rules.`
+        );
+        if (mentioned) {
+            const sci = mentioned.scientific_name ? ` (${mentioned.scientific_name})` : '';
+            parts.push(
+                `Your message references “${mentioned.name}”${sci}. Cross-check habitat, seasonality, and distance rules on that species card; treat this reply as a draft, not a permit or safety briefing.`
+            );
+        }
+    }
+    let text = parts.join('\n\n');
+    text = sigtsClampStr(text, 3900);
+    if (locationName) {
+        text += ` Nearby map label in data: ${locationName} (confirm on the ground).`;
+    }
+    return text;
+}
+
+function sigtsIsBwindiParkContextQuery(q) {
+    if (q.includes('bwindi')) return true;
+    if (/\b(buhoma|ruhija|rushaga|nkuringo)\b/i.test(q)) return true;
+    if (/\bbwindi[-\s]?impenetrable\b/i.test(q)) return true;
+    if (/\bimpenetrable\s+national\s+park\b/i.test(q)) return true;
+    if (/\b(binp|bwindi\s+imp\.?\s*n\.?p\.?|bwindi\s+np)\b/i.test(q)) return true;
+    if (/\buganda\s+wildlife\b/i.test(q) || /\buwa\b/i.test(q)) return true;
+    if (/\b(kanungu|kisoro|kabale)\b/i.test(q)) return true;
+    if (/\b(south-?western|southwestern)\s+uganda\b/i.test(q)) return true;
+    if (/\bworld\s+heritage\b/i.test(q) && (/\b682\b/.test(q) || /\bbwindi\b/i.test(q))) return true;
+    if (/\balbertine\b/i.test(q) && /\b(forest|rift|gorilla|endemic)\b/i.test(q)) return true;
+    if (/\b(gorilla\s+trek|gorilla\s+tracking|habituation\s+trek|gorilla\s+habituation)\b/i.test(q)) return true;
+    if (/\b(primate\s+trek|forest\s+habituation|nature\s+walk)\b/i.test(q) && /\b(uganda|bwindi|forest)\b/i.test(q)) {
+        return true;
+    }
+    if (/\b(national\s+park)\b/i.test(q) && /\b(uganda|western|montane|rainforest)\b/i.test(q)) return true;
+    if (/\b(this\s+park|the\s+park)\b/i.test(q) && /\b(visit|trek|size|rules|animals|here|sigts)\b/i.test(q)) return true;
+    if (/\bimpenetrable\s+forest\b/i.test(q)) return true;
+    if (/\bwestern\s+uganda\b/i.test(q)) return true;
+    if (/\buganda\b/i.test(q) && /\b(forest|gorilla|trek|rainforest|primate|montane)\b/i.test(q)) return true;
+    if (/\bsigts\b/i.test(q)) return true;
+    return false;
+}
+
+function sigtsLooksClearlyOffTopic(q) {
+    return /\b(python|javascript|typescript|sql\s+query|react\.?js|node\.?js|excel\s+formula|homework\s+problem|nba\s+score|stock\s+price|netflix|movie\s+times|recipe|pizza\s+dough|tax\s+return\s+software)\b/i.test(
+        q
+    );
+}
+
+function sigtsIsNatureTourismTopic(q) {
+    return /\b(wildlife|trek|trekking|trail|hike|hiking|forest|jungle|rainforest|safari|monkey|ape|birding|bird\s|primates?|ranger|guide\s|permit|sightings?|ecology|conservation|national\s+park|buffer\s*zone|fauna|flora|endemic|montane|elevat|tracking)\b/i.test(
+        q
+    );
+}
+
+function sigtsBuildBwindiScopedAnswer(question, locationName, appContext) {
+    const q = sigtsNormalizeQuestion(question);
+    const extras = [];
+    if (/\bwhat\s+(is|are)\s+bwindi\b/.test(q) || (/\bwhat\s+is\b/.test(q) && q.includes('bwindi'))) {
+        extras.push(
+            'In plain terms: Bwindi is a Ugandan national park dominated by ancient montane rainforest; it is globally known for mountain gorilla tracking and for very high biodiversity in the Albertine Rift.'
+        );
+    }
+    if (/\b(permit|fee|cost|price|ticket)\b/.test(q)) {
+        extras.push(
+            'Permits and fees change by season and policy: confirm the current Uganda Wildlife Authority (UWA) tariff and your issued permit details—SIGTS cannot quote live prices.'
+        );
+    }
+    if (/\b(bird|birding|ornith)\b/.test(q)) {
+        extras.push(
+            'Bwindi is an Albertine Rift hotspot with many regional endemics; quiet trails, no playback near sensitive species, and ranger guidance matter.'
+        );
+    }
+    if (/\b(season|dry|wet|when\s+to\s+visit|best\s+time)\b/.test(q)) {
+        extras.push(
+            'Many visitors target drier windows for comfort underfoot, but rain is always possible in montane forest—plan layers and grip footwear year-round.'
+        );
+    }
+    if (/\b(size|area|km2|km²|hectare|acre|how\s+big)\b/.test(q)) {
+        extras.push(
+            'The park is often cited around 331 km² of dense montane rainforest on steep terrain—use official UWA or UNESCO figures for planning.'
+        );
+    }
+    if (/\b(elevation|altitude|steep|terrain|hiking\s+hard)\b/.test(q)) {
+        extras.push(
+            'Expect steep, muddy, high-elevation forest walking; fitness and pacing matter more than flat-trail expectations.'
+        );
+    }
+    if (/\b(chimp|elephant|buffalo|leopard)\b/.test(q)) {
+        extras.push(
+            'Large mammals and other primates occur in forest mosaics; sightings vary by sector and luck—follow distance and group conduct rules at all times.'
+        );
+    }
+    let tail = '';
+    if (appContext?.animals?.length || appContext?.themes?.length) {
+        const bits = [];
+        if (appContext.animals?.length) bits.push(`${appContext.animals.length} species in the Animals catalogue`);
+        if (appContext.themes?.length) bits.push(`${appContext.themes.length} UNESCO-style tour theme briefings`);
+        tail = ` On this device, SIGTS also holds ${bits.join(' and ')}—open the Animals tab for tiles and species cards.`;
+    }
+    const core = `Bwindi Impenetrable National Park (BINP) in southwestern Uganda protects a large block of montane rainforest famous for mountain gorillas and exceptional Albertine Rift biodiversity (UNESCO World Heritage). Typical visitor threads are regulated gorilla tracking or habituation, guided forest walks, birding, and community-linked cultural experiences. Stay with your assigned ranger team, respect UWA distance and health rules (wildlife diseases cut both ways), avoid flash where restricted, and treat SIGTS as a planning companion—your permit, briefing, and on-ground signs override any app text.${tail}${locationName ? ` Nearby map label in SIGTS: ${locationName} (verify on the ground).` : ''}`;
+    const extraBlock = extras.length ? `\n\n${extras.join('\n\n')}` : '';
+    return sigtsClampStr(`${core}${extraBlock}`, 3900);
+}
+
+/**
+ * Same decision order as backend `buildRuleBasedAnswer` — used when /ai/chat is unavailable
+ * or returns no answer, so Tour help stays useful offline.
+ */
+function sigtsLocalTourHelpCompose(trimmed, appContext, locationName) {
+    const q = sigtsNormalizeQuestion(trimmed);
+    if (!q) return 'Please enter a question.';
+    if (sigtsLooksClearlyOffTopic(q)) {
+        return 'Tour help in SIGTS is limited to Bwindi Impenetrable National Park, trekking, wildlife, maps, culture, and what this app stores. Rephrase within that scope.';
+    }
+
+    if (q.includes('gorilla')) {
+        return `Mountain gorillas are one of Bwindi's flagship species. Keep a minimum distance of 7 meters, avoid flash photography, and follow your guide's instructions at all times.${locationName ? ` You are currently near ${locationName}.` : ''}`;
+    }
+    if (q.includes('safety') || q.includes('safe')) {
+        return `Safety guidelines: stay on marked trails, keep safe wildlife distance, move in groups when possible, and report emergencies immediately to park rangers.${locationName ? ` Current nearby landmark: ${locationName}.` : ''}`;
+    }
+    if (q.includes('weather') || q.includes('rain')) {
+        return 'Bwindi conditions can change quickly. Carry a light rain layer, water, and non-slip hiking footwear for both dry and wet seasons.';
+    }
+    if (q.includes('culture') || q.includes('batwa')) {
+        return 'Bwindi offers verified cultural narratives and Batwa heritage stories. You can open the Culture module in SIGTS to explore storyteller-approved content.';
+    }
+    if (q.includes('route') || q.includes('map') || q.includes('direction')) {
+        return `Routes and POIs: use the Map screen in SIGTS.${locationName ? ` Latest fix near ${locationName} (landmark name only; verify on the ground).` : ''}`;
+    }
+
+    const fromCat = sigtsLocalAnswerFromAppContext(trimmed, appContext, locationName);
+    if (fromCat) return fromCat;
+
+    if (sigtsIsBwindiParkContextQuery(q) || sigtsIsNatureTourismTopic(q)) {
+        return sigtsBuildBwindiScopedAnswer(trimmed, locationName, appContext);
+    }
+
+    return 'Ask about Bwindi or BINP (Buhoma, Ruhija, Rushaga, Nkuringo), forest trekking, UWA rules, wildlife, maps, culture, or what the Animals and Culture tabs show. I match your wording to those topics.';
+}
+
+/** 3.1.1.6 — local persistence for profiling, popularity, feedback, offline query log */
+const SIGTS_AI_PROFILE_KEY = 'sigts_ai_user_profile_v1';
+const SIGTS_AI_POPULARITY_KEY = 'sigts_ai_popularity_v1';
+const SIGTS_AI_RECO_FEEDBACK_KEY = 'sigts_ai_reco_feedback_v1';
+const SIGTS_AI_CHAT_FEEDBACK_KEY = 'sigts_ai_chat_feedback_v1';
+const SIGTS_AI_QUERY_LOG_KEY = 'sigts_ai_query_log_v1';
+const SIGTS_AI_TRAINING_SIGNAL_KEY = 'sigts_ai_training_signal_v1';
+
+const BWINDI_TOUR_CATALOG = [
+    { id: 'gorilla_tracking', name: 'Mountain gorilla tracking', tags: ['wildlife', 'primate', 'trek'], seasonBoost: ['dry', 'wet'] },
+    { id: 'gorilla_habituation', name: 'Gorilla habituation experience', tags: ['wildlife', 'primate', 'trek'], seasonBoost: ['dry', 'wet'] },
+    { id: 'forest_nature_walk', name: 'Forest nature walk', tags: ['nature', 'forest', 'bird'], seasonBoost: ['wet', 'dry'] },
+    { id: 'birding_albertine', name: 'Albertine Rift birding', tags: ['bird', 'wildlife', 'forest'], seasonBoost: ['dry', 'wet'] },
+    { id: 'batwa_cultural', name: 'Batwa cultural trail', tags: ['culture', 'heritage'], seasonBoost: ['wet', 'dry'] },
+    { id: 'community_crafts', name: 'Buffer-zone community visit', tags: ['culture', 'community'], seasonBoost: ['dry', 'wet'] },
+    { id: 'photography_briefing', name: 'Photography & field etiquette', tags: ['photography', 'wildlife'], seasonBoost: ['dry', 'wet'] },
+    { id: 'primate_other', name: 'Other primate tracking', tags: ['wildlife', 'primate'], seasonBoost: ['dry', 'wet'] }
+];
+
+function sigtsAiReadJson(key, fallback) {
+    try {
+        const raw = localStorage.getItem(key);
+        if (raw == null || raw === '') return fallback;
+        const v = JSON.parse(raw);
+        return v === undefined ? fallback : v;
+    } catch (_) {
+        return fallback;
+    }
+}
+
+function sigtsAiWriteJson(key, val) {
+    try {
+        localStorage.setItem(key, JSON.stringify(val));
+    } catch (_) {
+        /**/
+    }
+}
+
 class AIRecommendationEngine {
     constructor() {
         this.queryHistory = [];
+    }
+
+    async buildAppContextForTourHelp() {
+        if (typeof Content === 'undefined' || !Content.getWildlifeTourThemes || !Content.getAnimals) {
+            return null;
+        }
+        try {
+            const [themes, animals] = await Promise.all([Content.getWildlifeTourThemes(), Content.getAnimals()]);
+            const themeList = (Array.isArray(themes) ? themes : []).slice(0, 24).map((t) => ({
+                slug: t.slug,
+                session_title: t.session_title,
+                subtitle: t.subtitle,
+                tourist_summary_en:
+                    typeof t.tourist_summary_en === 'string' ? t.tourist_summary_en.slice(0, 650) : ''
+            }));
+            const animalList = (Array.isArray(animals) ? animals : []).slice(0, 300).map((a) => ({
+                name: a.name,
+                scientific_name: a.scientific_name || a.scientific
+            }));
+            if (!themeList.length && !animalList.length) return null;
+            return { themes: themeList, animals: animalList };
+        } catch (_) {
+            return null;
+        }
     }
 
     async getUserProfile() {
@@ -969,10 +1247,21 @@ class AIRecommendationEngine {
             return { answer: 'Please enter a question.' };
         }
 
+        let appContext = null;
+        try {
+            appContext = await this.buildAppContextForTourHelp();
+        } catch (_) {
+            appContext = null;
+        }
+
         const payload = {
             question: trimmed,
             language: AppState.userPreferences?.language || 'en'
         };
+
+        if (appContext) {
+            payload.app_context = appContext;
+        }
 
         if (AppState.currentLocation?.lat && AppState.currentLocation?.lng) {
             payload.location = {
@@ -995,21 +1284,18 @@ class AIRecommendationEngine {
                 }
             }
         } catch (error) {
-            // Fall back to offline mode below.
+            // Fall back to local rules below.
         }
 
-        // Offline AI mode: basic local response when network/API unavailable.
-        const lowercase = trimmed.toLowerCase();
-        if (lowercase.includes('gorilla')) {
-            return { answer: 'Offline mode: Mountain gorillas are protected in Bwindi. Keep 7 meters distance and follow guide instructions.' };
-        }
-        if (lowercase.includes('safety')) {
-            return { answer: 'Offline mode: stay on marked trails, keep safe wildlife distance, and contact rangers for emergencies.' };
-        }
-        if (lowercase.includes('weather')) {
-            return { answer: 'Offline mode: weather can change quickly in Bwindi. Carry rain gear and water.' };
-        }
-        return { answer: 'Offline mode: I can answer basics on wildlife, safety, tours, and culture.' };
+        const locName = null;
+        const localAnswer = sigtsLocalTourHelpCompose(trimmed, appContext, locName);
+        return {
+            answer: localAnswer,
+            meta: {
+                local_fallback: true,
+                offline: typeof navigator !== 'undefined' ? !navigator.onLine : false
+            }
+        };
     }
 
     async getPersonalizedContentFeed(limit = 4) {
