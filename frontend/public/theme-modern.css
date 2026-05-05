@@ -875,6 +875,12 @@ body.auth-page {
 }
 
 .auth-side-message { max-width: min(32rem, 100%); }
+.auth-side-message-wrap {
+    max-width: min(32rem, 100%);
+}
+.auth-side-toggle {
+    display: none;
+}
 .auth-side-kicker {
     display: inline-block;
     padding: 5px 12px;
@@ -1366,6 +1372,240 @@ body.auth-page {
     .quick-card { height: 120px; }
 }
 
+/* ----- Mobile auth readability hotfix ---------------------- */
+@media (max-width: 900px) {
+    body.auth-page {
+        overflow-y: auto;
+        min-height: 100dvh;
+    }
+
+    .auth-portal {
+        min-height: 100dvh;
+        height: auto;
+    }
+
+    .auth-portal-main {
+        height: auto;
+        min-height: 100dvh;
+        overflow-y: auto;
+        align-items: flex-start;
+        justify-content: flex-start;
+        padding-top: max(18px, env(safe-area-inset-top, 0px) + 10px);
+        padding-bottom: max(20px, env(safe-area-inset-bottom, 0px) + 12px);
+    }
+
+    .auth-card {
+        max-height: none;
+        overflow: visible;
+        width: min(100%, 560px);
+        margin: 0 auto;
+    }
+}
+
+@media (max-width: 560px) {
+    .auth-portal-main {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+
+    .auth-card {
+        border-radius: 18px;
+        padding: 18px 14px 16px;
+    }
+
+    .auth-tabs {
+        gap: 4px;
+        padding: 4px;
+        margin-bottom: 14px;
+    }
+
+    .auth-tab {
+        min-height: 42px;
+        padding: 8px 10px;
+        font-size: 0.82rem;
+    }
+
+    .auth-form-head h2 {
+        font-size: clamp(1.55rem, 8.5vw, 2rem);
+        line-height: 1.1;
+    }
+
+    .auth-form-head p {
+        font-size: 0.9rem;
+    }
+
+    .auth-form {
+        gap: 10px;
+    }
+
+    .auth-input,
+    .auth-select {
+        font-size: 16px;
+    }
+
+    .auth-primary-btn {
+        min-height: 48px;
+        font-size: 0.85rem;
+    }
+}
+
+/* ----- Auth hard override for Android phones -------------- */
+@media (max-width: 900px) {
+    html,
+    body.auth-page {
+        height: auto !important;
+        min-height: 100% !important;
+    }
+
+    body.auth-page {
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #app {
+        min-height: 100dvh;
+        height: auto !important;
+    }
+
+    .auth-portal {
+        display: block !important;
+        height: auto !important;
+        min-height: 100dvh !important;
+        overflow: visible !important;
+    }
+
+    .auth-portal-side {
+        display: flex !important;
+        min-height: auto !important;
+        gap: 10px;
+        padding: max(12px, env(safe-area-inset-top, 0px)) 14px 10px !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+        background-position: center 32%;
+    }
+
+    .auth-side-message-wrap {
+        width: 100%;
+        border-radius: 12px;
+        background: rgba(6, 32, 20, 0.34);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        padding: 8px 10px;
+    }
+
+    .auth-side-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        list-style: none;
+        cursor: pointer;
+        color: #fff;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        user-select: none;
+    }
+
+    .auth-side-toggle::-webkit-details-marker {
+        display: none;
+    }
+
+    .auth-side-toggle::after {
+        content: 'Hide';
+        color: rgba(255, 255, 255, 0.82);
+        font-size: 0.72rem;
+        font-weight: 600;
+    }
+
+    .auth-side-message-wrap:not([open]) .auth-side-toggle::after {
+        content: 'Show';
+    }
+
+    .auth-side-message-wrap .auth-side-message {
+        margin-top: 8px;
+    }
+
+    .auth-side-message-wrap:not([open]) .auth-side-message {
+        display: none;
+    }
+
+    .auth-side-brand {
+        gap: 8px;
+    }
+
+    .auth-side-logo {
+        width: 40px;
+        height: 40px;
+    }
+
+    .auth-side-title {
+        font-size: 1rem;
+    }
+
+    .auth-side-subtitle {
+        font-size: 0.72rem;
+    }
+
+    .auth-side-message {
+        max-width: 100%;
+    }
+
+    .auth-side-kicker {
+        margin-bottom: 6px;
+        padding: 4px 10px;
+        font-size: 0.66rem;
+    }
+
+    .auth-side-message h1 {
+        font-size: clamp(1.28rem, 5.2vw, 1.6rem);
+        line-height: 1.18;
+        margin-bottom: 6px;
+    }
+
+    .auth-side-message h1::after {
+        width: 56px;
+        height: 3px;
+        margin-top: 8px;
+    }
+
+    .auth-side-message p {
+        max-width: 100%;
+        font-size: 0.82rem;
+        line-height: 1.4;
+    }
+
+    .auth-portal-main {
+        display: block !important;
+        height: auto !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+        padding-top: 10px !important;
+        padding-bottom: max(16px, env(safe-area-inset-bottom, 0px)) !important;
+    }
+
+    .auth-card {
+        max-height: none !important;
+        height: auto !important;
+        overflow: visible !important;
+        transform: none !important;
+    }
+}
+
+@media (max-width: 560px) {
+    .auth-portal-side {
+        padding-left: 12px !important;
+        padding-right: 12px !important;
+    }
+
+    .auth-side-message h1 {
+        font-size: clamp(1.16rem, 6vw, 1.4rem);
+    }
+
+    .auth-side-message p {
+        font-size: 0.78rem;
+    }
+}
+
 /* ----- Selection styling ----------------------------------- */
 ::selection {
     background: var(--yellow-200);
@@ -1384,3 +1624,171 @@ body.auth-page {
     border-radius: 999px;
 }
 *::-webkit-scrollbar-thumb:hover { background: rgba(13, 27, 20, 0.32); }
+
+/* ----- Global phone collision guards ----------------------- */
+@media (max-width: 900px) {
+    *,
+    *::before,
+    *::after {
+        min-width: 0;
+    }
+
+    .main-container,
+    .section-card,
+    .card,
+    .dashboard-quote-card,
+    .profile-header,
+    .ui-modal,
+    .ui-modal-rich {
+        max-width: 100%;
+    }
+
+    .section-card,
+    .card,
+    .dashboard-quote-card,
+    .profile-header {
+        overflow-x: hidden;
+    }
+
+    .section-header,
+    .header-right,
+    .admin-actions,
+    .shift-controls,
+    .park-access-actions,
+    .map-guidance,
+    .auth-options-row,
+    .auth-actions {
+        flex-wrap: wrap;
+    }
+
+    .section-header .add-btn,
+    .section-header .small-btn,
+    .admin-action-btn,
+    .shift-controls .small-btn,
+    .shift-controls .login-btn {
+        max-width: 100%;
+        white-space: normal;
+        text-align: center;
+    }
+
+    .analytics-row,
+    .recommendation-row,
+    .rec-card,
+    .tour-item,
+    .inventory-item,
+    .employee-item,
+    .announcement-item,
+    .user-item,
+    .sighting-item {
+        grid-template-columns: 1fr;
+        align-items: flex-start;
+    }
+
+    .auth-tab,
+    .auth-link-btn,
+    .small-btn,
+    .add-btn,
+    .login-btn,
+    .auth-primary-btn,
+    .admin-action-btn,
+    .park-chip {
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .rec-title,
+    .rec-reason,
+    .animal-name,
+    .announcement-title,
+    .announcement-content,
+    .sighting-comment,
+    .map-status,
+    .map-coords,
+    .map-guidance-text,
+    .map-nearby,
+    .ui-modal-title,
+    .ui-modal-muted {
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    img,
+    svg,
+    video,
+    canvas {
+        max-width: 100%;
+    }
+
+    .map-container,
+    .dashboard-quote-card,
+    .seasonal-thumb,
+    .culture-card-thumb,
+    .animal-card-thumb {
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 560px) {
+    .main-container {
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+    }
+
+    .content-header {
+        padding-left: max(10px, env(safe-area-inset-left, 0px));
+        padding-right: max(10px, env(safe-area-inset-right, 0px));
+    }
+
+    .section-card,
+    .card,
+    .dashboard-quote-card {
+        border-radius: 12px;
+    }
+
+    .section-header {
+        gap: 8px;
+    }
+
+    .section-header .add-btn,
+    .section-header .small-btn,
+    .admin-action-btn,
+    .auth-primary-btn,
+    .login-btn,
+    .small-btn,
+    .add-btn {
+        width: 100%;
+        justify-content: center;
+        min-height: 42px;
+    }
+
+    .quick-grid,
+    .metrics-grid,
+    .animals-list,
+    .admin-actions,
+    .schema-items,
+    .culture-card-grid,
+    .tour-focus-grid,
+    .kpi-strip {
+        grid-template-columns: 1fr !important;
+    }
+
+    .map-overlay {
+        left: 8px !important;
+        right: 8px !important;
+        bottom: 8px !important;
+        width: auto !important;
+        max-height: 60% !important;
+    }
+
+    .ui-modal-overlay,
+    .ui-modal-overlay-rich {
+        padding: 10px;
+    }
+
+    .ui-modal,
+    .ui-modal-rich {
+        width: 100%;
+        max-width: 100%;
+        border-radius: 12px;
+    }
+}

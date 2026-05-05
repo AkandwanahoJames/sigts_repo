@@ -76,4 +76,34 @@ async function sendPasswordResetEmail(email, token, username) {
     }
 }
 
-module.exports = { sendVerificationEmail, sendPasswordResetEmail };
+/**
+ * Send a generic activity notification email
+ */
+async function sendActivityNotificationEmail(email, username, activityTitle, activityDetails = '') {
+    const safeUsername = username || 'User';
+    const safeDetails = activityDetails || 'No additional details were provided.';
+    const mailOptions = {
+        from: `"Bwindi Tour Guide" <${process.env.SMTP_USER}>`,
+        to: email,
+        subject: `${activityTitle} - Bwindi Smart Tour Guide`,
+        html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h1 style="color: #2E7D32;">Activity Notification</h1>
+                <p>Hello ${safeUsername},</p>
+                <p>${activityTitle}</p>
+                <p>${safeDetails}</p>
+                <hr>
+                <p style="color: #666; font-size: 12px;">Bwindi Impenetrable National Park - Smart Information Guide Tour System</p>
+            </div>
+        `
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        logger.info(`Activity email sent to ${email}: ${activityTitle}`);
+    } catch (error) {
+        logger.error(`Failed to send activity email to ${email}:`, error);
+    }
+}
+
+module.exports = { sendVerificationEmail, sendPasswordResetEmail, sendActivityNotificationEmail };

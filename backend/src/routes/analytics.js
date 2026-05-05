@@ -7,6 +7,185 @@ const { authenticateJWT, authorize } = require('../middleware/auth');
 
 router.use(authenticateJWT, authorize('it_manager'));
 
+const ALLOWED_INTERVALS = new Set(['hour', 'day', 'week']);
+const ALLOWED_EXPORT_FORMATS = new Set(['json', 'csv']);
+
+function toIsoDate(input, fallbackDate) {
+    if (!input) return fallbackDate;
+    const d = new Date(input);
+    if (Number.isNaN(d.getTime())) return fallbackDate;
+    return d.toISOString().slice(0, 10);
+}
+
+function toIsoDateTime(input, fallbackDateTime) {
+    if (!input) return fallbackDateTime;
+    const d = new Date(input);
+    if (Number.isNaN(d.getTime())) return fallbackDateTime;
+    return d.toISOString();
+}
+
+function mean(values) {
+    if (!values.length) return 0;
+    return values.reduce((acc, value) => acc + value, 0) / values.length;
+}
+
+function stddev(values, baselineMean) {
+    if (!values.length) return 0;
+    const variance = values.reduce((acc, value) => acc + (value - baselineMean) ** 2, 0) / values.length;
+    return Math.sqrt(variance);
+}
+
+function rowsToCsv(rows) {
+    if (!rows.length) return '';
+    const headers = Object.keys(rows[0]);
+    const escapeValue = (value) => {
+        if (value === null || value === undefined) return '';
+        const asString = String(value);
+        const escaped = asString.replace(/"/g, '""');
+        return /[",\n]/.test(escaped) ? `"${escaped}"` : escaped;
+    };
+    const lines = [
+        headers.join(','),
+        ...rows.map((row) => headers.map((header) => escapeValue(row[header])).join(','))
+    ];
+    return `${lines.join('\n')}\n`;
+}
+
+function nextHourStaffing(predictedVisitorCount) {
+    const guides = Math.max(1, Math.ceil(predictedVisitorCount / 30));
+    const rangers = Math.max(1, Math.ceil(predictedVisitorCount / 60));
+    const gateStaff = Math.max(1, Math.ceil(predictedVisitorCount / 80));
+    return { guides, rangers, gate_staff: gateStaff };
+}
+
+function parseMetrics(rawMetrics) {
+    if (!rawMetrics) return [];
+    if (Array.isArray(rawMetrics)) return rawMetrics;
+    return String(rawMetrics).split(',').map((m) => m.trim()).filter(Boolean);
+}
+
+async function tableExists(name) {
+    const r = await pool.query(
+        `SELECT 1 FROM information_schema.tables
+         WHERE table_schema = 'public' AND table_name = $1`,
+        [name]
+    );
+    return r.rows.length > 0;
+}
+
+async function getVisitorFlowDataset(start, end, interval = 'day') {
+    const truncUnit = ALLOWED_INTERVALS.has(interval) ? interval : 'day';
+    const timeline = await pool.query(
+        `SELECT date_trunc($1, arrival_time) as time_period,
+                COUNT(*)::int as visitor_count,
+                COUNT(DISTINCT tourist_id)::int as unique_visitors,
+                ROUND(AVG(duration_minutes)::numeric, 2) as avg_duration
+         FROM visitor_flow
+         WHERE arrival_time BETWEEN $2 AND $3
+         GROUP BY time_period
+         ORDER BY time_period`,
+        [truncUnit, start, end]
+    );
+
+    const routes = await pool.query(
+        `SELECT l.name AS location_name,
+                COUNT(*)::int AS visit_count,
+                ROUND(AVG(vf.duration_minutes)::numeric, 2) AS avg_dwell_minutes
+         FROM visitor_flow vf
+         JOIN locations l ON vf.location_id = l.location_id
+         WHERE vf.arrival_time BETWEEN $1 AND $2
+         GROUP BY l.location_id, l.name
+         ORDER BY visit_count DESC, location_name ASC
+         LIMIT 15`,
+        [start, end]
+    );
+
+    const dwellTimes = await pool.query(
+        `SELECT l.name AS location_name,
+                ROUND(AVG(vf.duration_minutes)::numeric, 2) AS avg_dwell_minutes,
+                COUNT(*)::int AS observations
+         FROM visitor_flow vf
+         JOIN locations l ON vf.location_id = l.location_id
+         WHERE vf.arrival_time BETWEEN $1 AND $2
+           AND vf.duration_minutes IS NOT NULL
+         GROUP BY l.location_id, l.name
+         HAVING COUNT(*) > 2
+         ORDER BY avg_dwell_minutes DESC
+         LIMIT 15`,
+        [start, end]
+    );
+
+    const avgDwell = timeline.rows.length
+        ? timeline.rows.reduce((acc, row) => acc + Number(row.avg_duration || 0), 0) / timeline.rows.length
+        : 0;
+
+    return {
+        range: { start, end, interval: truncUnit },
+        timeline: timeline.rows,
+        flow_patterns: timeline.rows,
+        popular_routes: routes.rows,
+        top_locations: routes.rows,
+        dwell_times: dwellTimes.rows,
+        average_dwell_time: Number(avgDwell.toFixed(2))
+    };
+}
+
+async function getCongestionPredictions(date, locationId) {
+    const params = [date];
+    let locationClause = '';
+    if (locationId) {
+        params.push(locationId);
+        locationClause = 'AND cp.location_id = $2';
+    }
+    const predictions = await pool.query(
+        `SELECT cp.predicted_date,
+                cp.predicted_hour,
+                cp.predicted_visitor_count,
+                cp.confidence_interval_low,
+                cp.confidence_interval_high,
+                cp.location_id,
+                l.name AS location_name
+         FROM congestion_predictions cp
+         JOIN locations l ON l.location_id = cp.location_id
+         WHERE cp.predicted_date = $1
+           ${locationClause}
+         ORDER BY cp.predicted_hour ASC, l.name ASC`,
+        params
+    );
+    return predictions.rows;
+}
+
+async function getSatisfactionDataset(start, end) {
+    const overall = await pool.query(
+        `SELECT ROUND(AVG(rating)::numeric, 2) AS avg_rating,
+                COUNT(*)::int AS total_ratings,
+                COUNT(CASE WHEN rating >= 4 THEN 1 END)::int AS satisfied,
+                COUNT(CASE WHEN rating <= 2 THEN 1 END)::int AS dissatisfied
+         FROM feedback
+         WHERE created_at BETWEEN $1 AND $2`,
+        [start, end]
+    );
+    const trend = await pool.query(
+        `SELECT DATE_TRUNC('day', created_at) AS day,
+                ROUND(AVG(rating)::numeric, 2) AS avg_rating,
+                COUNT(*)::int AS responses
+         FROM feedback
+         WHERE created_at BETWEEN $1 AND $2
+         GROUP BY DATE_TRUNC('day', created_at)
+         ORDER BY day ASC`,
+        [start, end]
+    );
+    const total = overall.rows[0]?.total_ratings || 0;
+    const satisfied = overall.rows[0]?.satisfied || 0;
+    return {
+        overall: Number(overall.rows[0]?.avg_rating || 0),
+        total_ratings: total,
+        satisfaction_rate: total ? Number(((satisfied / total) * 100).toFixed(1)) : 0,
+        dissatisfaction_count: overall.rows[0]?.dissatisfied || 0,
+        trend: trend.rows
+    };
+}
+
 // =====================================================
 // GET /api/analytics/visitor-flow
 // Get visitor flow analytics
@@ -23,37 +202,8 @@ router.get('/visitor-flow', [
     const { start, end, interval = 'day' } = req.query;
 
     try {
-        // Vanilla Postgres equivalent of TimescaleDB's time_bucket().
-        const truncUnit = ['hour', 'day', 'week'].includes(interval) ? interval : 'day';
-
-        const result = await pool.query(
-            `SELECT date_trunc($1, arrival_time) as time_period,
-                    COUNT(*) as visitor_count,
-                    COUNT(DISTINCT tourist_id) as unique_visitors,
-                    AVG(duration_minutes) as avg_duration
-             FROM visitor_flow
-             WHERE arrival_time BETWEEN $2 AND $3
-             GROUP BY time_period
-             ORDER BY time_period`,
-            [truncUnit, start, end]
-        );
-
-        const topLocations = await pool.query(
-            `SELECT l.name, COUNT(*) as visit_count
-             FROM visitor_flow vf
-             JOIN locations l ON vf.location_id = l.location_id
-             WHERE vf.arrival_time BETWEEN $1 AND $2
-             GROUP BY l.location_id, l.name
-             ORDER BY visit_count DESC
-             LIMIT 10`,
-            [start, end]
-        );
-
-        res.json({
-            timeline: result.rows,
-            top_locations: topLocations.rows,
-            average_dwell_time: result.rows.reduce((acc, r) => acc + parseFloat(r.avg_duration || 0), 0) / result.rows.length || 0
-        });
+        const dataset = await getVisitorFlowDataset(start, end, interval);
+        res.json(dataset);
 
     } catch (error) {
         console.error('Get visitor flow error:', error);
@@ -66,30 +216,23 @@ router.get('/visitor-flow', [
 // Get congestion predictions
 // =====================================================
 router.get('/predictions/congestion', [
-    query('date').optional().isDate()
+    query('date').optional().isDate(),
+    query('location_id').optional().isUUID()
 ], async (req, res) => {
-    const { date = new Date().toISOString().split('T')[0] } = req.query;
+    const date = toIsoDate(req.query.date, new Date().toISOString().slice(0, 10));
+    const locationId = req.query.location_id || null;
 
     try {
-        const predictions = await pool.query(
-            `SELECT predicted_hour, predicted_visitor_count,
-                    confidence_interval_low, confidence_interval_high
-             FROM congestion_predictions
-             WHERE predicted_date = $1
-             ORDER BY predicted_hour`,
-            [date]
-        );
+        const predictions = await getCongestionPredictions(date, locationId);
 
         let recommendations = [];
 
-        if (predictions.rows.length > 0) {
-            const peakHour = predictions.rows.reduce((a, b) => 
-                (a.predicted_visitor_count > b.predicted_visitor_count) ? a : b
+        if (predictions.length > 0) {
+            const peakHour = predictions.reduce((a, b) =>
+                (Number(a.predicted_visitor_count) > Number(b.predicted_visitor_count)) ? a : b
             );
-
-            recommendations.push(`Add 2-3 guides between ${peakHour.predicted_hour}:00 - ${peakHour.predicted_hour + 2}:00`);
-            
-            if (peakHour.predicted_visitor_count > 200) {
+            recommendations.push(`Increase staffing near ${peakHour.location_name} around ${peakHour.predicted_hour}:00.`);
+            if (Number(peakHour.predicted_visitor_count) > 200) {
                 recommendations.push('Prepare overflow parking');
                 recommendations.push('Consider opening additional viewing platforms');
             }
@@ -99,7 +242,8 @@ router.get('/predictions/congestion', [
 
         res.json({
             date,
-            predictions: predictions.rows,
+            location_id: locationId,
+            predictions,
             recommendations
         });
 
@@ -157,7 +301,19 @@ router.get('/popular-content', async (req, res) => {
             [limit]
         );
 
-        const allContent = [...animals.rows, ...locations.rows, ...stories.rows]
+        const tourContent = await pool.query(
+            `SELECT tc.title_en AS name,
+                    'tour_content' AS type,
+                    COALESCE(COUNT(tp.touristprog_id), 0)::int AS view_count
+             FROM tour_content tc
+             LEFT JOIN tourist_progress tp ON tp.content_id = tc.content_id
+             GROUP BY tc.content_id, tc.title_en
+             ORDER BY view_count DESC, tc.title_en
+             LIMIT $1`,
+            [limit]
+        );
+
+        const allContent = [...animals.rows, ...locations.rows, ...stories.rows, ...tourContent.rows]
             .sort((a, b) => (b.view_count || 0) - (a.view_count || 0))
             .slice(0, limit);
 
@@ -175,30 +331,10 @@ router.get('/popular-content', async (req, res) => {
 // =====================================================
 router.get('/satisfaction', async (req, res) => {
     try {
-        const ratings = await pool.query(
-            `SELECT AVG(rating) as avg_rating,
-                    COUNT(*) as total_ratings,
-                    COUNT(CASE WHEN rating >= 4 THEN 1 END) as satisfied,
-                    COUNT(CASE WHEN rating <= 2 THEN 1 END) as dissatisfied
-             FROM tour_participants
-             WHERE rating IS NOT NULL
-               AND feedback_date > NOW() - INTERVAL '90 days'`
-        );
-
-        const guideRatings = await pool.query(
-            `SELECT AVG(average_rating) as avg_guide_rating
-             FROM tour_guides
-             WHERE average_rating > 0`
-        );
-
-        res.json({
-            overall: parseFloat(ratings.rows[0].avg_rating) || 0,
-            total_ratings: parseInt(ratings.rows[0].total_ratings),
-            satisfaction_rate: ratings.rows[0].total_ratings > 0 
-                ? (ratings.rows[0].satisfied / ratings.rows[0].total_ratings * 100).toFixed(1)
-                : 0,
-            guide_rating: parseFloat(guideRatings.rows[0].avg_guide_rating) || 0
-        });
+        const start = toIsoDateTime(req.query.start, new Date(Date.now() - 90 * 86400000).toISOString());
+        const end = toIsoDateTime(req.query.end, new Date().toISOString());
+        const data = await getSatisfactionDataset(start, end);
+        res.json({ range: { start, end }, ...data });
 
     } catch (error) {
         console.error('Get satisfaction metrics error:', error);
@@ -237,10 +373,23 @@ router.get('/demographics', async (req, res) => {
         );
 
         const userTypes = await pool.query(
-            `SELECT user_type, COUNT(*) as count
-             FROM users
-             WHERE is_active = true
-             GROUP BY user_type`
+            `WITH normalized AS (
+                SELECT CASE
+                    WHEN user_type IN ('admin', 'it_manager') THEN 'it_manager'
+                    WHEN user_type = 'guide' THEN 'guide'
+                    ELSE 'tourist'
+                END AS user_type
+                FROM users
+                WHERE is_active = true
+            ),
+            allowed_types AS (
+                SELECT * FROM (VALUES ('tourist'), ('guide'), ('it_manager')) AS t(user_type)
+            )
+            SELECT a.user_type, COALESCE(COUNT(n.user_type), 0)::int AS count
+            FROM allowed_types a
+            LEFT JOIN normalized n ON n.user_type = a.user_type
+            GROUP BY a.user_type
+            ORDER BY a.user_type`
         );
 
         res.json({
@@ -252,6 +401,117 @@ router.get('/demographics', async (req, res) => {
     } catch (error) {
         console.error('Get demographics error:', error);
         res.status(500).json({ error: 'Failed to fetch demographics' });
+    }
+});
+
+// =====================================================
+// GET /api/analytics/peak-times
+// =====================================================
+router.get('/peak-times', [
+    query('start').optional().isISO8601(),
+    query('end').optional().isISO8601()
+], async (req, res) => {
+    try {
+        const start = toIsoDateTime(req.query.start, new Date(Date.now() - 120 * 86400000).toISOString());
+        const end = toIsoDateTime(req.query.end, new Date().toISOString());
+        const byHour = await pool.query(
+            `SELECT EXTRACT(HOUR FROM arrival_time)::int AS hour,
+                    COUNT(*)::int AS visitors
+             FROM visitor_flow
+             WHERE arrival_time BETWEEN $1 AND $2
+             GROUP BY EXTRACT(HOUR FROM arrival_time)
+             ORDER BY visitors DESC`,
+            [start, end]
+        );
+        const byDow = await pool.query(
+            `SELECT EXTRACT(DOW FROM arrival_time)::int AS day_of_week,
+                    COUNT(*)::int AS visitors
+             FROM visitor_flow
+             WHERE arrival_time BETWEEN $1 AND $2
+             GROUP BY EXTRACT(DOW FROM arrival_time)
+             ORDER BY visitors DESC`,
+            [start, end]
+        );
+        const peakHour = byHour.rows[0] || null;
+        const peakDay = byDow.rows[0] || null;
+        return res.json({ range: { start, end }, by_hour: byHour.rows, by_day_of_week: byDow.rows, peak_hour: peakHour, peak_day: peakDay });
+    } catch (error) {
+        console.error('peak times', error);
+        res.status(500).json({ error: 'Failed to compute peak times' });
+    }
+});
+
+// =====================================================
+// GET /api/analytics/resource-allocation
+// =====================================================
+router.get('/resource-allocation', [
+    query('date').optional().isDate(),
+    query('location_id').optional().isUUID()
+], async (req, res) => {
+    try {
+        const date = toIsoDate(req.query.date, new Date().toISOString().slice(0, 10));
+        const locationId = req.query.location_id || null;
+        const predictions = await getCongestionPredictions(date, locationId);
+        const recommendations = predictions.map((row) => ({
+            location_id: row.location_id,
+            location_name: row.location_name,
+            hour: row.predicted_hour,
+            predicted_visitor_count: row.predicted_visitor_count,
+            suggested_staffing: nextHourStaffing(Number(row.predicted_visitor_count || 0))
+        }));
+        return res.json({ date, location_id: locationId, recommendations });
+    } catch (error) {
+        console.error('resource allocation', error);
+        res.status(500).json({ error: 'Failed to generate staffing recommendations' });
+    }
+});
+
+// =====================================================
+// GET /api/analytics/sightings-trends
+// =====================================================
+router.get('/sightings-trends', [
+    query('start').optional().isISO8601(),
+    query('end').optional().isISO8601(),
+    query('animal_id').optional().isUUID()
+], async (req, res) => {
+    try {
+        const start = toIsoDateTime(req.query.start, new Date(Date.now() - 120 * 86400000).toISOString());
+        const end = toIsoDateTime(req.query.end, new Date().toISOString());
+        const animalId = req.query.animal_id || null;
+        const params = [start, end];
+        let animalFilter = '';
+        if (animalId) {
+            params.push(animalId);
+            animalFilter = 'AND s.animal_id = $3';
+        }
+        const trend = await pool.query(
+            `SELECT DATE_TRUNC('day', s.timestamp) AS day,
+                    COUNT(*)::int AS sightings
+             FROM sightings s
+             WHERE s.timestamp BETWEEN $1 AND $2
+               AND s.verification_status = 'verified'
+               ${animalFilter}
+             GROUP BY DATE_TRUNC('day', s.timestamp)
+             ORDER BY day ASC`,
+            params
+        );
+        const species = await pool.query(
+            `SELECT a.animal_id, a.name,
+                    COUNT(*)::int AS sightings
+             FROM sightings s
+             JOIN animals a ON a.animal_id = s.animal_id
+             WHERE s.timestamp BETWEEN $1 AND $2
+               AND s.verification_status = 'verified'
+               ${animalFilter}
+             GROUP BY a.animal_id, a.name
+             ORDER BY sightings DESC
+             LIMIT 10`,
+            params
+        );
+        return res.json({ range: { start, end }, animal_id: animalId, trend: trend.rows, species_breakdown: species.rows });
+    } catch (error) {
+        console.error('sightings trend', error);
+        res.status(500).json({ error: 'Failed to fetch sightings trends' });
     }
 });
 
@@ -273,32 +533,22 @@ router.get('/anomalies', async (req, res) => {
         if (!rows.length) {
             return res.json({ anomalies: [], stats: { baseline_mean: 0, stddev: 0 } });
         }
-        const counts = rows.map((r) => r.cnt);
-        const mean = counts.reduce((a, b) => a + b, 0) / counts.length;
-        const variance = counts.reduce((a, b) => a + (b - mean) ** 2, 0) / counts.length;
-        const std = Math.sqrt(variance) || 1;
+        const counts = rows.map((r) => Number(r.cnt));
+        const baselineMean = mean(counts);
+        const std = stddev(counts, baselineMean) || 1;
         const zThresh = Math.max(2, Math.min(4, Number(req.query.z) || 2.5));
         const anomalies = rows
             .map((r) => {
-                const z = (r.cnt - mean) / std;
+                const z = (Number(r.cnt) - baselineMean) / std;
                 return { day: r.day, count: r.cnt, zscore: Math.round(z * 100) / 100, high: z > zThresh, low: z < -zThresh };
             })
             .filter((r) => r.high || r.low);
-        return res.json({ anomalies, stats: { baseline_mean: mean, stddev: std, z_threshold: zThresh } });
+        return res.json({ anomalies, stats: { baseline_mean: baselineMean, stddev: std, z_threshold: zThresh } });
     } catch (error) {
         console.error('analytics anomalies', error);
         res.status(500).json({ error: 'Failed to compute anomalies' });
     }
 });
-
-async function tableExists(name) {
-    const r = await pool.query(
-        `SELECT 1 FROM information_schema.tables
-         WHERE table_schema = 'public' AND table_name = $1`,
-        [name]
-    );
-    return r.rows.length > 0;
-}
 
 // =====================================================
 // POST /api/analytics/models/retrain-job — queue stub (§3.1.1.11)
@@ -349,14 +599,41 @@ router.get('/models/retrain-job', async (req, res) => {
     }
 });
 
+router.post('/models/retrain-job/:id/complete', [
+    body('status').isIn(['succeeded', 'failed']),
+    body('message').optional().isString()
+], async (req, res) => {
+    try {
+        if (!(await tableExists('ops_training_jobs'))) {
+            return res.status(503).json({ error: 'ops_training_jobs table missing; apply migration 011.' });
+        }
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+        const r = await pool.query(
+            `UPDATE ops_training_jobs
+             SET status = $2, message = COALESCE($3, message), completed_at = CURRENT_TIMESTAMP
+             WHERE job_id = $1
+             RETURNING job_id, model_key, status, message, completed_at`,
+            [req.params.id, req.body.status, req.body.message || null]
+        );
+        if (!r.rows.length) return res.status(404).json({ error: 'Training job not found' });
+        return res.json({ success: true, job: r.rows[0] });
+    } catch (error) {
+        console.error('complete retrain job', error);
+        res.status(500).json({ error: 'Failed to update job status' });
+    }
+});
+
 // =====================================================
 // POST /api/analytics/reports/build — custom metric bundle (§3.1.1.11)
 // =====================================================
 router.post('/reports/build', async (req, res) => {
-    const metrics = Array.isArray(req.body?.metrics) ? req.body.metrics : ['visitor_flow', 'satisfaction', 'popular_content'];
+    const metrics = parseMetrics(req.body?.metrics).length
+        ? parseMetrics(req.body.metrics)
+        : ['visitor_flow', 'satisfaction', 'popular_content'];
     const out = { built_at: new Date().toISOString(), sections: {}, section_errors: {} };
-    const start = new Date(Date.now() - 14 * 86400000).toISOString();
-    const end = new Date().toISOString();
+    const start = toIsoDateTime(req.body?.start, new Date(Date.now() - 14 * 86400000).toISOString());
+    const end = toIsoDateTime(req.body?.end, new Date().toISOString());
 
     async function trySection(key, fn) {
         try {
@@ -368,16 +645,7 @@ router.post('/reports/build', async (req, res) => {
 
     if (metrics.includes('visitor_flow')) {
         await trySection('visitor_flow', async () => {
-            const r = await pool.query(
-                `SELECT date_trunc('day', arrival_time) AS time_period,
-                        COUNT(*) AS visitor_count
-                 FROM visitor_flow
-                 WHERE arrival_time BETWEEN $1 AND $2
-                 GROUP BY time_period
-                 ORDER BY time_period`,
-                [start, end]
-            );
-            return r.rows;
+            return getVisitorFlowDataset(start, end, 'day');
         });
     }
     if (metrics.includes('sightings_trend')) {
@@ -395,11 +663,7 @@ router.post('/reports/build', async (req, res) => {
     }
     if (metrics.includes('satisfaction')) {
         await trySection('satisfaction', async () => {
-            const r = await pool.query(
-                `SELECT AVG(rating)::float AS avg_rating, COUNT(*) AS n
-                 FROM tour_participants WHERE rating IS NOT NULL`
-            );
-            return r.rows[0];
+            return getSatisfactionDataset(start, end);
         });
     }
     if (metrics.includes('popular_content')) {
@@ -414,6 +678,28 @@ router.post('/reports/build', async (req, res) => {
             );
             return r.rows;
         });
+    }
+
+    if (await tableExists('park_performance_reports')) {
+        const reportType = req.body?.report_type || 'custom';
+        const persisted = await pool.query(
+            `INSERT INTO park_performance_reports (
+                report_type, period_start, period_end, metrics, insights, recommendations, generated_by, user_id
+            ) VALUES (
+                $1, $2::date, $3::date, $4::jsonb, $5::jsonb, $6::jsonb, $7, $7
+            ) RETURNING report_id, generated_at`,
+            [
+                reportType,
+                start.slice(0, 10),
+                end.slice(0, 10),
+                JSON.stringify(out.sections),
+                JSON.stringify({ section_errors: out.section_errors }),
+                JSON.stringify({ notes: ['Generated via analytics custom report builder'] }),
+                req.user.user_id
+            ]
+        );
+        out.report_id = persisted.rows[0].report_id;
+        out.generated_at = persisted.rows[0].generated_at;
     }
 
     return res.json(out);
@@ -520,6 +806,163 @@ router.post('/reports/schedules/:id/run', async (req, res) => {
     } catch (error) {
         console.error('run schedule', error);
         res.status(500).json({ error: 'Failed to execute schedule manually' });
+    }
+});
+
+router.get('/reports/history', async (req, res) => {
+    try {
+        if (!(await tableExists('park_performance_reports'))) {
+            return res.json({ reports: [] });
+        }
+        const r = await pool.query(
+            `SELECT report_id, report_type, period_start, period_end, generated_at, generated_by
+             FROM park_performance_reports
+             ORDER BY generated_at DESC
+             LIMIT 50`
+        );
+        return res.json({ reports: r.rows });
+    } catch (error) {
+        console.error('report history', error);
+        res.status(500).json({ error: 'Failed to load report history' });
+    }
+});
+
+router.get('/reports/export', [
+    query('metrics').optional(),
+    query('start').optional().isISO8601(),
+    query('end').optional().isISO8601(),
+    query('format').optional().isIn(['json', 'csv'])
+], async (req, res) => {
+    try {
+        const metrics = parseMetrics(req.query.metrics);
+        const start = toIsoDateTime(req.query.start, new Date(Date.now() - 7 * 86400000).toISOString());
+        const end = toIsoDateTime(req.query.end, new Date().toISOString());
+        const format = ALLOWED_EXPORT_FORMATS.has(String(req.query.format || '').toLowerCase())
+            ? String(req.query.format).toLowerCase()
+            : 'json';
+        const exportPayload = {
+            generated_at: new Date().toISOString(),
+            range: { start, end },
+            metrics: metrics.length ? metrics : ['visitor_flow']
+        };
+        if (exportPayload.metrics.includes('visitor_flow')) {
+            const flow = await getVisitorFlowDataset(start, end, 'day');
+            exportPayload.visitor_flow = flow.timeline;
+        }
+        if (exportPayload.metrics.includes('sightings_trend')) {
+            const trends = await pool.query(
+                `SELECT DATE_TRUNC('day', timestamp) AS day, COUNT(*)::int AS sightings
+                 FROM sightings
+                 WHERE timestamp BETWEEN $1 AND $2
+                 GROUP BY DATE_TRUNC('day', timestamp)
+                 ORDER BY day`,
+                [start, end]
+            );
+            exportPayload.sightings_trend = trends.rows;
+        }
+        if (exportPayload.metrics.includes('satisfaction')) {
+            exportPayload.satisfaction = await getSatisfactionDataset(start, end);
+        }
+        if (format === 'csv') {
+            const csvRows = [];
+            Object.entries(exportPayload).forEach(([key, value]) => {
+                if (Array.isArray(value)) {
+                    value.forEach((row) => csvRows.push({ metric: key, ...row }));
+                }
+            });
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', 'attachment; filename="analytics-export.csv"');
+            return res.status(200).send(rowsToCsv(csvRows));
+        }
+        return res.json(exportPayload);
+    } catch (error) {
+        console.error('report export', error);
+        res.status(500).json({ error: 'Failed to export analytics data' });
+    }
+});
+
+router.get('/dashboard', [
+    query('start').optional().isISO8601(),
+    query('end').optional().isISO8601(),
+    query('date').optional().isDate()
+], async (req, res) => {
+    try {
+        const start = toIsoDateTime(req.query.start, new Date(Date.now() - 30 * 86400000).toISOString());
+        const end = toIsoDateTime(req.query.end, new Date().toISOString());
+        const date = toIsoDate(req.query.date, new Date().toISOString().slice(0, 10));
+
+        const [visitorFlow, congestion, peakTimes, popularContent, demographics, sightingsTrends, satisfaction, anomalies] = await Promise.all([
+            getVisitorFlowDataset(start, end, 'day'),
+            getCongestionPredictions(date, null),
+            pool.query(
+                `SELECT EXTRACT(HOUR FROM arrival_time)::int AS hour,
+                        COUNT(*)::int AS visitors
+                 FROM visitor_flow
+                 WHERE arrival_time BETWEEN $1 AND $2
+                 GROUP BY EXTRACT(HOUR FROM arrival_time)
+                 ORDER BY visitors DESC
+                 LIMIT 24`,
+                [start, end]
+            ),
+            pool.query(
+                `SELECT tc.title_en AS name, COUNT(tp.touristprog_id)::int AS view_count
+                 FROM tour_content tc
+                 LEFT JOIN tourist_progress tp ON tp.content_id = tc.content_id
+                 GROUP BY tc.content_id, tc.title_en
+                 ORDER BY view_count DESC
+                 LIMIT 8`
+            ),
+            pool.query(
+                `SELECT nationality, COUNT(*)::int AS count
+                 FROM tourists
+                 WHERE nationality IS NOT NULL
+                 GROUP BY nationality
+                 ORDER BY count DESC
+                 LIMIT 8`
+            ),
+            pool.query(
+                `SELECT DATE_TRUNC('day', timestamp) AS day, COUNT(*)::int AS sightings
+                 FROM sightings
+                 WHERE timestamp BETWEEN $1 AND $2
+                 GROUP BY DATE_TRUNC('day', timestamp)
+                 ORDER BY day`,
+                [start, end]
+            ),
+            getSatisfactionDataset(start, end),
+            pool.query(
+                `SELECT DATE_TRUNC('day', timestamp) AS day, COUNT(*)::int AS cnt
+                 FROM sightings
+                 WHERE timestamp > NOW() - INTERVAL '90 days'
+                 GROUP BY DATE_TRUNC('day', timestamp)
+                 ORDER BY day`
+            )
+        ]);
+
+        const anomalyCounts = anomalies.rows.map((row) => Number(row.cnt));
+        const anomalyMean = mean(anomalyCounts);
+        const anomalyStd = stddev(anomalyCounts, anomalyMean) || 1;
+        const anomalyFlags = anomalies.rows
+            .map((row) => {
+                const z = (Number(row.cnt) - anomalyMean) / anomalyStd;
+                return { day: row.day, count: row.cnt, zscore: Number(z.toFixed(2)), anomaly: Math.abs(z) >= 2.5 };
+            })
+            .filter((row) => row.anomaly);
+
+        return res.json({
+            range: { start, end },
+            prediction_date: date,
+            visitor_flow: visitorFlow,
+            congestion_forecast: congestion,
+            peak_time_chart: peakTimes.rows,
+            popular_content_rankings: popularContent.rows,
+            demographics: demographics.rows,
+            sightings_trends: sightingsTrends.rows,
+            satisfaction_metrics: satisfaction,
+            anomaly_alerts: anomalyFlags
+        });
+    } catch (error) {
+        console.error('dashboard analytics', error);
+        res.status(500).json({ error: 'Failed to build dashboard analytics' });
     }
 });
 

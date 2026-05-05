@@ -8,7 +8,7 @@ const { pool } = require('../config/database');
 const { REQUIREMENTS } = require('../config/requirements');
 const { authenticateJWT } = require('../middleware/auth');
 const { logger } = require('../utils/logger');
-const { sendPasswordResetEmail } = require('../services/emailService');
+const { sendPasswordResetEmail, sendActivityNotificationEmail } = require('../services/emailService');
 const refreshTokenService = require('../services/refreshTokenService');
 const crypto = require('crypto');
 
@@ -191,6 +191,13 @@ router.post('/register', [
                 [user.user_id, `ITM-${Date.now()}`, 'admin']
             );
         }
+
+        sendActivityNotificationEmail(
+            user.email,
+            user.username,
+            'Your SIGTS account was created',
+            'Your account has been registered successfully. If this was not you, contact support immediately.'
+        ).catch((err) => logger.error('Registration activity email failed:', err.message));
 
         res.status(201).json({
             success: true,
@@ -390,6 +397,12 @@ router.post('/forgot-password', [
             );
 
             await sendPasswordResetEmail(user.email, rawToken, user.username);
+            sendActivityNotificationEmail(
+                user.email,
+                user.username,
+                'Password reset requested',
+                'We received a password reset request for your account. If this was not you, secure your account immediately.'
+            ).catch((err) => logger.error('Password-reset-request activity email failed:', err.message));
         }
 
         return res.json({
@@ -434,6 +447,13 @@ router.post('/reset-password', [
 
         const reset = resetResult.rows[0];
         const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
+        const userResult = await pool.query(
+            `SELECT email, username
+             FROM users
+             WHERE user_id = $1
+             LIMIT 1`,
+            [reset.user_id]
+        );
 
         await pool.query(
             `UPDATE users
@@ -448,6 +468,16 @@ router.post('/reset-password', [
              WHERE reset_id = $1`,
             [reset.reset_id]
         );
+
+        if (userResult.rows.length > 0) {
+            const user = userResult.rows[0];
+            sendActivityNotificationEmail(
+                user.email,
+                user.username,
+                'Your password was changed',
+                'Your SIGTS password has been reset successfully. If you did not perform this action, contact support immediately.'
+            ).catch((err) => logger.error('Password-reset-complete activity email failed:', err.message));
+        }
 
         return res.json({ success: true, message: 'Password has been reset successfully' });
     } catch (error) {
@@ -882,10 +912,28 @@ router.post('/guest', [
 // =====================================================
 router.post('/deactivate', authenticateJWT, async (req, res) => {
     try {
+        const userResult = await pool.query(
+            `SELECT email, username
+             FROM users
+             WHERE user_id = $1
+             LIMIT 1`,
+            [req.user.user_id]
+        );
+
         await pool.query(
             `UPDATE users SET is_active = false WHERE user_id = $1`,
             [req.user.user_id]
         );
+
+        if (userResult.rows.length > 0) {
+            const user = userResult.rows[0];
+            sendActivityNotificationEmail(
+                user.email,
+                user.username,
+                'Your account was deactivated',
+                'Your SIGTS account has been deactivated. If this was not initiated by you, contact the IT manager immediately.'
+            ).catch((err) => logger.error('Account-deactivate activity email failed:', err.message));
+        }
         return res.json({ success: true, message: 'Account deactivated successfully' });
     } catch (error) {
         logger.error('Account deactivation failed:', error.message);

@@ -810,7 +810,11 @@ class TourGuideManager {
     }
 
     async getGuideDashboard() {
-        const tours = await API.getToursForGuide();
+        const [tours, shiftStatus, performance] = await Promise.all([
+            API.getToursForGuide(),
+            API.getGuideShiftStatus(),
+            API.getGuidePerformance()
+        ]);
         const myTours = Array.isArray(tours) ? tours : [];
         const todayStr = new Date().toISOString().split('T')[0];
         
@@ -818,20 +822,19 @@ class TourGuideManager {
         const completed = myTours.filter(t => t.status === 'completed');
         const today = myTours.filter(t => t.scheduled_start?.split('T')[0] === todayStr);
         
-        const shifts = JSON.parse(localStorage.getItem('guide_shifts') || '[]');
-        const activeShift = shifts.find(s => s.shift_date === todayStr && s.status === 'active');
+        const activeShift = shiftStatus?.shift?.status === 'active' ? shiftStatus.shift : null;
         
         return { upcoming, today, completed, activeShift, stats: {
             totalTours: myTours.length,
             completedTours: completed.length,
             totalGuests: myTours.reduce((sum, t) => sum + (t.group_size || 0), 0),
-            averageRating: this.getAverageRating(guideId)
+            averageRating: Number(performance?.average_rating || this.getAverageRating()).toFixed(1)
         } };
     }
 
-    getAverageRating(guideId) {
+    getAverageRating() {
         const feedback = JSON.parse(localStorage.getItem('feedback') || '[]');
-        const guideFeedback = feedback.filter(f => f.guide_id === guideId);
+        const guideFeedback = feedback.filter(f => f.category === 'guide');
         if (guideFeedback.length === 0) return 0;
         return (guideFeedback.reduce((a, f) => a + (f.rating || 0), 0) / guideFeedback.length).toFixed(1);
     }
@@ -909,27 +912,15 @@ class TourGuideManager {
     }
 
     async clockIn() {
-        const shifts = JSON.parse(localStorage.getItem('guide_shifts') || '[]');
-        const today = new Date().toISOString().split('T')[0];
-        if (shifts.find(s => s.shift_date === today && s.status === 'active')) {
-            return { success: false, error: 'Already clocked in' };
-        }
-        const newShift = { shift_id: Date.now(), shift_date: today, start_time: new Date().toISOString(), status: 'active' };
-        shifts.push(newShift);
-        localStorage.setItem('guide_shifts', JSON.stringify(shifts));
-        return { success: true, shift: newShift };
+        const result = await API.clockInGuideShift();
+        if (result?.success) return { success: true, shift: result.shift };
+        return { success: false, error: result?.error || 'Already clocked in' };
     }
 
     async clockOut() {
-        const shifts = JSON.parse(localStorage.getItem('guide_shifts') || '[]');
-        const today = new Date().toISOString().split('T')[0];
-        const shiftIndex = shifts.findIndex(s => s.shift_date === today && s.status === 'active');
-        if (shiftIndex === -1) return { success: false, error: 'Not clocked in' };
-        shifts[shiftIndex].end_time = new Date().toISOString();
-        shifts[shiftIndex].status = 'completed';
-        localStorage.setItem('guide_shifts', JSON.stringify(shifts));
-        const hoursWorked = (new Date(shifts[shiftIndex].end_time) - new Date(shifts[shiftIndex].start_time)) / (1000 * 60 * 60);
-        return { success: true, hoursWorked: hoursWorked.toFixed(2) };
+        const result = await API.clockOutGuideShift();
+        if (result?.success) return { success: true, hoursWorked: Number(result.worked_hours || 0).toFixed(2) };
+        return { success: false, error: result?.error || 'Not clocked in' };
     }
 
     async addLiveNote(noteText) {
@@ -1874,34 +1865,38 @@ class IntranetManager {
 // =====================================================
 class ITManagerAPI {
     async getSystemMetrics() {
-        const result = await API.request('/admin/stats');
-        const hrStats = await Intranet.getHRStats();
-        const usersSnapshot = await API.request('/admin/users?limit=1&offset=0');
-        const liveTotalUsers = Number(usersSnapshot?.total || 0);
-        if (result) {
-            return {
-                activeUsers: Number(result.totalUsers || liveTotalUsers || 0),
-                syncQueueSize: OfflineSync.getPendingCount(),
-                storageUsed: Content.getOfflineStorageSize(),
-                totalSightings: result.pendingApprovals || 0,
-                averageRating: result.avgRating || 0,
-                totalStaff: hrStats.totalStaff,
-                guidesOnDuty: hrStats.guidesOnDuty,
-                inventoryItems: (await Intranet.getInventory()).length,
-                activeTours: result.activeTours || 0
-            };
-        }
+        const settled = await Promise.allSettled([
+            API.request('/admin/stats'),
+            Intranet.getHRStats(),
+            API.request('/admin/users?limit=1&offset=0'),
+            Intranet.getInventory(),
+            API.getSightingStats(null, 3650)
+        ]);
+        const valueOf = (i, fallback) => (settled[i].status === 'fulfilled' && settled[i].value != null ? settled[i].value : fallback);
 
-        const sightings = JSON.parse(localStorage.getItem('sightings') || '[]');
+        const adminStats = valueOf(0, {});
+        const hrStats = valueOf(1, { totalStaff: 0, guidesOnDuty: 0, itStaff: 0 });
+        const usersSnapshot = valueOf(2, {});
+        const inventory = valueOf(3, []);
+        const sightingStats = valueOf(4, {});
+        const liveTotalUsers = Number(usersSnapshot?.total || 0);
+
+        const totalSightings = Number(
+            sightingStats?.totalSightings ??
+            sightingStats?.total ??
+            0
+        );
+
         return {
-            activeUsers: liveTotalUsers,
+            activeUsers: Number(adminStats?.totalUsers || liveTotalUsers || 0),
             syncQueueSize: OfflineSync.getPendingCount(),
             storageUsed: Content.getOfflineStorageSize(),
-            totalSightings: sightings.length,
-            averageRating: 4.5,
-            totalStaff: hrStats.totalStaff,
-            guidesOnDuty: hrStats.guidesOnDuty,
-            inventoryItems: (await Intranet.getInventory()).length
+            totalSightings,
+            averageRating: Number(adminStats?.avgRating || 0),
+            totalStaff: Number(hrStats?.totalStaff || 0),
+            guidesOnDuty: Number(hrStats?.guidesOnDuty || 0),
+            inventoryItems: Array.isArray(inventory) ? inventory.length : 0,
+            activeTours: Number(adminStats?.activeTours || 0)
         };
     }
     
@@ -1949,8 +1944,10 @@ class ITManagerAPI {
 
         // Use allSettled so one slow/broken endpoint doesn't blank the whole dashboard.
         const settled = await Promise.allSettled([
-            API.getVisitorFlowAnalytics(startIso, endIso, 'day'),
-            API.getCongestionPredictions(today),
+            API.getAnalyticsDashboard(startIso, endIso, today),
+            API.getPeakTimes(startIso, endIso),
+            API.getResourceAllocation(today),
+            API.getSightingsTrends(startIso, endIso),
             API.getPopularContent(6),
             API.getSatisfactionAnalytics(),
             API.getDemographicsAnalytics()
@@ -1962,26 +1959,43 @@ class ITManagerAPI {
             }
         });
 
-        const visitorFlow = valueOf(0);
-        const congestion = valueOf(1);
-        const popular = valueOf(2);
-        const satisfaction = valueOf(3);
-        const demographics = valueOf(4);
+        const dashboard = valueOf(0);
+        const peakTimes = valueOf(1);
+        const resourceAllocation = valueOf(2);
+        const sightingsTrends = valueOf(3);
+        const popular = valueOf(4);
+        const satisfaction = valueOf(5);
+        const demographics = valueOf(6);
+        const visitorFlow = dashboard?.visitor_flow || {};
+        const congestion = {
+            predictions: dashboard?.congestion_forecast || [],
+            recommendations: (resourceAllocation?.recommendations || [])
+                .slice(0, 6)
+                .map((r) => {
+                    const staff = r.suggested_staffing || {};
+                    return `${r.location_name || 'Location'} @ ${r.hour}:00 - guides ${staff.guides || 1}, rangers ${staff.rangers || 1}, gate ${staff.gate_staff || 1}`;
+                })
+        };
 
         return {
             visitorFlow: visitorFlow?.timeline || [],
-            topLocations: visitorFlow?.top_locations || [],
+            topLocations: visitorFlow?.popular_routes || visitorFlow?.top_locations || [],
             congestionPredictions: congestion?.predictions || [],
             congestionRecommendations: congestion?.recommendations || [],
-            popularContent: popular || [],
-            satisfaction: satisfaction || {},
-            demographics: demographics || {}
+            popularContent: (dashboard?.popular_content_rankings || popular || []),
+            satisfaction: (dashboard?.satisfaction_metrics || satisfaction || {}),
+            demographics: (dashboard?.demographics ? { user_types: dashboard.demographics } : demographics || {}),
+            peakTimes: peakTimes?.by_hour || dashboard?.peak_time_chart || [],
+            resourceAllocation: resourceAllocation?.recommendations || [],
+            sightingsTrends: sightingsTrends?.trend || dashboard?.sightings_trends || [],
+            anomalyAlerts: dashboard?.anomaly_alerts || [],
+            dashboardRange: dashboard?.range || { start: startIso, end: endIso }
         };
     }
 
     async getLiveOperations() {
         const settled = await Promise.allSettled([
-            Intranet.getPeers(),
+            API.getAdminActiveUsers(5),
             Intranet.getIntranetStatus(),
             API.request('/sync/status')
         ]);
@@ -1992,7 +2006,7 @@ class ITManagerAPI {
             }
         });
         return {
-            peers: valueOf(0) || [],
+            peers: (valueOf(0)?.users || []),
             intranetStatus: valueOf(1) || {},
             syncStatus: valueOf(2) || {}
         };

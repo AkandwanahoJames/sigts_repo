@@ -108,6 +108,59 @@ class APIService {
         }
     }
 
+    async requestRaw(endpoint, options = {}) {
+        const token = this.getToken();
+        const headers = {
+            ...options.headers
+        };
+
+        if (!(options.body instanceof FormData) && !headers['Content-Type']) {
+            headers['Content-Type'] = 'application/json';
+        }
+        if (token) {
+            headers.Authorization = `Bearer ${token}`;
+        }
+        const coords = this.getLiveCoordinates();
+        if (coords && !headers['x-user-lat'] && !headers['x-user-lng']) {
+            headers['x-user-lat'] = String(coords.lat);
+            headers['x-user-lng'] = String(coords.lng);
+        }
+
+        const opts = { ...options };
+        delete opts.timeoutMs;
+        const isFormData = opts.body instanceof FormData;
+        let timeoutMs = options.timeoutMs;
+        if (timeoutMs === undefined) {
+            timeoutMs = isFormData ? 0 : 15000;
+        }
+
+        let controller;
+        let timer;
+        if (timeoutMs > 0 && typeof AbortController !== 'undefined') {
+            controller = new AbortController();
+            timer = window.setTimeout(() => controller.abort(), timeoutMs);
+        }
+
+        try {
+            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                ...opts,
+                headers,
+                ...(controller ? { signal: controller.signal } : {})
+            });
+            const text = await response.text();
+            return { ok: response.ok, status: response.status, headers: response.headers, text };
+        } catch (error) {
+            if (error?.name === 'AbortError') {
+                console.warn(`API timeout (${endpoint}) after ${timeoutMs}ms`);
+            } else {
+                console.error(`API Error (${endpoint}):`, error);
+            }
+            return { ok: false, status: 0, headers: null, text: '', error };
+        } finally {
+            if (timer !== undefined) window.clearTimeout(timer);
+        }
+    }
+
     // Sightings endpoints
     async getRecentSightings(limit = 20) {
         const result = await this.request(`/sightings/recent?limit=${limit}`);
@@ -290,6 +343,13 @@ class APIService {
         return tours.filter(t => t.guide_id === guideId);
     }
 
+    async getTourScheduleView(mode = 'daily', anchor = '') {
+        const qs = new URLSearchParams();
+        if (mode) qs.set('mode', mode);
+        if (anchor) qs.set('anchor', anchor);
+        return this.request(`/tours/schedule-view?${qs.toString()}`);
+    }
+
     async startTour(tourId, location) {
         const result = await this.request(`/tours/${tourId}/start`, {
             method: 'PUT',
@@ -350,6 +410,84 @@ class APIService {
         return !!result?.success;
     }
 
+    async getTourPreparation(tourId) {
+        return this.request(`/tours/${encodeURIComponent(tourId)}/preparation`);
+    }
+
+    async getTourGuestList(tourId) {
+        return this.request(`/tours/${encodeURIComponent(tourId)}/guest-list`);
+    }
+
+    async getGuestProfileForGuide(touristId) {
+        return this.request(`/tours/guests/${encodeURIComponent(touristId)}/profile`);
+    }
+
+    async getActiveTourMode(tourId) {
+        return this.request(`/tours/${encodeURIComponent(tourId)}/active-mode`);
+    }
+
+    async getTourCompletionReport(tourId) {
+        return this.request(`/tours/${encodeURIComponent(tourId)}/completion-report`);
+    }
+
+    async getGuideShiftStatus() {
+        return this.request('/tours/guide/shifts/status');
+    }
+
+    async clockInGuideShift() {
+        return this.request('/tours/guide/shifts/clock-in', { method: 'POST', body: JSON.stringify({}) });
+    }
+
+    async clockOutGuideShift() {
+        return this.request('/tours/guide/shifts/clock-out', { method: 'POST', body: JSON.stringify({}) });
+    }
+
+    async getGuideProfile() {
+        return this.request('/tours/guide/profile');
+    }
+
+    async getGuidePerformance(start = '', end = '') {
+        const qs = new URLSearchParams();
+        if (start) qs.set('start', start);
+        if (end) qs.set('end', end);
+        return this.request(`/tours/guide/performance?${qs.toString()}`);
+    }
+
+    async getGuideEmergencyContacts() {
+        return this.request('/tours/guide/emergency-contacts');
+    }
+
+    async listTourGuidesForAssignment() {
+        return this.request('/tours/guides');
+    }
+
+    async listTourRoutesForAssignment() {
+        return this.request('/tours/routes');
+    }
+
+    async createTourAssignment(payload) {
+        return this.request('/tours/assignments', {
+            method: 'POST',
+            body: JSON.stringify(payload || {})
+        });
+    }
+
+    async createWeeklyTourAssignments(payload) {
+        return this.request('/tours/assignments/weekly', {
+            method: 'POST',
+            body: JSON.stringify(payload || {})
+        });
+    }
+
+    async listTourAssignments({ start = '', end = '', guide_user_id = '', status = '' } = {}) {
+        const qs = new URLSearchParams();
+        if (start) qs.set('start', start);
+        if (end) qs.set('end', end);
+        if (guide_user_id) qs.set('guide_user_id', guide_user_id);
+        if (status) qs.set('status', status);
+        return this.request(`/tours/assignments?${qs.toString()}`);
+    }
+
     // Analytics endpoints (IT Manager)
     async getVisitorFlowAnalytics(start, end, interval = 'day') {
         const result = await this.request(`/analytics/visitor-flow?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&interval=${encodeURIComponent(interval)}`);
@@ -358,6 +496,41 @@ class APIService {
 
     async getCongestionPredictions(date) {
         const result = await this.request(`/analytics/predictions/congestion?date=${encodeURIComponent(date)}`);
+        return result || null;
+    }
+
+    async getAnalyticsDashboard(start, end, date) {
+        const qs = new URLSearchParams();
+        if (start) qs.set('start', start);
+        if (end) qs.set('end', end);
+        if (date) qs.set('date', date);
+        const suffix = qs.toString() ? `?${qs.toString()}` : '';
+        const result = await this.request(`/analytics/dashboard${suffix}`);
+        return result || null;
+    }
+
+    async getPeakTimes(start, end) {
+        const qs = new URLSearchParams();
+        if (start) qs.set('start', start);
+        if (end) qs.set('end', end);
+        const result = await this.request(`/analytics/peak-times?${qs.toString()}`);
+        return result || null;
+    }
+
+    async getResourceAllocation(date, locationId = '') {
+        const qs = new URLSearchParams();
+        if (date) qs.set('date', date);
+        if (locationId) qs.set('location_id', locationId);
+        const result = await this.request(`/analytics/resource-allocation?${qs.toString()}`);
+        return result || null;
+    }
+
+    async getSightingsTrends(start, end, animalId = '') {
+        const qs = new URLSearchParams();
+        if (start) qs.set('start', start);
+        if (end) qs.set('end', end);
+        if (animalId) qs.set('animal_id', animalId);
+        const result = await this.request(`/analytics/sightings-trends?${qs.toString()}`);
         return result || null;
     }
 
@@ -375,6 +548,11 @@ class APIService {
     async getDemographicsAnalytics() {
         const result = await this.request('/analytics/demographics');
         return result || null;
+    }
+
+    async getAdminActiveUsers(windowMinutes = 5) {
+        const result = await this.request(`/admin/active-users?window_minutes=${encodeURIComponent(windowMinutes)}`);
+        return result || { count: 0, users: [] };
     }
 
     // Sync queue
@@ -508,6 +686,68 @@ class APIService {
         return this.request('/analytics/reports/build', {
             method: 'POST',
             body: JSON.stringify({ metrics })
+        });
+    }
+
+    async buildAnalyticsReportAdvanced(metrics = [], start = '', end = '', reportType = 'custom') {
+        return this.request('/analytics/reports/build', {
+            method: 'POST',
+            body: JSON.stringify({
+                metrics,
+                start: start || undefined,
+                end: end || undefined,
+                report_type: reportType
+            })
+        });
+    }
+
+    async listReportSchedules() {
+        return this.request('/analytics/reports/schedules');
+    }
+
+    async createReportSchedule(payload) {
+        return this.request('/analytics/reports/schedules', {
+            method: 'POST',
+            body: JSON.stringify(payload || {})
+        });
+    }
+
+    async runReportSchedule(scheduleId) {
+        return this.request(`/analytics/reports/schedules/${encodeURIComponent(scheduleId)}/run`, {
+            method: 'POST'
+        });
+    }
+
+    async getAnalyticsReportHistory() {
+        return this.request('/analytics/reports/history');
+    }
+
+    async exportAnalyticsData(metrics = [], start = '', end = '', format = 'json') {
+        const qs = new URLSearchParams();
+        if (metrics?.length) qs.set('metrics', metrics.join(','));
+        if (start) qs.set('start', start);
+        if (end) qs.set('end', end);
+        if (format) qs.set('format', format);
+        return this.request(`/analytics/reports/export?${qs.toString()}`);
+    }
+
+    async exportAnalyticsDataRaw(metrics = [], start = '', end = '', format = 'csv') {
+        const qs = new URLSearchParams();
+        if (metrics?.length) qs.set('metrics', metrics.join(','));
+        if (start) qs.set('start', start);
+        if (end) qs.set('end', end);
+        if (format) qs.set('format', format);
+        return this.requestRaw(`/analytics/reports/export?${qs.toString()}`);
+    }
+
+    async listRetrainJobs() {
+        return this.request('/analytics/models/retrain-job');
+    }
+
+    async completeRetrainJob(jobId, status, message = '') {
+        return this.request(`/analytics/models/retrain-job/${encodeURIComponent(jobId)}/complete`, {
+            method: 'POST',
+            body: JSON.stringify({ status, message: message || undefined })
         });
     }
 

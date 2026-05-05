@@ -78,6 +78,7 @@ function icon(name, className = '') {
         bell: '<path d="M15 17H5l1.5-2v-4a5.5 5.5 0 1 1 11 0v4L19 17z"/><path d="M10 19a2 2 0 0 0 4 0"/>',
         info: '<circle cx="12" cy="12" r="9"/><path d="M12 10v6"/><circle cx="12" cy="7" r="1"/>',
         target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1.5"/>',
+        feather: '<path d="M20 4c-6 0-11 5-11 11v5h5c6 0 11-5 11-11V4h-5z"/><path d="M7 17l10-10"/><path d="M12 12l3 3"/>',
         leaf: '<path d="M5 15c6-8 13-8 14-8 0 8-5 12-10 12-2 0-3-.8-4-4z"/><path d="M7 18c3-4 7-8 12-11"/>',
         grid: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
         sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1l2.1-2.1M17 7l2.1-2.1"/>',
@@ -143,7 +144,7 @@ function getRecommendationPhotoClass(item = {}, index = 0) {
 }
 
 function getPageTitle(view) {
-    const titles = { dashboard: 'Dashboard', animals: 'Animals', map: 'Map', culture: 'Culture', sightings: 'Sightings', profile: 'Profile', info: 'Info', ai_chat: 'Tour help', guide_dashboard: 'Guide Dashboard', it_dashboard: 'Admin Dashboard', intranet: 'Intranet Hub' };
+    const titles = { dashboard: 'Dashboard', animals: 'Animals', map: 'Map', culture: 'Culture', sightings: 'Sightings', profile: 'Profile', info: 'Info', ai_chat: "Let's Chat", guide_dashboard: 'Guide Dashboard', it_dashboard: 'Admin Dashboard', it_tour_assignments: 'Tour Session Assignments', intranet: 'Intranet Hub' };
     return titles[view] || 'SIGTS Platform';
 }
 
@@ -152,6 +153,7 @@ function getPageSubtitle(view) {
         dashboard: "Welcome back, explore today's recommendations.",
         guide_dashboard: 'Track tours, guests, and active shifts.',
         it_dashboard: 'Monitor users, sync status, and platform health.',
+        it_tour_assignments: 'Assign and manage guide tour sessions.',
         intranet: 'Manage staff communication and operations.'
     };
     return subtitles[view] || 'Role-based access with secure operational controls.';
@@ -171,6 +173,7 @@ const APP_VIEWS = new Set([
     'ai_chat',
     'guide_dashboard',
     'it_dashboard',
+    'it_tour_assignments',
     'intranet'
 ]);
 
@@ -193,7 +196,7 @@ const SHARED_APP_VIEWS = new Set([
 /** Whether the given role may open `view` (excludes login/register). */
 function canUserAccessView(role, view) {
     if (PUBLIC_VIEWS.has(view)) return true;
-    if (view === 'it_dashboard' || view === 'intranet') return role === 'it_manager';
+    if (view === 'it_dashboard' || view === 'it_tour_assignments' || view === 'intranet') return role === 'it_manager';
     if (view === 'guide_dashboard') return role === 'guide';
     return SHARED_APP_VIEWS.has(view);
 }
@@ -425,13 +428,14 @@ function renderMainLayout(content) {
         { id: 'animals', icon: 'paw', label: 'Animals' },
         { id: 'map', icon: 'map', label: 'Map' },
         { id: 'culture', icon: 'book', label: 'Culture' },
-        { id: 'ai_chat', icon: 'target', label: 'Tour help' },
+        { id: 'ai_chat', icon: 'feather', label: "Let's Chat" },
         { id: 'sightings', icon: 'camera', label: 'Sightings' },
         { id: 'profile', icon: 'user', label: 'Profile' }
     ];
     if (isGuide) navItems.push({ id: 'guide_dashboard', icon: 'ticket', label: 'Guide' });
     if (isITManager) {
         navItems.push({ id: 'it_dashboard', icon: 'chart', label: 'Admin' });
+        navItems.push({ id: 'it_tour_assignments', icon: 'clock', label: 'Assignments' });
         navItems.push({ id: 'intranet', icon: 'building', label: 'Intranet' });
     }
     
@@ -630,7 +634,7 @@ function renderAnimalSpeciesCardHtml(animal) {
                 <p class="animal-teaser">${teaser}</p>
                 <span class="animal-status status-${escapeHtml(status.replace(/_/g, '-'))}">${statusLabel}</span>
                 <div class="animal-card-actions">
-                    <button type="button" class="small-btn" onclick="event.stopPropagation(); navigateToAIWithPrompt(${JSON.stringify(aiPrompt)});">${icon('target', 'icon-sm')} Tour help</button>
+                    <button type="button" class="small-btn" onclick="event.stopPropagation(); navigateToAIWithPrompt(${JSON.stringify(aiPrompt)});">${icon('feather', 'icon-sm')} Let's Chat</button>
                     <button type="button" class="small-btn ghost-btn" onclick="event.stopPropagation(); submitContentHelpfulness('animal', '${id}', ${JSON.stringify(animal.name || '')});">${icon('target', 'icon-sm')} Helpful?</button>
                 </div>
             </div>
@@ -1833,7 +1837,7 @@ async function renderCultureContent() {
                 <div class="story-title">${escapeHtml(featured.title_en || featured.title_local || 'Untitled story')}</div>
                 <div class="animal-teaser">${escapeHtml(truncateSnippet(featured.narrative_en || (featured.duration ? `About ${featured.duration}-minute listen.` : '') || 'Tap for full stewardship notes.', 140))}</div>
                 <div class="animal-card-actions">
-                    <button type="button" class="small-btn" onclick="event.stopPropagation(); navigateToAIWithPrompt(${JSON.stringify(culturalAIPromptFromRecord(featured))});">${icon('target', 'icon-sm')} Tour help</button>
+                    <button type="button" class="small-btn" onclick="event.stopPropagation(); navigateToAIWithPrompt(${JSON.stringify(culturalAIPromptFromRecord(featured))});">${icon('feather', 'icon-sm')} Let's Chat</button>
                     <button type="button" class="small-btn ghost-btn" onclick="event.stopPropagation(); submitContentHelpfulness('cultural', '${featId}', '${escapeHtml(featured.title_en || featured.title_local || 'story')}');">${icon('target', 'icon-sm')} Helpful?</button>
                 </div>
                 <div class="story-storyteller">${escapeHtml(featured.storyteller_name || 'Unknown storyteller')}${featured.duration ? ` • ${featured.duration} min` : ''}</div>
@@ -1854,7 +1858,7 @@ async function renderCultureContent() {
                 <div class="story-title">${escapeHtml(story.title_en || story.title_local || 'Untitled story')}</div>
                 <div class="animal-teaser">${escapeHtml(truncateSnippet(story.narrative_en || story.cultural_significance || story.verification_badge || 'Tap for narrative + etiquette prompts.', 120))}</div>
                 <div class="animal-card-actions">
-                    <button type="button" class="small-btn" onclick="event.stopPropagation(); navigateToAIWithPrompt(${JSON.stringify(culturalAIPromptFromRecord(story))});">${icon('target', 'icon-sm')} Tour help</button>
+                    <button type="button" class="small-btn" onclick="event.stopPropagation(); navigateToAIWithPrompt(${JSON.stringify(culturalAIPromptFromRecord(story))});">${icon('feather', 'icon-sm')} Let's Chat</button>
                     <button type="button" class="small-btn ghost-btn" onclick="event.stopPropagation(); submitContentHelpfulness('cultural', '${sid}', '${escapeHtml(story.title_en || story.title_local || 'story')}');">${icon('target', 'icon-sm')} Helpful?</button>
                 </div>
             </div>
@@ -1950,7 +1954,7 @@ function renderInfoContent() {
 
 function renderAIChatContent() {
     return `<div class="section-card ai-chat-panel">
-        <div class="section-header"><h3>${icon('target', 'icon-sm')} Tour help</h3></div>
+        <div class="section-header"><h3>${icon('feather', 'icon-sm')} Let's Chat</h3></div>
         <p id="aiPrefillBanner" class="ai-prefill-banner" aria-live="polite">Animals, Culture, or Info may drop starter text here. Always edit before sending.</p>
         <div id="aiChatMessages" class="ai-chat-messages" role="log" aria-relevant="additions text" aria-live="polite">
             <div class="rec-card ai-chat-message">
@@ -1972,7 +1976,11 @@ async function renderGuideDashboard() {
     const guideManager = getGuideOpsManager();
     const settled = await Promise.allSettled([
         guideManager.getGuideDashboard(),
-        Content.getAnimals()
+        Content.getAnimals(),
+        API.getTourScheduleView('weekly', new Date().toISOString()),
+        API.getGuideProfile(),
+        API.getGuidePerformance(),
+        API.getGuideEmergencyContacts()
     ]);
     settled.forEach((r, i) => {
         if (r.status === 'rejected') {
@@ -1983,6 +1991,10 @@ async function renderGuideDashboard() {
         ? settled[0].value
         : { today: [], stats: { totalTours: 0, totalGuests: 0, averageRating: 0 }, activeShift: false };
     const animals = settled[1].status === 'fulfilled' && Array.isArray(settled[1].value) ? settled[1].value : [];
+    const weeklyView = settled[2].status === 'fulfilled' ? settled[2].value : { tours: [] };
+    const guideProfile = settled[3].status === 'fulfilled' ? settled[3].value?.profile : null;
+    const performance = settled[4].status === 'fulfilled' ? settled[4].value : null;
+    const emergencyContacts = settled[5].status === 'fulfilled' ? (settled[5].value?.contacts || []) : [];
     const guideItems = (dashboard.today || []).slice(0, 3).map((t) => ({
         title: t.route_name || 'Gorilla Trek',
         match: `${new Date(t.scheduled_start).toLocaleTimeString()}`,
@@ -1996,8 +2008,18 @@ async function renderGuideDashboard() {
         });
     }
     const todaysTour = (dashboard.today || [])[0];
-    const tourDetails = todaysTour?.tour_session_id ? await API.getTourById(todaysTour.tour_session_id) : null;
-    const participants = Array.isArray(tourDetails?.participants) ? tourDetails.participants : [];
+    const [tourDetails, guestList, activeMode] = await Promise.all([
+        todaysTour?.tour_session_id ? API.getTourPreparation(todaysTour.tour_session_id) : null,
+        todaysTour?.tour_session_id ? API.getTourGuestList(todaysTour.tour_session_id) : null,
+        guideManager.activeTour?.tour_session_id ? API.getActiveTourMode(guideManager.activeTour.tour_session_id) : null
+    ]);
+    const participants = Array.isArray(guestList?.guests) ? guestList.guests : [];
+    const activeGuests = Array.isArray(activeMode?.live_map?.guests) ? activeMode.live_map.guests : [];
+    const weeklyRows = Array.isArray(weeklyView?.tours) ? weeklyView.tours : [];
+    const prepChecklist = Array.isArray(tourDetails?.checklist) ? tourDetails.checklist : [];
+    const profileLine = guideProfile
+        ? `${escapeHtml(guideProfile.certification_level || 'guide')} • ${escapeHtml(String(guideProfile.languages || '[]'))}`
+        : 'Profile unavailable';
     return `<div class="guide-dashboard">${renderDashboardShell({
         primaryTitle: "Today's Tours",
         primaryIcon: 'clock',
@@ -2007,14 +2029,28 @@ async function renderGuideDashboard() {
         seasonalItems: [
             `Total tours: ${dashboard.stats.totalTours}`,
             `Guests served: ${dashboard.stats.totalGuests}`,
-            `Average rating: ${dashboard.stats.averageRating}`,
+            `Average rating: ${performance?.average_rating || dashboard.stats.averageRating}`,
             `Shift: ${dashboard.activeShift ? 'On duty' : 'Off duty'}`
         ],
         seasonalActionLabel: dashboard.activeShift ? 'Clock Out' : 'Clock In',
         animalCount: animals.length
-    })}<div class="section-card"><div class="section-header"><h3>${icon('clock', 'icon-sm')} Schedule Controls</h3></div><div class="seasonal-list">${(dashboard.today || []).length ? dashboard.today.map((t) => `<div class="seasonal-item"><strong>${escapeHtml(t.route_name || 'Tour Route')}</strong> - ${new Date(t.scheduled_start).toLocaleTimeString()} (${t.confirmed_guests || t.group_size || 0} guests) <button class="small-btn" onclick="startTour('${t.tour_session_id}')">Start</button></div>`).join('') : '<div class="seasonal-item">No tours today.</div>'}</div></div><div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Live Participants</h3></div><div class="seasonal-list">${participants.length ? participants.map((p) => `<div class="seasonal-item">${escapeHtml(p.first_name || p.username || 'Tourist')} ${escapeHtml(p.last_name || '')} - ${escapeHtml(p.pickup_location || 'In-session')}</div>`).join('') : '<div class="seasonal-item">No participants assigned yet.</div>'}</div></div><div class="section-card"><div class="section-header"><h3>${icon('bell', 'icon-sm')} Guide-to-guide messages</h3></div><p class="animals-page-blurb">Operational notes to peers (DB migration 011).</p><div class="info-chip-row" style="flex-wrap:wrap;gap:8px;"><select id="guideMsgPeerSelect" class="map-destination" style="flex:1;min-width:180px;"><option value="">Select peer…</option></select></div><div id="guideMsgThread" class="seasonal-list" style="max-height:200px;overflow:auto;margin-top:8px;"><div class="seasonal-item">Loading…</div></div><textarea id="guideMsgBody" class="map-destination" style="margin-top:8px;min-height:72px;width:100%;box-sizing:border-box;" placeholder="Operational note"></textarea><div class="info-chip-row" style="margin-top:8px;"><button type="button" class="login-btn" onclick="sendGuideDeskNote()">${icon('target', 'icon-sm')} Send</button><button type="button" class="small-btn ghost-btn" onclick="refreshGuideDeskInbox()">${icon('grid', 'icon-sm')} Refresh</button></div></div><div class="shift-controls"><button class="login-btn" onclick="clockInOut()">${dashboard.activeShift ? 'Clock Out' : 'Clock In'}</button><button class="small-btn" onclick="addTourNotePrompt()">Add Tour Note</button></div><div id="activeTourPanel" style="${guideManager.activeTour ? 'display:block' : 'display:none'}"><div id="tourTimerDisplay" class="tour-timer">00:00:00</div><button onclick="quickSighting()">Log Sighting</button><button onclick="endActiveTour()">End Tour</button></div></div>`;}
+    })}<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('clock', 'icon-sm')} Tour Schedule (Today)</h3></div><div class="seasonal-list">${(dashboard.today || []).length ? dashboard.today.map((t) => `<div class="seasonal-item"><strong>${escapeHtml(t.route_name || 'Tour Route')}</strong> - ${new Date(t.scheduled_start).toLocaleTimeString()} (${t.confirmed_guests || t.group_size || 0} guests) <button class="small-btn" onclick="startTour('${t.tour_session_id}')">Start</button> <button class="small-btn" onclick="openTourPreparation('${t.tour_session_id}')">Prepare</button></div>`).join('') : '<div class="seasonal-item">No tours today.</div>'}</div></div><div class="section-card"><div class="section-header"><h3>${icon('grid', 'icon-sm')} Weekly Assignments</h3></div><div class="seasonal-list">${weeklyRows.length ? weeklyRows.slice(0, 8).map((t) => `<div class="seasonal-item">${new Date(t.scheduled_start).toLocaleDateString()} ${new Date(t.scheduled_start).toLocaleTimeString()} - ${escapeHtml(t.route_name || 'Route')} (${t.confirmed_guests || t.group_size || 0})</div>`).join('') : '<div class="seasonal-item">No weekly assignments.</div>'}</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Guest List Management</h3></div><div class="seasonal-list">${participants.length ? participants.slice(0, 10).map((p) => `<div class="seasonal-item">${escapeHtml(p.first_name || p.username || 'Tourist')} ${escapeHtml(p.last_name || '')} • ${escapeHtml(p.nationality || 'N/A')} <button class="small-btn" onclick="openGuestProfile('${p.tourist_id}')">Profile</button></div>`).join('') : '<div class="seasonal-item">No participants assigned yet.</div>'}</div></div><div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Tour Preparation Checklist</h3></div><div class="seasonal-list">${prepChecklist.length ? prepChecklist.map((c) => `<div class="seasonal-item">${c.done ? '✅' : '⬜'} ${escapeHtml(c.label || c.key)}</div>`).join('') : '<div class="seasonal-item">No checklist loaded.</div>'}</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('map', 'icon-sm')} Active Tour Mode</h3></div><div class="seasonal-list"><div class="seasonal-item">Guide profile: ${profileLine}</div><div class="seasonal-item">Tracked guests: ${activeGuests.length}</div><div class="seasonal-item">Elapsed: ${activeMode?.timer?.elapsed_minutes ?? 0} min • Remaining: ${activeMode?.timer?.remaining_minutes ?? 'N/A'} min</div>${activeGuests.slice(0, 5).map((g) => `<div class="seasonal-item">${escapeHtml(g.name || 'Guest')} - ${g.position ? `${Number(g.position.lat).toFixed(4)}, ${Number(g.position.lng).toFixed(4)}` : 'No GPS'}</div>`).join('') || ''}</div></div><div class="section-card"><div class="section-header"><h3>${icon('phone', 'icon-sm')} Emergency Communication</h3></div><div class="seasonal-list">${emergencyContacts.length ? emergencyContacts.slice(0, 6).map((c) => `<div class="seasonal-item">${escapeHtml(c.contact_type || 'Emergency')} - ${escapeHtml(c.name || 'Contact')} (${escapeHtml(c.phone || 'N/A')})</div>`).join('') : '<div class="seasonal-item">No emergency contacts available.</div>'}</div></div></div><div class="section-card"><div class="section-header"><h3>${icon('bell', 'icon-sm')} Guide-to-guide messages</h3></div><p class="animals-page-blurb">Operational notes to peers (DB migration 011).</p><div class="info-chip-row" style="flex-wrap:wrap;gap:8px;"><select id="guideMsgPeerSelect" class="map-destination" style="flex:1;min-width:180px;"><option value="">Select peer…</option></select></div><div id="guideMsgThread" class="seasonal-list" style="max-height:200px;overflow:auto;margin-top:8px;"><div class="seasonal-item">Loading…</div></div><textarea id="guideMsgBody" class="map-destination" style="margin-top:8px;min-height:72px;width:100%;box-sizing:border-box;" placeholder="Operational note"></textarea><div class="info-chip-row" style="margin-top:8px;"><button type="button" class="login-btn" onclick="sendGuideDeskNote()">${icon('target', 'icon-sm')} Send</button><button type="button" class="small-btn ghost-btn" onclick="refreshGuideDeskInbox()">${icon('grid', 'icon-sm')} Refresh</button></div></div><div class="shift-controls"><button class="login-btn" onclick="clockInOut()">${dashboard.activeShift ? 'Clock Out' : 'Clock In'}</button><button class="small-btn" onclick="addTourNotePrompt()">Add Tour Note</button><button class="small-btn" onclick="viewActiveTourCompletionReport()">Completion Report</button></div><div id="activeTourPanel" style="${guideManager.activeTour ? 'display:block' : 'display:none'}"><div id="tourTimerDisplay" class="tour-timer">00:00:00</div><button onclick="quickSighting()">Log Sighting</button><button onclick="endActiveTour()">End Tour</button></div></div>`;}
+
+function isCurrentUserITManager() {
+    const user = Auth.getCurrentUser?.() || null;
+    return user?.role === 'it_manager' || user?.userType === 'it_manager';
+}
+
+function requireITManagerAccess(actionLabel = 'this module') {
+    if (isCurrentUserITManager()) return true;
+    showToast?.(`Only IT managers can access ${actionLabel}.`, 'warning');
+    return false;
+}
 
 async function renderITManagerDashboard() {
+    if (!isCurrentUserITManager()) {
+        return `<div class="it-dashboard"><div class="section-card"><div class="section-header"><h3>${icon('shield', 'icon-sm')} Access restricted</h3></div><div class="seasonal-list"><div class="seasonal-item">Only users with the IT Manager role can access predictive analytics and reporting.</div></div></div></div>`;
+    }
     // Resilient fan-out: if any single endpoint fails, fall back to a safe
     // default so the dashboard still renders for the IT manager.
     const settled = await Promise.allSettled([
@@ -2040,7 +2076,11 @@ async function renderITManagerDashboard() {
         congestionRecommendations: [],
         popularContent: [],
         satisfaction: {},
-        demographics: {}
+        demographics: {},
+        peakTimes: [],
+        resourceAllocation: [],
+        sightingsTrends: [],
+        anomalyAlerts: []
     });
     const liveOps = valueOr(3, { peers: [], intranetStatus: {}, syncStatus: {} });
     const feedbackInsights = valueOr(4, {
@@ -2061,9 +2101,22 @@ async function renderITManagerDashboard() {
     const demographicRows = (interactive.demographics?.user_types || []).map((row) =>
         `<div class="analytics-row"><span>${escapeHtml(row.user_type || 'user')}</span><div class="analytics-bar"><div style="width:${Math.min(100, Number(row.count || 0) * 10)}%;"></div></div><strong>${row.count || 0}</strong></div>`
     ).join('') || '<div class="empty-state">No demographics data yet.</div>';
+    const peakRows = (interactive.peakTimes || []).slice(0, 8).map((row) =>
+        `<div class="analytics-row"><span>${String(row.hour).padStart(2, '0')}:00</span><div class="analytics-bar"><div style="width:${Math.min(100, Number(row.visitors || 0))}%;"></div></div><strong>${row.visitors || 0}</strong></div>`
+    ).join('') || '<div class="empty-state">No peak-time data yet.</div>';
+    const trendRows = (interactive.sightingsTrends || []).slice(-8).map((row) =>
+        `<div class="analytics-row"><span>${new Date(row.day).toLocaleDateString()}</span><div class="analytics-bar"><div style="width:${Math.min(100, Number(row.sightings || 0) * 5)}%;"></div></div><strong>${row.sightings || 0}</strong></div>`
+    ).join('') || '<div class="empty-state">No sightings trend data yet.</div>';
+    const resourceRows = (interactive.resourceAllocation || []).slice(0, 8).map((row) => {
+        const s = row.suggested_staffing || {};
+        return `<div class="seasonal-item">• ${escapeHtml(row.location_name || 'Location')} @ ${row.hour}:00 (visitors ${row.predicted_visitor_count || 0})<br><small>Guides ${s.guides || 1} • Rangers ${s.rangers || 1} • Gate ${s.gate_staff || 1}</small></div>`;
+    }).join('') || '<div class="seasonal-item">• No allocation recommendations available</div>';
+    const anomalyRows = (interactive.anomalyAlerts || []).slice(0, 6).map((row) =>
+        `<div class="seasonal-item">• ${new Date(row.day).toLocaleDateString()} — count ${row.count || 0} (z ${row.zscore || 0})</div>`
+    ).join('') || '<div class="seasonal-item">• No current anomaly flags.</div>';
     const rareAlertsHtml = `<div class="section-card"><div class="section-header"><h3>${icon('bell', 'icon-sm')} Rare Sighting Alerts</h3></div><div class="seasonal-list">${(rareAlerts || []).length ? rareAlerts.map((a) => `<div class="seasonal-item rare-alert-item"><strong>${escapeHtml((a.risk_level || 'high').toUpperCase())}</strong> • ${escapeHtml(a.animal_name || 'Wildlife')} @ ${escapeHtml(a.location_name || 'Unknown')} (${a.number_observed || 0}) ${a.acknowledged ? '<span style="color:#2E7D32;">(Acknowledged)</span>' : `<button class=\"small-btn\" onclick=\"ackRareAlertPrompt('${a.alert_id}')\">Acknowledge</button>`}<br><span style="color:#6B705C;">${escapeHtml(a.reason || '')}</span></div>`).join('') : '<div class="seasonal-item">• No rare alerts in recent reports.</div>'}</div></div>`;
     const managerFeedbackControlHtml = `<div class="section-card"><div class="section-header"><h3>${icon('note', 'icon-sm')} Feedback Control Queue</h3></div><div class="seasonal-list">${(managerQueue || []).length ? managerQueue.map((item) => `<div class="seasonal-item"><strong>${escapeHtml(item.category || 'general')}</strong> • ${'★'.repeat(Number(item.rating || 0))} • <em>${escapeHtml(item.improvement_status || 'new')}</em><br>${escapeHtml(item.comment || 'No comment')}<br>${item.response_text ? `<span style=\"color:#2E7D32;\">Response sent</span>` : `<button class=\"small-btn\" onclick=\"respondToFeedbackPrompt('${item.feedback_id}')\">Respond</button>`} <button class=\"small-btn\" onclick=\"updateFeedbackStatusPrompt('${item.feedback_id}')\">Update Status</button></div>`).join('') : '<div class="seasonal-item">• No feedback items in queue.</div>'}</div></div>`;
-    const itOpsShortcutsHtml = `<div class="section-card"><div class="section-header"><h3>${icon('chart', 'icon-sm')} Analytics & backups</h3></div><p class="animals-page-blurb">Quick checks for anomalies, training jobs, bundled reports, and backup index.</p><div class="info-chip-row" style="flex-wrap:wrap;gap:8px;"><button type="button" class="small-btn" onclick="itOpsPeekAnalyticsAnomalies()">${icon('target', 'icon-sm')} Anomalies</button><button type="button" class="small-btn" onclick="itOpsQueueModelRetrain()">${icon('database', 'icon-sm')} Queue retrain</button><button type="button" class="small-btn" onclick="itOpsRunReportBuild()">${icon('note', 'icon-sm')} Build report</button><button type="button" class="small-btn" onclick="itOpsPeekBackupsList()">${icon('download', 'icon-sm')} Backups</button></div></div>`;
+    const itOpsShortcutsHtml = `<div class="section-card"><div class="section-header"><h3>${icon('chart', 'icon-sm')} Analytics operations</h3></div><p class="animals-page-blurb">Run predictive/reporting workflows directly from the dashboard.</p><div class="info-chip-row" style="flex-wrap:wrap;gap:8px;"><button type="button" class="small-btn" onclick="itOpsPeekAnalyticsAnomalies()">${icon('target', 'icon-sm')} Anomalies</button><button type="button" class="small-btn" onclick="itOpsQueueModelRetrain()">${icon('database', 'icon-sm')} Queue retrain</button><button type="button" class="small-btn" onclick="itOpsRunReportBuild()">${icon('note', 'icon-sm')} Build report</button><button type="button" class="small-btn" onclick="itOpsCreateReportSchedulePrompt()">${icon('clock', 'icon-sm')} Schedule report</button><button type="button" class="small-btn" onclick="itOpsRunLatestSchedule()">${icon('play', 'icon-sm')} Run latest schedule</button><button type="button" class="small-btn" onclick="itOpsExportAnalyticsPrompt()">${icon('download', 'icon-sm')} Export analytics</button><button type="button" class="small-btn" onclick="itOpsPeekTrainingJobs()">${icon('users', 'icon-sm')} Training jobs</button><button type="button" class="small-btn" onclick="navigateTo('it_tour_assignments')">${icon('clock', 'icon-sm')} Assign Tour Sessions</button><button type="button" class="small-btn" onclick="itOpsPeekBackupsList()">${icon('download', 'icon-sm')} Backups</button></div></div>`;
     const animals = await Content.getAnimals();
     const itKpis = [
         { label: 'Active Users', value: metrics.activeUsers || 0, hint: 'Current sessions' },
@@ -2114,7 +2167,7 @@ async function renderITManagerDashboard() {
         ],
         seasonalActionLabel: 'View Suggestions',
         animalCount: animals.length
-    })}<div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Current Users (Realtime)</h3><span id="adminLiveUsersStamp" class="status-badge neutral">Updated just now • ${(liveOps.peers || []).length} active now / ${Number(metrics.activeUsers || 0)} total</span></div><div id="adminLiveUsersList">${liveUsersHtml}</div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('chart', 'icon-sm')} Visitor Flow (7 days)</h3></div><div class="analytics-list">${flowBars}</div></div><div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Popular Content</h3></div><div class="analytics-list">${popularRows}</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} User Type Demographics</h3></div><div class="analytics-list">${demographicRows}</div></div><div class="section-card"><div class="section-header"><h3>${icon('map', 'icon-sm')} Congestion Guidance</h3></div><div class="seasonal-list">${(interactive.congestionRecommendations || []).map((r) => `<div class="seasonal-item">• ${escapeHtml(r)}</div>`).join('') || '<div class="seasonal-item">• No congestion recommendations available</div>'}</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('building', 'icon-sm')} Intranet Connectivity</h3></div><div class="analytics-list"><div class="analytics-row"><span>Intranet</span><div class="analytics-bar"><div style="width:${liveOps.intranetStatus?.isIntranet ? 100 : 35}%;"></div></div><strong>${liveOps.intranetStatus?.isIntranet ? 'Connected' : 'External'}</strong></div><div class="analytics-row"><span>Device IP</span><span></span><strong>${escapeHtml(liveOps.intranetStatus?.ip || 'Unknown')}</strong></div><div class="analytics-row"><span>Pending Sync</span><span></span><strong>${liveOps.syncStatus?.pending || liveOps.syncStatus?.pending_items || 0}</strong></div></div></div><div class="section-card"><div class="section-header"><h3>${icon('user', 'icon-sm')} Live Peers / Guests</h3></div><div class="seasonal-list">${(liveOps.peers || []).length ? liveOps.peers.slice(0, 8).map((p) => `<div class="seasonal-item">• ${escapeHtml(p.name || 'Peer')} (${escapeHtml(p.type || 'user')})${p.location ? ` @ ${Number(p.location.lat).toFixed(4)}, ${Number(p.location.lng).toFixed(4)}` : ''}</div>`).join('') : '<div class="seasonal-item">• No live peers detected in last 5 minutes.</div>'}</div></div></div><div class="section-card"><div class="section-header"><h3>${icon('note', 'icon-sm')} Feedback & Improvements (30 days)</h3></div><div class="analytics-list"><div class="analytics-row"><span>Total Feedback</span><span></span><strong>${feedbackInsights.summary?.total_feedback || 0}</strong></div><div class="analytics-row"><span>Average Rating</span><span></span><strong>${feedbackInsights.summary?.avg_rating || 0}</strong></div><div class="analytics-row"><span>Bug Reports</span><span></span><strong>${feedbackInsights.summary?.bug_reports || 0}</strong></div><div class="analytics-row"><span>Feature Requests</span><span></span><strong>${feedbackInsights.summary?.feature_requests || 0}</strong></div><div class="analytics-row"><span>Surveys</span><span></span><strong>${feedbackInsights.summary?.survey_count || 0}</strong></div><div class="analytics-row"><span>Avg NPS</span><span></span><strong>${feedbackInsights.summary?.avg_nps || 0}</strong></div><div class="analytics-row"><span>Responded</span><span></span><strong>${feedbackInsights.summary?.responded_count || 0}</strong></div></div><div class="seasonal-list">${(feedbackInsights.recent || []).slice(0, 5).map((item) => `<div class="seasonal-item">• ${escapeHtml(item.category)} - ${escapeHtml(item.comment || 'No comment')} [${escapeHtml(item.improvement_status || 'new')}] ${item.response_text ? '<span style="color:#2E7D32;">(Responded)</span>' : `<button class=\"small-btn\" onclick=\"respondToFeedbackPrompt('${item.feedback_id}')\">Respond</button>`} <button class=\"small-btn\" onclick=\"updateFeedbackStatusPrompt('${item.feedback_id}')\">Status</button></div>`).join('') || '<div class="seasonal-item">• No recent feedback</div>'}</div></div>${managerFeedbackControlHtml}${itOpsShortcutsHtml}${rareAlertsHtml}<div class="admin-actions"><button class="admin-action-btn" onclick="handleMFASetup()">${icon('shield', 'icon-sm')} Configure MFA</button><button class="admin-action-btn" onclick="clearAllCache()">Clear Cache</button><button class="admin-action-btn" onclick="exportData()">Export Data</button><button class="admin-action-btn danger" onclick="resetApp()">Reset App</button></div></div>`;}
+    })}<div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Current Users (Realtime)</h3><span id="adminLiveUsersStamp" class="status-badge neutral">Updated just now • ${(liveOps.peers || []).length} active now / ${Number(metrics.activeUsers || 0)} total</span></div><div id="adminLiveUsersList">${liveUsersHtml}</div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('chart', 'icon-sm')} Visitor Flow (7 days)</h3></div><div class="analytics-list">${flowBars}</div></div><div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Popular Content</h3></div><div class="analytics-list">${popularRows}</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} User Type Demographics</h3></div><div class="analytics-list">${demographicRows}</div></div><div class="section-card"><div class="section-header"><h3>${icon('clock', 'icon-sm')} Peak Time Identification</h3></div><div class="analytics-list">${peakRows}</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('map', 'icon-sm')} Resource Allocation</h3></div><div class="seasonal-list">${resourceRows}</div></div><div class="section-card"><div class="section-header"><h3>${icon('paw', 'icon-sm')} Sightings Trends</h3></div><div class="analytics-list">${trendRows}</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Congestion Guidance</h3></div><div class="seasonal-list">${(interactive.congestionRecommendations || []).map((r) => `<div class="seasonal-item">• ${escapeHtml(r)}</div>`).join('') || '<div class="seasonal-item">• No congestion recommendations available</div>'}</div></div><div class="section-card"><div class="section-header"><h3>${icon('bell', 'icon-sm')} Anomaly Detection</h3></div><div class="seasonal-list">${anomalyRows}</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('building', 'icon-sm')} Intranet Connectivity</h3></div><div class="analytics-list"><div class="analytics-row"><span>Intranet</span><div class="analytics-bar"><div style="width:${liveOps.intranetStatus?.isIntranet ? 100 : 35}%;"></div></div><strong>${liveOps.intranetStatus?.isIntranet ? 'Connected' : 'External'}</strong></div><div class="analytics-row"><span>Device IP</span><span></span><strong>${escapeHtml(liveOps.intranetStatus?.ip || 'Unknown')}</strong></div><div class="analytics-row"><span>Pending Sync</span><span></span><strong>${liveOps.syncStatus?.pending || liveOps.syncStatus?.pending_items || 0}</strong></div></div></div><div class="section-card"><div class="section-header"><h3>${icon('user', 'icon-sm')} Live Peers / Guests</h3></div><div class="seasonal-list">${(liveOps.peers || []).length ? liveOps.peers.slice(0, 8).map((p) => `<div class="seasonal-item">• ${escapeHtml(p.name || 'Peer')} (${escapeHtml(p.type || 'user')})${p.location ? ` @ ${Number(p.location.lat).toFixed(4)}, ${Number(p.location.lng).toFixed(4)}` : ''}</div>`).join('') : '<div class="seasonal-item">• No live peers detected in last 5 minutes.</div>'}</div></div></div><div class="section-card"><div class="section-header"><h3>${icon('note', 'icon-sm')} Feedback & Improvements (30 days)</h3></div><div class="analytics-list"><div class="analytics-row"><span>Total Feedback</span><span></span><strong>${feedbackInsights.summary?.total_feedback || 0}</strong></div><div class="analytics-row"><span>Average Rating</span><span></span><strong>${feedbackInsights.summary?.avg_rating || 0}</strong></div><div class="analytics-row"><span>Bug Reports</span><span></span><strong>${feedbackInsights.summary?.bug_reports || 0}</strong></div><div class="analytics-row"><span>Feature Requests</span><span></span><strong>${feedbackInsights.summary?.feature_requests || 0}</strong></div><div class="analytics-row"><span>Surveys</span><span></span><strong>${feedbackInsights.summary?.survey_count || 0}</strong></div><div class="analytics-row"><span>Avg NPS</span><span></span><strong>${feedbackInsights.summary?.avg_nps || 0}</strong></div><div class="analytics-row"><span>Responded</span><span></span><strong>${feedbackInsights.summary?.responded_count || 0}</strong></div></div><div class="seasonal-list">${(feedbackInsights.recent || []).slice(0, 5).map((item) => `<div class="seasonal-item">• ${escapeHtml(item.category)} - ${escapeHtml(item.comment || 'No comment')} [${escapeHtml(item.improvement_status || 'new')}] ${item.response_text ? '<span style="color:#2E7D32;">(Responded)</span>' : `<button class=\"small-btn\" onclick=\"respondToFeedbackPrompt('${item.feedback_id}')\">Respond</button>`} <button class=\"small-btn\" onclick=\"updateFeedbackStatusPrompt('${item.feedback_id}')\">Status</button></div>`).join('') || '<div class="seasonal-item">• No recent feedback</div>'}</div></div>${managerFeedbackControlHtml}${itOpsShortcutsHtml}${rareAlertsHtml}<div class="admin-actions"><button class="admin-action-btn" onclick="handleMFASetup()">${icon('shield', 'icon-sm')} Configure MFA</button><button class="admin-action-btn" onclick="clearAllCache()">Clear Cache</button><button class="admin-action-btn" onclick="exportData()">Export Data</button><button class="admin-action-btn danger" onclick="resetApp()">Reset App</button></div></div>`;}
 
 // =====================================================
 // INTRANET DASHBOARD (HR, Announcements, Inventory)
@@ -2132,6 +2185,11 @@ async function renderIntranetDashboard() {
     const eventsResponse = valueOr(2, {});
     const employees = valueOr(3, []);
     const geofenceEvents = eventsResponse?.events || [];
+    const parkState = getParkAccessState();
+    const effectiveIntranet = parkState.networkMode === 'auto'
+        ? (AppState?.accessContext?.isIntranet ?? intranetStatus?.isIntranet ?? false)
+        : parkState.online;
+    const effectiveIp = AppState?.accessContext?.ip || intranetStatus?.ip || 'Unknown';
     const insideCount = peers.filter((p) => p.location && Geofence?.isInsidePark?.(p.location.lat, p.location.lng)).length;
     const outsideCount = peers.filter((p) => p.location && !Geofence?.isInsidePark?.(p.location.lat, p.location.lng)).length;
     const unknownCount = Math.max(0, peers.length - insideCount - outsideCount);
@@ -2149,9 +2207,9 @@ async function renderIntranetDashboard() {
                 },
                 {
                     title: 'Network Rule',
-                    match: intranetStatus?.isIntranet ? 'Intranet linked' : 'External network',
-                    reason: intranetStatus?.isIntranet
-                        ? `Connected via trusted network (${intranetStatus?.ip || 'IP unavailable'}).`
+                    match: effectiveIntranet ? 'Intranet linked' : 'External network',
+                    reason: effectiveIntranet
+                        ? `Connected via trusted network (${effectiveIp || 'IP unavailable'}).`
                         : 'Currently outside the trusted intranet network; restricted workflows should be limited until connectivity is restored.'
                 },
                 {
@@ -2175,8 +2233,10 @@ async function renderIntranetDashboard() {
             <div class="section-card">
                 <div class="section-header"><h3>${icon('building', 'icon-sm')} Network & Boundary Compliance</h3></div>
                 <div class="analytics-list">
-                    <div class="analytics-row"><span>Intranet Link</span><div class="analytics-bar"><div style="width:${intranetStatus?.isIntranet ? 100 : 35}%;"></div></div><strong>${intranetStatus?.isIntranet ? 'Connected' : 'External'}</strong></div>
-                    <div class="analytics-row"><span>Device IP</span><span></span><strong>${escapeHtml(intranetStatus?.ip || 'Unknown')}</strong></div>
+                    <div class="analytics-row"><span>Intranet Link</span><div class="analytics-bar"><div id="intranetLinkBar" style="width:${effectiveIntranet ? 100 : 35}%;"></div></div><strong id="intranetLinkValue">${effectiveIntranet ? 'Connected' : 'External'}</strong></div>
+                    <div class="analytics-row"><span>Device IP</span><span></span><strong id="intranetIpValue">${escapeHtml(effectiveIp || 'Unknown')}</strong></div>
+                    <div class="analytics-row"><span>Park Boundary</span><span></span><strong id="intranetBoundaryValue">${parkState.insidePark ? 'Inside' : 'Outside'}</strong></div>
+                    <div class="analytics-row"><span>Network Status</span><span></span><strong id="intranetNetworkValue">${parkState.online ? 'Online' : 'Offline'}</strong></div>
                     <div class="analytics-row"><span>Peers inside boundary</span><span></span><strong>${insideCount}</strong></div>
                     <div class="analytics-row"><span>Peers outside boundary</span><span></span><strong>${outsideCount}</strong></div>
                 </div>
@@ -2212,6 +2272,77 @@ async function renderIntranetDashboard() {
         </div>
         <div class="admin-actions">
             <button class="admin-action-btn" onclick="runInteractiveMapSeedFromUI()">${icon('database', 'icon-sm')} Seed Map Demo Data</button>
+        </div>
+    </div>`;
+}
+
+function refreshIntranetParkStatusLinks() {
+    if (window.currentView !== 'intranet') return;
+    const linkValue = document.getElementById('intranetLinkValue');
+    const linkBar = document.getElementById('intranetLinkBar');
+    const ipValue = document.getElementById('intranetIpValue');
+    const boundaryValue = document.getElementById('intranetBoundaryValue');
+    const networkValue = document.getElementById('intranetNetworkValue');
+    if (!linkValue || !linkBar || !ipValue || !boundaryValue || !networkValue) return;
+
+    const state = getParkAccessState();
+    const isIntranet = state.networkMode === 'auto'
+        ? Boolean(AppState?.accessContext?.isIntranet)
+        : Boolean(state.online);
+    const ip = AppState?.accessContext?.ip || 'Unknown';
+
+    linkValue.textContent = isIntranet ? 'Connected' : 'External';
+    linkBar.style.width = isIntranet ? '100%' : '35%';
+    ipValue.textContent = ip;
+    boundaryValue.textContent = state.insidePark ? 'Inside' : 'Outside';
+    networkValue.textContent = state.online ? 'Online' : 'Offline';
+}
+
+async function renderITTourAssignmentsDashboard() {
+    if (!isCurrentUserITManager()) {
+        return `<div class="it-dashboard"><div class="section-card"><div class="section-header"><h3>${icon('shield', 'icon-sm')} Access restricted</h3></div><div class="seasonal-list"><div class="seasonal-item">Only IT managers can access tour session assignment tools.</div></div></div></div>`;
+    }
+    const start = new Date(Date.now() - 7 * 86400000).toISOString();
+    const end = new Date(Date.now() + 28 * 86400000).toISOString();
+    const settled = await Promise.allSettled([
+        API.listTourAssignments({ start, end }),
+        API.listTourGuidesForAssignment(),
+        API.listTourRoutesForAssignment()
+    ]);
+    const valueOr = (i, fallback) => (settled[i].status === 'fulfilled' && settled[i].value != null ? settled[i].value : fallback);
+    const assignmentRows = Array.isArray(valueOr(0, {})?.assignments) ? valueOr(0, {}).assignments : [];
+    const guides = Array.isArray(valueOr(1, {})?.guides) ? valueOr(1, {}).guides : [];
+    const routes = Array.isArray(valueOr(2, {})?.routes) ? valueOr(2, {}).routes : [];
+
+    const assignmentList = assignmentRows.length
+        ? assignmentRows.slice(0, 12).map((a) => {
+            const name = `${a.guide_first_name || ''} ${a.guide_last_name || ''}`.trim() || a.guide_username || 'Guide';
+            return `<div class="seasonal-item"><strong>${new Date(a.scheduled_start).toLocaleString()}</strong> • ${escapeHtml(a.route_name || 'Route')} • ${escapeHtml(name)} • ${escapeHtml(a.status || 'scheduled')} (${a.confirmed_guests || 0} guests)</div>`;
+        }).join('')
+        : '<div class="seasonal-item">No assigned tour sessions found in selected range.</div>';
+
+    return `<div class="it-dashboard">
+        <div class="section-card">
+            <div class="section-header"><h3>${icon('clock', 'icon-sm')} Tour Session Assignments</h3></div>
+            <p class="animals-page-blurb">Create one-off tour session assignments for guides.</p>
+            <div class="info-chip-row" style="padding:0 16px 12px;flex-wrap:wrap;gap:8px;">
+                <button type="button" class="small-btn" onclick="itOpsAssignSingleTourPrompt()">${icon('clock', 'icon-sm')} Assign Tour Sessions</button>
+                <button type="button" class="small-btn ghost-btn" onclick="renderView('it_tour_assignments')">${icon('grid', 'icon-sm')} Refresh</button>
+            </div>
+            <div class="analytics-list">
+                <div class="analytics-row"><span>Active guides</span><strong>${guides.length}</strong></div>
+                <div class="analytics-row"><span>Available routes</span><strong>${routes.length}</strong></div>
+                <div class="analytics-row"><span>Assignments (5-week window)</span><strong>${assignmentRows.length}</strong></div>
+            </div>
+        </div>
+        <div class="section-card">
+            <div class="section-header"><h3>${icon('grid', 'icon-sm')} Weekly Assignments</h3></div>
+            <p class="animals-page-blurb">Assign recurring sessions across selected weekdays for the week.</p>
+            <div class="info-chip-row" style="padding:0 16px 12px;flex-wrap:wrap;gap:8px;">
+                <button type="button" class="small-btn" onclick="itOpsAssignWeeklyToursPrompt()">${icon('grid', 'icon-sm')} Create Weekly Assignments</button>
+                <button type="button" class="small-btn ghost-btn" onclick="navigateTo('it_dashboard')">${icon('chart', 'icon-sm')} Back to Admin Dashboard</button>
+            </div>
+            <div class="seasonal-list">${assignmentList}</div>
         </div>
     </div>`;
 }
@@ -2359,7 +2490,7 @@ window.startTourHelpVoiceCapture = function () {
         window.__sigtsTourHelpRecListening = false;
         const t = e.results[0]?.[0]?.transcript?.trim();
         if (t && input) input.value = `${(input.value || '').trim()}${input.value ? ' ' : ''}${t}`;
-        showToast(t ? 'Speech added to the Tour help box.' : 'No speech captured.', t ? 'success' : 'warning');
+        showToast(t ? "Speech added to the Let's Chat box." : 'No speech captured.', t ? 'success' : 'warning');
     };
     rec.onerror = () => {
         window.__sigtsTourHelpRecListening = false;
@@ -2448,6 +2579,7 @@ window.initGuideMessagingPanel = async function () {
 };
 
 window.itOpsPeekAnalyticsAnomalies = async function () {
+    if (!requireITManagerAccess('predictive analytics operations')) return;
     const d = await API.getAnalyticsAnomalies(2.5);
     if (d?.status >= 400) {
         showToast(d?.error || 'Anomalies request failed.', 'danger');
@@ -2459,12 +2591,14 @@ window.itOpsPeekAnalyticsAnomalies = async function () {
 };
 
 window.itOpsQueueModelRetrain = async function () {
+    if (!requireITManagerAccess('predictive analytics operations')) return;
     const r = await API.queuePredictiveTrainingJob('congestion_v1');
     if (r?.error || r?.status >= 400) showToast(r?.error || 'Queue retrain failed', 'danger');
     else showToast(r?.job?.job_id ? `Job ${r.job.job_id} queued.` : 'Retrain queued.', 'success');
 };
 
 window.itOpsRunReportBuild = async function () {
+    if (!requireITManagerAccess('predictive analytics operations')) return;
     const r = await API.buildAnalyticsReport(['visitor_flow', 'satisfaction', 'sightings_trend', 'popular_content']);
     if (r?.status >= 400) showToast(r?.error || 'Report build failed', 'danger');
     else {
@@ -2473,6 +2607,266 @@ window.itOpsRunReportBuild = async function () {
         showToast(`Report built: ${keys.length} section(s); ${errs.length} error(s). See console.`, errs.length ? 'warning' : 'success');
         console.info('[SIGTS] report build', r);
     }
+};
+
+window.itOpsCreateReportSchedulePrompt = async function () {
+    if (!requireITManagerAccess('predictive analytics operations')) return;
+    const name = await showPromptDialog('Schedule name', 'Weekly SIGTS analytics report');
+    if (!name) return;
+    const cron = await showPromptDialog('CRON expression', '0 9 * * 1');
+    if (!cron) return;
+    const recipientsRaw = await showPromptDialog('Recipients (comma-separated emails)', 'admin@bwindi.com');
+    const metricsRaw = await showPromptDialog('Metrics (comma-separated)', 'visitor_flow,satisfaction,sightings_trend,popular_content');
+    const recipients = String(recipientsRaw || '').split(',').map((v) => v.trim()).filter(Boolean);
+    const metricKeys = String(metricsRaw || '').split(',').map((v) => v.trim()).filter(Boolean);
+    const created = await API.createReportSchedule({
+        name,
+        cron_expression: cron,
+        email_recipients: recipients,
+        metric_keys: metricKeys
+    });
+    if (created?.status >= 400 || created?.error) {
+        showToast(created?.error || 'Failed to create report schedule.', 'danger');
+        return;
+    }
+    showToast('Report schedule created.', 'success');
+};
+
+window.itOpsRunLatestSchedule = async function () {
+    if (!requireITManagerAccess('predictive analytics operations')) return;
+    const list = await API.listReportSchedules();
+    const rows = Array.isArray(list?.schedules) ? list.schedules : [];
+    if (!rows.length) {
+        showToast('No report schedules found. Create one first.', 'warning');
+        return;
+    }
+    const latest = rows[0];
+    const run = await API.runReportSchedule(latest.schedule_id);
+    if (run?.status >= 400 || run?.error) {
+        showToast(run?.error || 'Failed to run report schedule.', 'danger');
+        return;
+    }
+    showToast(`Schedule "${latest.name || latest.schedule_id}" executed.`, 'success');
+    console.info('[SIGTS] schedule run', run);
+};
+
+window.itOpsExportAnalyticsPrompt = async function () {
+    if (!requireITManagerAccess('predictive analytics operations')) return;
+    const format = (await showPromptDialog('Export format (json/csv)', 'json') || 'json').toLowerCase();
+    const metricsRaw = await showPromptDialog('Metrics (comma-separated)', 'visitor_flow,sightings_trend,satisfaction');
+    const metrics = String(metricsRaw || '').split(',').map((v) => v.trim()).filter(Boolean);
+    const start = await showPromptDialog('Start datetime (ISO8601, optional)', '');
+    const end = await showPromptDialog('End datetime (ISO8601, optional)', '');
+    if (format === 'csv') {
+        const raw = await API.exportAnalyticsDataRaw(metrics, start || '', end || '', 'csv');
+        if (!raw?.ok) {
+            showToast(raw?.error?.message || `CSV export failed (HTTP ${raw?.status || 0}).`, 'danger');
+            return;
+        }
+        const csv = String(raw.text || '');
+        if (!csv.trim()) {
+            showToast('CSV export returned no rows.', 'warning');
+            return;
+        }
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const fileName = `sigts-analytics-${stamp}.csv`;
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = fileName;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        URL.revokeObjectURL(url);
+        showToast(`CSV downloaded: ${fileName}`, 'success');
+    } else {
+        const out = await API.exportAnalyticsData(metrics, start || '', end || '', format);
+        if (out?.status >= 400 || out?.error) {
+            showToast(out?.error || 'Export failed.', 'danger');
+            return;
+        }
+        const keys = Object.keys(out || {}).length;
+        showToast(`JSON export ready with ${keys} top-level key(s). See console.`, 'success');
+        console.info('[SIGTS] analytics export', out);
+    }
+};
+
+window.itOpsPeekTrainingJobs = async function () {
+    if (!requireITManagerAccess('predictive analytics operations')) return;
+    const r = await API.listRetrainJobs();
+    if (r?.status >= 400 || r?.error) {
+        showToast(r?.error || 'Failed to load training jobs.', 'danger');
+        return;
+    }
+    const jobs = Array.isArray(r?.jobs) ? r.jobs : [];
+    showToast(`${jobs.length} training job(s) loaded; details in console.`, jobs.length ? 'info' : 'success');
+    console.info('[SIGTS] training jobs', jobs);
+};
+
+function openTourAssignmentModal({ mode, guides, routes }) {
+    return new Promise((resolve) => {
+        const root = ensureFeedbackRoot();
+        const overlay = document.createElement('div');
+        overlay.className = 'ui-modal-overlay';
+        const isWeekly = mode === 'weekly';
+        const guideOptions = guides
+            .map((g) => `<option value="${escapeHtml(g.user_id)}">${escapeHtml(g.first_name || '')} ${escapeHtml(g.last_name || '')} (${escapeHtml(g.username || '')})</option>`)
+            .join('');
+        const routeOptions = routes
+            .map((r) => `<option value="${escapeHtml(r.route_id)}">${escapeHtml(r.name || 'Route')} • ${escapeHtml(String(r.difficulty || ''))}</option>`)
+            .join('');
+        const startDateDefault = new Date().toISOString().slice(0, 10);
+        const startTimeDefault = '08:00';
+
+        overlay.innerHTML = `
+            <div class="ui-modal ui-modal-assignment" role="dialog" aria-modal="true">
+                <div class="ui-modal-title">${isWeekly ? 'Weekly Tour Assignment' : 'Assign Tour to Guide'}</div>
+                <div class="ui-assignment-grid">
+                    <label class="ui-assignment-field">
+                        <span>Guide</span>
+                        <select id="assignGuideSelect" class="ui-modal-input ui-modal-select">${guideOptions}</select>
+                    </label>
+                    <label class="ui-assignment-field">
+                        <span>Route</span>
+                        <select id="assignRouteSelect" class="ui-modal-input ui-modal-select">${routeOptions}</select>
+                    </label>
+                    <label class="ui-assignment-field">
+                        <span>${isWeekly ? 'Week start date' : 'Date'}</span>
+                        <input id="assignDate" class="ui-modal-input" type="date" value="${startDateDefault}" />
+                    </label>
+                    <label class="ui-assignment-field">
+                        <span>${isWeekly ? 'Daily start time' : 'Start time'}</span>
+                        <input id="assignTime" class="ui-modal-input" type="time" value="${startTimeDefault}" />
+                    </label>
+                    <label class="ui-assignment-field">
+                        <span>Group size</span>
+                        <input id="assignGroupSize" class="ui-modal-input" type="number" min="1" max="200" value="8" />
+                    </label>
+                    <label class="ui-assignment-field ui-assignment-field-full">
+                        <span>Special requests (optional)</span>
+                        <input id="assignSpecialReq" class="ui-modal-input" type="text" placeholder="Accessibility needs, language preference..." />
+                    </label>
+                    ${isWeekly ? `
+                    <div class="ui-assignment-field ui-assignment-field-full">
+                        <span>Assign days (Sun-Sat)</span>
+                        <div class="ui-weekday-row">
+                            <label><input type="checkbox" value="0"> Sun</label>
+                            <label><input type="checkbox" value="1" checked> Mon</label>
+                            <label><input type="checkbox" value="2" checked> Tue</label>
+                            <label><input type="checkbox" value="3" checked> Wed</label>
+                            <label><input type="checkbox" value="4" checked> Thu</label>
+                            <label><input type="checkbox" value="5" checked> Fri</label>
+                            <label><input type="checkbox" value="6"> Sat</label>
+                        </div>
+                    </div>` : ''}
+                </div>
+                <div class="ui-modal-actions">
+                    <button type="button" class="ui-btn ui-btn-secondary" data-action="cancel">Cancel</button>
+                    <button type="button" class="ui-btn ui-btn-primary" data-action="submit">${isWeekly ? 'Create Weekly Assignments' : 'Assign Tour'}</button>
+                </div>
+            </div>
+        `;
+
+        const cleanup = (value) => {
+            overlay.remove();
+            resolve(value);
+        };
+        const collect = () => {
+            const guide = overlay.querySelector('#assignGuideSelect')?.value || '';
+            const route = overlay.querySelector('#assignRouteSelect')?.value || '';
+            const date = overlay.querySelector('#assignDate')?.value || '';
+            const time = overlay.querySelector('#assignTime')?.value || '';
+            const groupSize = Number(overlay.querySelector('#assignGroupSize')?.value || 0) || undefined;
+            const specialRequests = overlay.querySelector('#assignSpecialReq')?.value?.trim() || undefined;
+            const startIso = date && time ? new Date(`${date}T${time}:00`).toISOString() : '';
+            if (!isWeekly) {
+                return {
+                    guide_user_id: guide,
+                    route_id: route,
+                    scheduled_start: startIso,
+                    group_size: groupSize,
+                    special_requests: specialRequests
+                };
+            }
+            const days = Array.from(overlay.querySelectorAll('.ui-weekday-row input[type="checkbox"]:checked'))
+                .map((n) => Number(n.value))
+                .filter((n) => Number.isInteger(n));
+            return {
+                guide_user_id: guide,
+                route_id: route,
+                week_start: date ? new Date(`${date}T00:00:00`).toISOString() : '',
+                days,
+                start_time: time,
+                group_size: groupSize,
+                special_requests: specialRequests
+            };
+        };
+
+        overlay.querySelector('[data-action="cancel"]')?.addEventListener('click', () => cleanup(null));
+        overlay.querySelector('[data-action="submit"]')?.addEventListener('click', () => cleanup(collect()));
+        overlay.addEventListener('click', (event) => {
+            if (event.target === overlay) cleanup(null);
+        });
+        root.appendChild(overlay);
+        overlay.querySelector('#assignGuideSelect')?.focus();
+    });
+}
+
+window.itOpsAssignSingleTourPrompt = async function () {
+    if (!requireITManagerAccess('tour assignment operations')) return;
+    const [guidesRes, routesRes] = await Promise.all([
+        API.listTourGuidesForAssignment(),
+        API.listTourRoutesForAssignment()
+    ]);
+    const guides = Array.isArray(guidesRes?.guides) ? guidesRes.guides : [];
+    const routes = Array.isArray(routesRes?.routes) ? routesRes.routes : [];
+    if (!guides.length || !routes.length) {
+        showToast('Need at least one active guide and one route to assign tours.', 'warning');
+        return;
+    }
+    const payload = await openTourAssignmentModal({ mode: 'single', guides, routes });
+    if (!payload) return;
+    if (!payload.guide_user_id || !payload.route_id || !payload.scheduled_start) {
+        showToast('Guide, route, and start date/time are required.', 'warning');
+        return;
+    }
+    const out = await API.createTourAssignment(payload);
+    if (out?.status >= 400 || out?.error) {
+        showToast(out?.error || 'Failed to assign tour.', 'danger');
+        return;
+    }
+    showToast('Tour assigned to guide successfully.', 'success');
+};
+
+window.itOpsAssignWeeklyToursPrompt = async function () {
+    if (!requireITManagerAccess('tour assignment operations')) return;
+    const [guidesRes, routesRes] = await Promise.all([
+        API.listTourGuidesForAssignment(),
+        API.listTourRoutesForAssignment()
+    ]);
+    const guides = Array.isArray(guidesRes?.guides) ? guidesRes.guides : [];
+    const routes = Array.isArray(routesRes?.routes) ? routesRes.routes : [];
+    if (!guides.length || !routes.length) {
+        showToast('Need at least one active guide and one route to assign weekly tours.', 'warning');
+        return;
+    }
+    const payload = await openTourAssignmentModal({ mode: 'weekly', guides, routes });
+    if (!payload) return;
+    if (!payload.guide_user_id || !payload.route_id || !payload.week_start || !payload.start_time) {
+        showToast('Guide, route, week start date, and time are required.', 'warning');
+        return;
+    }
+    if (!Array.isArray(payload.days) || payload.days.length === 0) {
+        showToast('Select at least one weekday for weekly assignment.', 'warning');
+        return;
+    }
+    const out = await API.createWeeklyTourAssignments(payload);
+    if (out?.status >= 400 || out?.error) {
+        showToast(out?.error || 'Failed to create weekly assignments.', 'danger');
+        return;
+    }
+    showToast(`Weekly assignments created: ${out.created_count || 0}.`, 'success');
 };
 
 window.itOpsPeekBackupsList = async function () {
@@ -3168,6 +3562,45 @@ window.addTourNotePrompt = async function () {
     else alert(saved.error || 'Failed to save note.');
 };
 
+window.openTourPreparation = async function (tourId) {
+    if (!Auth.hasRole('guide')) return;
+    const prep = await API.getTourPreparation(tourId);
+    if (!prep || prep.error) {
+        showToast(prep?.error || 'Failed to load tour preparation.', 'danger');
+        return;
+    }
+    const checklist = (prep.checklist || []).map((c) => `${c.done ? '✓' : '□'} ${c.label}`).join('\n');
+    alert(`Tour preparation for ${prep.route?.name || 'route'}\nGuests: ${prep.guest_count || 0}\n\nChecklist:\n${checklist}`);
+};
+
+window.openGuestProfile = async function (touristId) {
+    if (!Auth.hasRole('guide')) return;
+    const profile = await API.getGuestProfileForGuide(touristId);
+    if (!profile || profile.error) {
+        showToast(profile?.error || 'Failed to load guest profile.', 'danger');
+        return;
+    }
+    const p = profile.profile || {};
+    const historyCount = Array.isArray(profile.history) ? profile.history.length : 0;
+    alert(`Guest: ${(p.first_name || '')} ${(p.last_name || '')}\nNationality: ${p.nationality || 'N/A'}\nInterests: ${JSON.stringify(p.interests || [])}\nPast tours found: ${historyCount}`);
+};
+
+window.viewActiveTourCompletionReport = async function () {
+    if (!Auth.hasRole('guide')) return;
+    const m = getGuideOpsManager();
+    const tourId = m.activeTour?.tour_session_id || (await API.getToursForGuide())?.find((t) => t.status === 'ongoing')?.tour_session_id;
+    if (!tourId) {
+        showToast('No active tour for completion report.', 'warning');
+        return;
+    }
+    const report = await API.getTourCompletionReport(tourId);
+    if (!report || report.error) {
+        showToast(report?.error || 'Failed to load completion report.', 'danger');
+        return;
+    }
+    alert(`Completion report\nRoute: ${report.route_name || 'N/A'}\nDuration: ${report.duration_minutes || 0} min\nDistance: ${report.distance_km || 0} km\nSightings: ${report.sightings?.total_sightings || 0}\nAvg rating: ${report.feedback_summary?.average_guest_rating || 0}`);
+};
+
 function renderAuthMergedScreen(activePanel = 'login') {
     const isLogin = activePanel === 'login';
     return `<div class="auth-portal ${isLogin ? 'auth-mode-login' : 'auth-mode-register'}">
@@ -3179,11 +3612,14 @@ function renderAuthMergedScreen(activePanel = 'login') {
                     <div class="auth-side-subtitle">Smart Information Guide Tour System</div>
                 </div>
             </div>
-            <div class="auth-side-message">
-                <span class="auth-side-kicker">Welcome</span>
-                <h1>Smart Information Access to<br>Bwindi Impenetrable National Park</h1>
-                <p>Navigate trails, discover wildlife insights, and receive real-time guidance for a safer, richer park experience as you navigate with your prefered tour guide.</p>
-            </div>
+            <details class="auth-side-message-wrap" open>
+                <summary class="auth-side-toggle" aria-label="Toggle welcome information">Welcome information</summary>
+                <div class="auth-side-message">
+                    <span class="auth-side-kicker">Welcome</span>
+                    <h1>Smart Information Access to<br>Bwindi Impenetrable National Park</h1>
+                    <p>Navigate trails, discover wildlife insights, and receive real-time guidance for a safer, richer park experience as you navigate with your prefered tour guide.</p>
+                </div>
+            </details>
         </aside>
         <main class="auth-portal-main">
             <section class="auth-card">
@@ -3285,6 +3721,7 @@ async function renderView(view, options = {}) {
         case 'ai_chat': content = renderAIChatContent(); break;
         case 'guide_dashboard': content = await renderGuideDashboard(); break;
         case 'it_dashboard': content = await renderITManagerDashboard(); break;
+        case 'it_tour_assignments': content = await renderITTourAssignmentsDashboard(); break;
         case 'intranet': content = await renderIntranetDashboard(); break;
         default: content = await renderDashboardContent();
     }
@@ -3311,6 +3748,9 @@ async function renderView(view, options = {}) {
             }
         });
     }
+    if (safeView === 'intranet') {
+        refreshIntranetParkStatusLinks();
+    }
 }
 
 function refreshNetworkStatusBadge() {
@@ -3331,6 +3771,7 @@ function refreshParkAccessPanel() {
     if (!panel) return;
     panel.outerHTML = renderParkAccessPanel();
     refreshNetworkStatusBadge();
+    refreshIntranetParkStatusLinks();
 }
 
 window.refreshParkAccessPanel = refreshParkAccessPanel;

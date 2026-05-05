@@ -85,6 +85,70 @@ router.get('/users', async (req, res) => {
 });
 
 // =====================================================
+// GET /api/admin/active-users
+// Realtime logged-in users from auth heartbeat
+// =====================================================
+router.get('/active-users', [
+    query('window_minutes').optional().isInt({ min: 1, max: 120 })
+], async (req, res) => {
+    try {
+        const windowMinutes = Number.parseInt(req.query.window_minutes, 10) || 5;
+        const tableCheck = await pool.query(
+            `SELECT 1
+             FROM information_schema.columns
+             WHERE table_schema = 'public'
+               AND table_name = 'users'
+               AND column_name = 'last_location_time'
+             LIMIT 1`
+        );
+        const hasHeartbeatColumn = tableCheck.rows.length > 0;
+        const activeSinceInterval = `${windowMinutes} minutes`;
+
+        const sql = hasHeartbeatColumn
+            ? `SELECT user_id, username, user_type, email,
+                      last_location_time AS last_seen,
+                      last_login, last_lat, last_lng
+               FROM users
+               WHERE is_active = true
+                 AND last_location_time IS NOT NULL
+                 AND last_location_time > NOW() - ($1)::interval
+               ORDER BY last_location_time DESC`
+            : `SELECT user_id, username, user_type, email,
+                      last_login AS last_seen,
+                      last_login, last_lat, last_lng
+               FROM users
+               WHERE is_active = true
+                 AND last_login IS NOT NULL
+                 AND last_login > NOW() - ($1)::interval
+               ORDER BY last_login DESC`;
+
+        const rows = await pool.query(sql, [activeSinceInterval]);
+        const activeUsers = rows.rows.map((row) => ({
+            user_id: row.user_id,
+            username: row.username,
+            name: row.username,
+            email: row.email,
+            type: row.user_type,
+            role: row.user_type,
+            location: (row.last_lat != null && row.last_lng != null)
+                ? { lat: Number(row.last_lat), lng: Number(row.last_lng) }
+                : null,
+            last_seen: row.last_seen,
+            last_login: row.last_login
+        }));
+
+        return res.json({
+            window_minutes: windowMinutes,
+            count: activeUsers.length,
+            users: activeUsers
+        });
+    } catch (error) {
+        console.error('Get active users error:', error);
+        return res.status(500).json({ error: 'Failed to fetch active users' });
+    }
+});
+
+// =====================================================
 // POST /api/admin/users
 // Create new user (admin)
 // =====================================================
