@@ -568,6 +568,26 @@ h2, h3 { font-weight: 600; }
     margin-top: 4px;
 }
 
+.ai-chat-response-block p {
+    margin: 0 0 10px;
+}
+
+.ai-chat-response-block p:last-child {
+    margin-bottom: 0;
+}
+
+.ai-chat-response-block ul,
+.ai-chat-response-block ol {
+    margin: 0 0 10px 18px;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+}
+
+.ai-chat-response-block li {
+    line-height: 1.5;
+}
+
 .ai-chat-composer {
     flex-shrink: 0;
     position: sticky;
@@ -1624,6 +1644,27 @@ body.auth-page {
     border-radius: 999px;
 }
 *::-webkit-scrollbar-thumb:hover { background: rgba(13, 27, 20, 0.32); }
+
+/* ----- Intranet Access Governance: show full rule text ----- */
+.intranet-dashboard #recList .rec-card {
+    align-items: flex-start;
+}
+
+.intranet-dashboard #recList .rec-reason {
+    overflow: visible;
+    text-overflow: clip;
+    display: block;
+    -webkit-line-clamp: unset;
+    line-clamp: unset;
+    -webkit-box-orient: unset;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.intranet-dashboard #recList .rec-go {
+    align-self: flex-start;
+}
 
 /* ----- Global phone collision guards ----------------------- */
 @media (max-width: 900px) {

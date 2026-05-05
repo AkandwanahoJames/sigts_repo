@@ -71,6 +71,11 @@ async function refreshAccessContext() {
         if (context) {
             AppState.accessContext = {
                 isIntranet: context.isIntranet === true,
+                insideBoundary: context.insideBoundary === true,
+                accessGranted: context.accessGranted !== false,
+                source: context.source || 'live',
+                mode: context.mode || 'demo',
+                reason: context.reason || '',
                 ip: context.ip || null,
                 lastUpdatedAt: context.timestamp || new Date().toISOString()
             };
@@ -153,6 +158,17 @@ async function init() {
         }
 
         const requestedView = window.location.hash.replace('#', '').trim();
+        const isVerifyEmailPath = window.location.pathname.replace(/\/+$/, '') === '/verify-email';
+        if (isVerifyEmailPath) {
+            const token = new URLSearchParams(window.location.search).get('token');
+            const verifyResult = await Auth.verifyEmailToken(token);
+            if (verifyResult?.success) {
+                showToast('Email verified successfully. You can now log in.', 'success');
+            } else {
+                showToast(verifyResult?.error || 'Email verification link is invalid or expired.', 'warning');
+            }
+            window.history.replaceState({}, '', `${window.location.origin}/#login`);
+        }
 
         // Render the first screen directly (and sync hash) to avoid
         // depending on hashchange event timing for initial paint.

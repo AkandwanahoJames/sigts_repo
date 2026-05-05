@@ -41,6 +41,9 @@ class APIService {
     }
 
     async request(endpoint, options = {}) {
+        if (window.Auth?.touchSessionActivity) {
+            window.Auth.touchSessionActivity();
+        }
         const token = this.getToken();
         const headers = {
             ...options.headers
@@ -56,6 +59,16 @@ class APIService {
         if (coords && !headers['x-user-lat'] && !headers['x-user-lng']) {
             headers['x-user-lat'] = String(coords.lat);
             headers['x-user-lng'] = String(coords.lng);
+        }
+        try {
+            const sim = JSON.parse(localStorage.getItem('parkAccessSimulation') || '{}');
+            const boundary = ['auto', 'inside', 'outside'].includes(sim.boundary) ? sim.boundary : 'auto';
+            const network = ['auto', 'online', 'offline'].includes(sim.network) ? sim.network : 'auto';
+            headers['x-sigts-sim-boundary'] = boundary;
+            headers['x-sigts-sim-network'] = network;
+        } catch (_) {
+            headers['x-sigts-sim-boundary'] = 'auto';
+            headers['x-sigts-sim-network'] = 'auto';
         }
 
         const opts = { ...options };
@@ -109,6 +122,9 @@ class APIService {
     }
 
     async requestRaw(endpoint, options = {}) {
+        if (window.Auth?.touchSessionActivity) {
+            window.Auth.touchSessionActivity();
+        }
         const token = this.getToken();
         const headers = {
             ...options.headers
@@ -124,6 +140,16 @@ class APIService {
         if (coords && !headers['x-user-lat'] && !headers['x-user-lng']) {
             headers['x-user-lat'] = String(coords.lat);
             headers['x-user-lng'] = String(coords.lng);
+        }
+        try {
+            const sim = JSON.parse(localStorage.getItem('parkAccessSimulation') || '{}');
+            const boundary = ['auto', 'inside', 'outside'].includes(sim.boundary) ? sim.boundary : 'auto';
+            const network = ['auto', 'online', 'offline'].includes(sim.network) ? sim.network : 'auto';
+            headers['x-sigts-sim-boundary'] = boundary;
+            headers['x-sigts-sim-network'] = network;
+        } catch (_) {
+            headers['x-sigts-sim-boundary'] = 'auto';
+            headers['x-sigts-sim-network'] = 'auto';
         }
 
         const opts = { ...options };
@@ -804,6 +830,11 @@ const AppState = {
     hrStats: { totalStaff: 0, guidesOnDuty: 0, itStaff: 0 },
     accessContext: {
         isIntranet: null,
+        insideBoundary: null,
+        accessGranted: null,
+        source: 'live',
+        mode: 'demo',
+        reason: '',
         ip: null,
         lastUpdatedAt: null
     }

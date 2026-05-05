@@ -125,57 +125,34 @@ function isNatureTourismTopic(q) {
 
 function buildBwindiScopedAnswer(question, locationName, appContext) {
     const q = normalizeTourHelpQuestion(question);
-    const extras = [];
-
     if (/\bwhat\s+(is|are)\s+bwindi\b/.test(q) || (/\bwhat\s+is\b/.test(q) && q.includes('bwindi'))) {
-        extras.push(
-            'In plain terms: Bwindi is a Ugandan national park dominated by ancient montane rainforest; it is globally known for mountain gorilla tracking and for very high biodiversity in the Albertine Rift.'
-        );
+        return 'Bwindi Impenetrable National Park is a protected montane rainforest in southwestern Uganda, globally known for mountain gorillas and Albertine Rift biodiversity.';
     }
-
     if (/\b(permit|fee|cost|price|ticket)\b/.test(q)) {
-        extras.push(
-            'Permits and fees change by season and policy: confirm the current Uganda Wildlife Authority (UWA) tariff and your issued permit details—SIGTS cannot quote live prices.'
-        );
+        return 'Permit and fee values change by policy and season. Use current UWA tariff information and your issued permit details for exact pricing.';
     }
     if (/\b(bird|birding|ornith)\b/.test(q)) {
-        extras.push(
-            'Bwindi is an Albertine Rift hotspot with many regional endemics; quiet trails, no playback near sensitive species, and ranger guidance matter.'
-        );
+        return 'Bwindi is a major Albertine Rift birding site with many regional endemics. For practical spotting guidance, use quiet movement and follow guide/ranger instructions.';
     }
     if (/\b(season|dry|wet|when\s+to\s+visit|best\s+time)\b/.test(q)) {
-        extras.push(
-            'Many visitors target drier windows for comfort underfoot, but rain is always possible in montane forest—plan layers and grip footwear year-round.'
-        );
+        return 'Drier periods are often preferred for easier trail conditions, but rain can occur year-round in Bwindi. Plan waterproof layers and good-traction footwear in any season.';
     }
     if (/\b(size|area|km2|km²|hectare|acre|how\s+big)\b/.test(q)) {
-        extras.push(
-            'The park is often cited around 331 km² of dense montane rainforest on steep terrain—use official UWA or UNESCO figures for planning.'
-        );
+        return 'Bwindi is commonly cited at about 331 km² of montane rainforest.';
     }
     if (/\b(elevation|altitude|steep|terrain|hiking\s+hard)\b/.test(q)) {
-        extras.push(
-            'Expect steep, muddy, high-elevation forest walking; fitness and pacing matter more than flat-trail expectations.'
-        );
+        return 'Bwindi terrain is steep and often muddy, with montane elevation changes. Expect physically demanding hikes and pace accordingly.';
     }
     if (/\b(chimp|elephant|buffalo|leopard)\b/.test(q)) {
-        extras.push(
-            'Large mammals and other primates occur in forest mosaics; sightings vary by sector and luck—follow distance and group conduct rules at all times.'
-        );
+        return 'These species occur in wider Ugandan ecosystems, but sightings in Bwindi vary by sector and conditions. Follow ranger guidance for current wildlife movement.';
     }
 
-    let tail = '';
-    if (appContext?.animals?.length || appContext?.themes?.length) {
-        const bits = [];
-        if (appContext.animals?.length) bits.push(`${appContext.animals.length} species in the Animals catalogue`);
-        if (appContext.themes?.length) bits.push(`${appContext.themes.length} UNESCO-style tour theme briefings`);
-        tail = ` On this device, SIGTS also holds ${bits.join(' and ')}—open the Animals tab for tiles and species cards.`;
-    }
-
-    const core = `Bwindi Impenetrable National Park (BINP) in southwestern Uganda protects a large block of montane rainforest famous for mountain gorillas and exceptional Albertine Rift biodiversity (UNESCO World Heritage). Typical visitor threads are regulated gorilla tracking or habituation, guided forest walks, birding, and community-linked cultural experiences. Stay with your assigned ranger team, respect UWA distance and health rules (wildlife diseases cut both ways), avoid flash where restricted, and treat SIGTS as a planning companion—your permit, briefing, and on-ground signs override any app text.${tail}${locationName ? ` Nearby map label in SIGTS: ${locationName} (verify on the ground).` : ''}`;
-
-    const extraBlock = extras.length ? `\n\n${extras.join('\n\n')}` : '';
-    return clampStr(`${core}${extraBlock}`, 3900);
+    const base = 'Bwindi is a protected Ugandan montane rainforest best known for gorilla trekking and high biodiversity.';
+    const nearby = locationName ? ` Nearby mapped label: ${locationName}.` : '';
+    const contextHint = appContext?.animals?.length
+        ? ` SIGTS currently has ${appContext.animals.length} animal records if you want species-specific detail.`
+        : '';
+    return clampStr(`${base}${nearby}${contextHint}`, 700);
 }
 
 function buildAnswerFromAppContext(question, appContext, locationName) {
@@ -192,37 +169,26 @@ function buildAnswerFromAppContext(question, appContext, locationName) {
     const parts = [];
 
     if (wantThemes && appContext.themes.length) {
+        const listed = appContext.themes
+            .slice(0, 3)
+            .map((t) => t.session_title || t.slug || 'Tour session')
+            .filter(Boolean);
         parts.push(
-            'Here is what this SIGTS install currently carries under UNESCO-style tour session briefings (Animals tab tiles). Use the in-app modal for the full script; this is a short digest:'
+            `Available tour themes: ${listed.join(', ')}${appContext.themes.length > 3 ? ` (+${appContext.themes.length - 3} more)` : ''}.`
         );
-        for (const t of appContext.themes.slice(0, 10)) {
-            const head = t.session_title || t.slug || 'Tour session';
-            const sub = t.subtitle ? ` (${t.subtitle})` : '';
-            const body = clampStr(t.tourist_summary_en, 420);
-            parts.push(`• ${head}${sub}: ${body || 'Open the theme card in the app for the full briefing.'}`);
-        }
-        if (appContext.themes.length > 10) {
-            parts.push(`(${appContext.themes.length - 10} additional themes are in the Animals tab—open each tile for the full script.)`);
-        }
     }
 
     if (wantAnimals && appContext.animals.length) {
         const n = appContext.animals.length;
-        const sample = appContext.animals.slice(0, 28).map((a) => a.name);
-        const extra = n > sample.length ? ` …and ${n - sample.length} more in the full Animals list` : '';
-        parts.push(
-            `Animals catalogue on this device: ${n} species. Examples: ${sample.join(', ')}.${extra} Open each species card for ranger-style notes, status, and etiquette—always defer to your guide and posted park rules.`
-        );
+        parts.push(`Animals catalogue on this device currently lists ${n} species.`);
         if (mentioned) {
             const sci = mentioned.scientific_name ? ` (${mentioned.scientific_name})` : '';
-            parts.push(
-                `Your message references “${mentioned.name}”${sci}. Cross-check habitat, seasonality, and distance rules on that species card; treat this reply as a draft, not a permit or safety briefing.`
-            );
+            parts.push(`You asked about ${mentioned.name}${sci}; open that species card for details in this SIGTS build.`);
         }
     }
 
     let text = parts.join('\n\n');
-    text = clampStr(text, 3900);
+    text = clampStr(text, 700);
     if (locationName) {
         text += ` Nearby map label in data: ${locationName} (confirm on the ground).`;
     }
@@ -258,7 +224,7 @@ function buildRuleBasedAnswer(question, context = {}) {
         return buildBwindiScopedAnswer(question, locationName, appContext);
     }
 
-    return `Ask about Bwindi or BINP (sectors like Buhoma or Rushaga), Uganda forest trekking, UWA rules, maps, weather, culture, or species—the assistant is tuned for that park context. Add a place name or topic so the reply can latch on.${locationName ? ` Nearby label in data: ${locationName}. Confirm with your guide.` : ''}`;
+    return `I can only answer SIGTS/Bwindi topics. Rephrase your question with a specific park topic (for example: gorillas, permits, weather, map route, culture, or species).${locationName ? ` Nearby label: ${locationName}.` : ''}`;
 }
 
 function buildServerTimeContextNote() {

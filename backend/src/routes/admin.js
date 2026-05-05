@@ -106,13 +106,13 @@ router.get('/active-users', [
 
         const sql = hasHeartbeatColumn
             ? `SELECT user_id, username, user_type, email,
-                      last_location_time AS last_seen,
+                      COALESCE(last_location_time, last_login) AS last_seen,
                       last_login, last_lat, last_lng
                FROM users
                WHERE is_active = true
-                 AND last_location_time IS NOT NULL
-                 AND last_location_time > NOW() - ($1)::interval
-               ORDER BY last_location_time DESC`
+                 AND COALESCE(last_location_time, last_login) IS NOT NULL
+                 AND COALESCE(last_location_time, last_login) > NOW() - ($1)::interval
+               ORDER BY COALESCE(last_location_time, last_login) DESC`
             : `SELECT user_id, username, user_type, email,
                       last_login AS last_seen,
                       last_login, last_lat, last_lng

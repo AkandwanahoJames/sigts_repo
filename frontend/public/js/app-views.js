@@ -62,6 +62,77 @@ function buildTourHelpMetaHtml(meta) {
     return parts.length ? `<div class="ai-chat-meta-block">${parts.join('')}</div>` : '';
 }
 
+function formatTourHelpAnswerHtml(rawText) {
+    const text = String(rawText || '').replace(/\r\n/g, '\n').trim();
+    if (!text) return '<p>No response available.</p>';
+
+    const blocks = text.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean);
+    const htmlBlocks = [];
+
+    for (const block of blocks) {
+        const lines = block.split('\n').map((line) => line.trim()).filter(Boolean);
+        if (!lines.length) continue;
+
+        const bulletLines = lines.filter((line) => /^[-*•]\s+/.test(line));
+        const numberedLines = lines.filter((line) => /^\d+[.)]\s+/.test(line));
+
+        if (bulletLines.length === lines.length) {
+            const items = lines
+                .map((line) => line.replace(/^[-*•]\s+/, ''))
+                .map((line) => `<li>${escapeHtml(line)}</li>`)
+                .join('');
+            htmlBlocks.push(`<ul>${items}</ul>`);
+            continue;
+        }
+
+        if (numberedLines.length === lines.length) {
+            const items = lines
+                .map((line) => line.replace(/^\d+[.)]\s+/, ''))
+                .map((line) => `<li>${escapeHtml(line)}</li>`)
+                .join('');
+            htmlBlocks.push(`<ol>${items}</ol>`);
+            continue;
+        }
+
+        htmlBlocks.push(`<p>${escapeHtml(lines.join(' '))}</p>`);
+    }
+
+    return htmlBlocks.join('');
+}
+
+const SIGTS_MIC_MAX_TRANSCRIPT_CHARS = 320;
+const SIGTS_MIC_MAX_STARTS_PER_MINUTE = 6;
+const SIGTS_MIC_CAPTURE_TIMEOUT_MS = 15000;
+
+function sanitizeVoiceTranscript(raw) {
+    const text = String(raw || '')
+        .normalize('NFKC')
+        .replace(/[\u0000-\u001f\u007f]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (!text) return '';
+    return text.slice(0, SIGTS_MIC_MAX_TRANSCRIPT_CHARS);
+}
+
+function setTourHelpMicButtonState(listening) {
+    const btn = document.getElementById('aiChatMicBtn');
+    if (!btn) return;
+    btn.disabled = Boolean(listening);
+    btn.setAttribute('aria-busy', listening ? 'true' : 'false');
+    btn.title = listening
+        ? 'Listening... speak clearly and wait for capture'
+        : 'Speak your question (browser Speech Recognition)';
+}
+
+function recordTourHelpMicStartAndCheckLimit() {
+    const now = Date.now();
+    const bucket = Array.isArray(window.__sigtsMicStartTimes) ? window.__sigtsMicStartTimes : [];
+    const recent = bucket.filter((ts) => now - Number(ts) <= 60000);
+    recent.push(now);
+    window.__sigtsMicStartTimes = recent;
+    return recent.length <= SIGTS_MIC_MAX_STARTS_PER_MINUTE;
+}
+
 function icon(name, className = '') {
     const classes = `ui-icon ${className}`.trim();
     const icons = {
@@ -78,7 +149,7 @@ function icon(name, className = '') {
         bell: '<path d="M15 17H5l1.5-2v-4a5.5 5.5 0 1 1 11 0v4L19 17z"/><path d="M10 19a2 2 0 0 0 4 0"/>',
         info: '<circle cx="12" cy="12" r="9"/><path d="M12 10v6"/><circle cx="12" cy="7" r="1"/>',
         target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1.5"/>',
-        feather: '<path d="M20 4c-6 0-11 5-11 11v5h5c6 0 11-5 11-11V4h-5z"/><path d="M7 17l10-10"/><path d="M12 12l3 3"/>',
+        feather: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
         leaf: '<path d="M5 15c6-8 13-8 14-8 0 8-5 12-10 12-2 0-3-.8-4-4z"/><path d="M7 18c3-4 7-8 12-11"/>',
         grid: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
         sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1l2.1-2.1M17 7l2.1-2.1"/>',
@@ -271,6 +342,8 @@ let liveMapTileLayers = {};
 let measureStartPoint = null;
 let lastTurnAlertAt = 0;
 let adminRealtimeUsersTimer = null;
+let guideDashboardRefreshTimer = null;
+let assignmentDashboardRefreshTimer = null;
 let parkAccessSimulation = (() => {
     try {
         const saved = JSON.parse(localStorage.getItem('parkAccessSimulation') || '{}');
@@ -293,13 +366,15 @@ function getParkAccessState() {
     const boundaryMode = parkAccessSimulation.boundary || 'auto';
     const networkMode = parkAccessSimulation.network || 'auto';
     const role = getEffectiveRole(Auth.getCurrentUser() || {});
-    const intranetState = AppState?.accessContext?.isIntranet;
+    const accessContext = AppState?.accessContext || {};
+    const intranetState = accessContext.isIntranet;
     const requiresIntranet = role === 'tourist' || role === 'guide';
+    const backendInside = typeof accessContext.insideBoundary === 'boolean' ? accessContext.insideBoundary : null;
     const insidePark = boundaryMode === 'auto'
-        ? (liveInside === null ? true : liveInside)
+        ? (backendInside === null ? (liveInside === null ? true : liveInside) : backendInside)
         : boundaryMode === 'inside';
     let online = networkMode === 'auto'
-        ? navigator.onLine
+        ? (typeof intranetState === 'boolean' ? intranetState : navigator.onLine)
         : networkMode === 'online';
     if (networkMode === 'auto' && requiresIntranet && intranetState === false) {
         online = false;
@@ -313,7 +388,10 @@ function getParkAccessState() {
         liveInside,
         boundaryMode,
         networkMode,
-        requiresIntranet
+        requiresIntranet,
+        policyMode: accessContext.mode || 'demo',
+        decisionSource: accessContext.source || 'live',
+        decisionReason: accessContext.reason || ''
     };
 }
 
@@ -338,9 +416,12 @@ function renderParkAccessPanel() {
         <div class="park-access-meta">
             <span class="park-chip ${state.insidePark ? 'ok' : 'warn'}">Boundary: ${state.insidePark ? 'Inside' : 'Outside'}</span>
             <span class="park-chip ${state.online ? 'ok' : 'warn'}">Network: ${state.online ? 'Online' : 'Offline'}</span>
+            <span class="park-chip neutral">Mode: ${escapeHtml(state.policyMode)}</span>
+            <span class="park-chip neutral">Source: ${escapeHtml(state.decisionSource)}</span>
             <span class="park-chip ${hasCoords ? '' : 'neutral'}">Lat: ${escapeHtml(latText)}${hasCoords ? ` • Lng: ${escapeHtml(lngText)}` : ''}</span>
         </div>
-        <details class="park-access-sim">
+        <div class="park-access-note">Decision: ${escapeHtml(state.decisionReason || 'No policy reason provided')}</div>
+        ${state.policyMode === 'demo' ? `<details class="park-access-sim">
             <summary>Demo simulation controls</summary>
             <div class="park-access-actions">
                 <button type="button" class="small-btn ${state.boundaryMode === 'auto' ? 'btn-primary' : ''}" onclick="setParkBoundaryMode('auto')">Boundary Auto</button>
@@ -352,7 +433,7 @@ function renderParkAccessPanel() {
                 <button type="button" class="small-btn" onclick="resetParkAccessSimulation()">Reset Simulation</button>
             </div>
             <div class="park-access-note">Use these controls to validate boundary and network restriction behavior.</div>
-        </details>
+        </details>` : '<div class="park-access-note">Simulation controls are disabled in production mode.</div>'}
     </section>`;
 }
 
@@ -403,6 +484,38 @@ function startAdminRealtimeUsersRefresh() {
     adminRealtimeUsersTimer = setInterval(() => {
         refreshAdminRealtimeUsers();
     }, 15000);
+}
+
+function stopGuideDashboardRefresh() {
+    if (guideDashboardRefreshTimer) {
+        clearInterval(guideDashboardRefreshTimer);
+        guideDashboardRefreshTimer = null;
+    }
+}
+
+function startGuideDashboardRefresh() {
+    stopGuideDashboardRefresh();
+    guideDashboardRefreshTimer = setInterval(() => {
+        if (window.currentView === 'guide_dashboard') {
+            renderView('guide_dashboard', { updateHash: false, suppressAccessToast: true });
+        }
+    }, 30000);
+}
+
+function stopAssignmentDashboardRefresh() {
+    if (assignmentDashboardRefreshTimer) {
+        clearInterval(assignmentDashboardRefreshTimer);
+        assignmentDashboardRefreshTimer = null;
+    }
+}
+
+function startAssignmentDashboardRefresh() {
+    stopAssignmentDashboardRefresh();
+    assignmentDashboardRefreshTimer = setInterval(() => {
+        if (window.currentView === 'it_tour_assignments') {
+            renderView('it_tour_assignments', { updateHash: false, suppressAccessToast: true });
+        }
+    }, 30000);
 }
 
 function renderNotificationBell(user) {
@@ -1966,7 +2079,7 @@ function renderAIChatContent() {
         </div>
         <div class="ai-chat-composer">
             <input id="aiChatInput" class="auth-input" placeholder="Your question (edit any pre-filled draft)..." />
-            <button type="button" class="small-btn" title="Speak your question (browser Speech Recognition)" onclick="startTourHelpVoiceCapture()">${icon('target', 'icon-sm')} Mic</button>
+            <button type="button" id="aiChatMicBtn" class="small-btn" title="Speak your question (browser Speech Recognition)" onclick="startTourHelpVoiceCapture()">${icon('target', 'icon-sm')} Mic</button>
             <button class="login-btn" onclick="sendAIChatMessage()">Send</button>
         </div>
     </div>`;
@@ -2237,6 +2350,9 @@ async function renderIntranetDashboard() {
                     <div class="analytics-row"><span>Device IP</span><span></span><strong id="intranetIpValue">${escapeHtml(effectiveIp || 'Unknown')}</strong></div>
                     <div class="analytics-row"><span>Park Boundary</span><span></span><strong id="intranetBoundaryValue">${parkState.insidePark ? 'Inside' : 'Outside'}</strong></div>
                     <div class="analytics-row"><span>Network Status</span><span></span><strong id="intranetNetworkValue">${parkState.online ? 'Online' : 'Offline'}</strong></div>
+                    <div class="analytics-row"><span>Policy Mode</span><span></span><strong>${escapeHtml(AppState?.accessContext?.mode || 'demo')}</strong></div>
+                    <div class="analytics-row"><span>Decision Source</span><span></span><strong>${escapeHtml(AppState?.accessContext?.source || 'live')}</strong></div>
+                    <div class="analytics-row"><span>Decision Reason</span><span></span><strong>${escapeHtml(AppState?.accessContext?.reason || 'Policy checks passed')}</strong></div>
                     <div class="analytics-row"><span>Peers inside boundary</span><span></span><strong>${insideCount}</strong></div>
                     <div class="analytics-row"><span>Peers outside boundary</span><span></span><strong>${outsideCount}</strong></div>
                 </div>
@@ -2428,6 +2544,10 @@ window.sendAIChatMessage = async function() {
 
     const question = input.value.trim();
     if (!question) return;
+    if (question.length > 2000) {
+        showToast('Message is too long. Please keep it under 2000 characters.', 'warning');
+        return;
+    }
 
     messages.innerHTML += `<div class="rec-card ai-chat-message"><div class="rec-info"><div class="rec-title">You</div><div class="rec-reason">${escapeHtml(question)}</div></div></div>`;
     input.value = '';
@@ -2435,9 +2555,10 @@ window.sendAIChatMessage = async function() {
     window.__sigtsLastTourHelpQuestion = question;
     const result = await AI.askQuestion(question);
     const answer = result?.answer || 'No response available.';
+    const formattedAnswer = formatTourHelpAnswerHtml(answer);
     const metaBlock = buildTourHelpMetaHtml(result?.meta);
     const feedbackRow = `<div class="ai-chat-feedback-row"><span class="ui-modal-muted">Was this helpful?</span><button type="button" class="small-btn" onclick="submitTourHelpFeedback(true)">${icon('target', 'icon-sm')} Yes</button><button type="button" class="small-btn ghost-btn" onclick="submitTourHelpFeedback(false)">No</button></div>`;
-    messages.innerHTML += `<div class="rec-card ai-chat-message"><div class="rec-info"><div class="rec-title">Park reference reply</div><div class="rec-reason">${escapeHtml(answer)}</div>${metaBlock}${feedbackRow}</div></div>`;
+    messages.innerHTML += `<div class="rec-card ai-chat-message"><div class="rec-info"><div class="rec-title">Park reference reply</div><div class="rec-reason ai-chat-response-block">${formattedAnswer}</div>${metaBlock}${feedbackRow}</div></div>`;
     requestAnimationFrame(() => {
         messages.scrollTop = messages.scrollHeight;
     });
@@ -2475,35 +2596,80 @@ window.toggleSpeciesHeatmapLayer = async function () {
 window.startTourHelpVoiceCapture = function () {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const input = document.getElementById('aiChatInput');
+    const secureContextOk = window.isSecureContext || /^localhost$|^127\.0\.0\.1$/.test(window.location.hostname);
     if (!SR) {
         showToast('Speech recognition is not supported in this browser.', 'warning');
         return;
     }
+    if (!secureContextOk) {
+        showToast('Microphone requires a secure context (HTTPS or localhost).', 'warning');
+        return;
+    }
+    if (!input) {
+        showToast('Chat input is unavailable right now.', 'warning');
+        return;
+    }
     if (window.__sigtsTourHelpRecListening) return;
+    if (!recordTourHelpMicStartAndCheckLimit()) {
+        showToast('Too many mic requests. Please wait a moment and try again.', 'warning');
+        return;
+    }
     const rec = new SR();
     const lang = AppState?.userPreferences?.language;
     rec.lang = lang === 'fr' ? 'fr-FR' : lang === 'sw' ? 'sw-TZ' : lang === 'ruk' ? 'rw-RW' : 'en-US';
     rec.continuous = false;
     rec.interimResults = false;
     rec.maxAlternatives = 1;
+    rec.onstart = () => {
+        setTourHelpMicButtonState(true);
+    };
     rec.onresult = (e) => {
         window.__sigtsTourHelpRecListening = false;
-        const t = e.results[0]?.[0]?.transcript?.trim();
-        if (t && input) input.value = `${(input.value || '').trim()}${input.value ? ' ' : ''}${t}`;
-        showToast(t ? "Speech added to the Let's Chat box." : 'No speech captured.', t ? 'success' : 'warning');
+        const captured = e.results?.[0]?.[0]?.transcript;
+        const t = sanitizeVoiceTranscript(captured);
+        if (t) {
+            input.value = `${(input.value || '').trim()}${input.value ? ' ' : ''}${t}`.trim();
+        }
+        showToast(t ? "Speech added to the Let's Chat box." : 'No usable speech captured.', t ? 'success' : 'warning');
     };
-    rec.onerror = () => {
+    rec.onerror = (err) => {
         window.__sigtsTourHelpRecListening = false;
-        showToast('Mic capture failed or was denied.', 'warning');
+        const code = String(err?.error || 'unknown');
+        if (code === 'not-allowed' || code === 'service-not-allowed') {
+            showToast('Microphone permission denied. Allow mic access in browser settings.', 'warning');
+            return;
+        }
+        if (code === 'no-speech') {
+            showToast('No speech detected. Try again and speak clearly.', 'warning');
+            return;
+        }
+        if (code === 'audio-capture') {
+            showToast('No microphone device detected.', 'warning');
+            return;
+        }
+        showToast('Mic capture failed. Please retry.', 'warning');
     };
     rec.onend = () => {
         window.__sigtsTourHelpRecListening = false;
+        if (window.__sigtsTourHelpRecTimeout) {
+            clearTimeout(window.__sigtsTourHelpRecTimeout);
+            window.__sigtsTourHelpRecTimeout = null;
+        }
+        setTourHelpMicButtonState(false);
     };
     window.__sigtsTourHelpRecListening = true;
     try {
         rec.start();
+        window.__sigtsTourHelpRecTimeout = setTimeout(() => {
+            try {
+                rec.stop();
+            } catch (_) {
+                /**/
+            }
+        }, SIGTS_MIC_CAPTURE_TIMEOUT_MS);
     } catch (_) {
         window.__sigtsTourHelpRecListening = false;
+        setTourHelpMicButtonState(false);
         showToast('Could not start speech recognition.', 'warning');
     }
 };
@@ -3706,6 +3872,12 @@ async function renderView(view, options = {}) {
     if (safeView !== 'it_dashboard') {
         stopAdminRealtimeUsersRefresh();
     }
+    if (safeView !== 'guide_dashboard') {
+        stopGuideDashboardRefresh();
+    }
+    if (safeView !== 'it_tour_assignments') {
+        stopAssignmentDashboardRefresh();
+    }
 
     let content = '';
     switch (safeView) {
@@ -3732,6 +3904,12 @@ async function renderView(view, options = {}) {
     await refreshRareAlertBadge();
     if (safeView === 'it_dashboard') {
         startAdminRealtimeUsersRefresh();
+    }
+    if (safeView === 'guide_dashboard') {
+        startGuideDashboardRefresh();
+    }
+    if (safeView === 'it_tour_assignments') {
+        startAssignmentDashboardRefresh();
     }
     if (safeView === 'map') {
         await initializeLiveMap();

@@ -1,5 +1,6 @@
 // backend/src/services/emailService.js
 const nodemailer = require('nodemailer');
+const jwt = require('jsonwebtoken');
 const { logger } = require('../utils/logger');
 
 // Create transporter
@@ -17,7 +18,12 @@ const transporter = nodemailer.createTransport({
  * Send verification email
  */
 async function sendVerificationEmail(email, userId) {
-    const verificationToken = Buffer.from(`${userId}:${Date.now()}`).toString('base64');
+    const verificationSecret = process.env.JWT_EMAIL_VERIFICATION_SECRET || process.env.JWT_SECRET || 'bwindi-dev-email-verify-secret';
+    const verificationToken = jwt.sign(
+        { sub: userId, typ: 'email_verify' },
+        verificationSecret,
+        { expiresIn: '24h' }
+    );
     const verificationUrl = `${process.env.CLIENT_URL}/verify-email?token=${verificationToken}`;
 
     const mailOptions = {

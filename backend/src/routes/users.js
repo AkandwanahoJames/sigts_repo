@@ -5,6 +5,22 @@ const { body, validationResult } = require('express-validator');
 const { pool } = require('../config/database');
 const { authenticateJWT, authorize } = require('../middleware/auth');
 const { canViewMedicalNotes } = require('../services/medicalNotesAccess');
+let usersEmailVerifiedReady = null;
+
+async function ensureUsersEmailVerifiedColumn() {
+    if (usersEmailVerifiedReady) return usersEmailVerifiedReady;
+    usersEmailVerifiedReady = (async () => {
+        await pool.query(
+            `ALTER TABLE users
+             ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT false`
+        );
+        return true;
+    })().catch((error) => {
+        usersEmailVerifiedReady = null;
+        throw error;
+    });
+    return usersEmailVerifiedReady;
+}
 
 // =====================================================
 // GET /api/users/profile
@@ -14,6 +30,7 @@ router.get('/profile', authenticateJWT, async (req, res) => {
     const userId = req.user.user_id;
 
     try {
+        await ensureUsersEmailVerifiedColumn();
         // Get base user info
         const userResult = await pool.query(
             `SELECT user_id, username, email, phone, first_name, last_name, 
@@ -32,7 +49,7 @@ router.get('/profile', authenticateJWT, async (req, res) => {
         // Get role-specific data
         if (profile.user_type === 'tourist') {
             const touristData = await pool.query(
-                `SELECT nationality, date_of_birth, interests, total_visits, is_premium,
+                `SELECT nationality, date_of_birth, interests, total_visits,
                         emergency_contact_name, emergency_contact_phone
                  FROM tourists WHERE user_id = $1`,
                 [userId]
@@ -42,7 +59,7 @@ router.get('/profile', authenticateJWT, async (req, res) => {
             }
         } else if (profile.user_type === 'guide') {
             const guideData = await pool.query(
-                `SELECT license_number, specialization, years_experience, languages,
+                `SELECT license_number, specialization, years_of_experience AS years_experience, languages,
                         certification_level, average_rating, total_tours_conducted
                  FROM tour_guides WHERE user_id = $1`,
                 [userId]

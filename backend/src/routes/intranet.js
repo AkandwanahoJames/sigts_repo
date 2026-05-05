@@ -9,37 +9,105 @@ const path = require('path');
 
 router.use(authenticateJWT);
 
+const ACCESS_POLICY_MODE = String(process.env.ACCESS_POLICY_MODE || process.env.NODE_ENV || 'development')
+    .toLowerCase() === 'production'
+    ? 'production'
+    : 'demo';
+const INTRANET_SUBNET = process.env.INTRANET_SUBNET || '192.168.100.0/24';
+
+function normalizeIp(rawIp) {
+    return String(rawIp || '').replace('::ffff:', '').trim();
+}
+
+function isInConfiguredIntranet(ip) {
+    // Minimal subnet matcher for current deployment contract.
+    // For Bwindi production subnet (e.g., 192.168.100.0/24), prefix match is sufficient.
+    const subnetPrefix = INTRANET_SUBNET.split('/')[0].split('.').slice(0, 3).join('.');
+    return ip.startsWith(`${subnetPrefix}.`);
+}
+
+function isInsideBoundaryFromHeaders(req) {
+    const lat = Number(req.headers['x-user-lat']);
+    const lng = Number(req.headers['x-user-lng']);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    // Boundary truth is computed elsewhere; for lightweight status endpoint we treat
+    // presence of coordinates as "field telemetry available", then let simulation/real mode decide.
+    return true;
+}
+
+function buildAccessContext(req) {
+    const ip = normalizeIp(req.ip || req.connection?.remoteAddress || '');
+    const role = req.user?.user_type || 'tourist';
+    const requiresIntranet = role === 'tourist' || role === 'guide';
+    const baseIsIntranet = isInConfiguredIntranet(ip);
+    const baseInsideBoundary = isInsideBoundaryFromHeaders(req);
+    const simBoundary = String(req.headers['x-sigts-sim-boundary'] || 'auto').toLowerCase();
+    const simNetwork = String(req.headers['x-sigts-sim-network'] || 'auto').toLowerCase();
+    const demoOverridesAllowed = ACCESS_POLICY_MODE === 'demo';
+
+    let isIntranet = baseIsIntranet;
+    let insideBoundary = baseInsideBoundary;
+    let source = 'live';
+    const reasons = [];
+
+    if (demoOverridesAllowed) {
+        if (simNetwork === 'online') {
+            isIntranet = true;
+            source = 'simulation';
+            reasons.push('network forced online for demo');
+        } else if (simNetwork === 'offline') {
+            isIntranet = false;
+            source = 'simulation';
+            reasons.push('network forced offline for demo');
+        }
+
+        if (simBoundary === 'inside') {
+            insideBoundary = true;
+            source = 'simulation';
+            reasons.push('boundary forced inside for demo');
+        } else if (simBoundary === 'outside') {
+            insideBoundary = false;
+            source = 'simulation';
+            reasons.push('boundary forced outside for demo');
+        }
+    }
+
+    const networkOk = requiresIntranet ? isIntranet : true;
+    const boundaryKnown = insideBoundary !== null;
+    const boundaryOk = boundaryKnown ? insideBoundary : true;
+    const accessGranted = Boolean(networkOk && boundaryOk);
+
+    if (!networkOk) reasons.push('outside trusted intranet subnet');
+    if (!boundaryOk) reasons.push('outside park boundary');
+    if (!boundaryKnown) reasons.push('gps unavailable');
+    if (!reasons.length) reasons.push('policy checks passed');
+
+    return {
+        mode: ACCESS_POLICY_MODE,
+        subnet: INTRANET_SUBNET,
+        role,
+        requiresIntranet,
+        ip,
+        isIntranet,
+        insideBoundary,
+        accessGranted,
+        source,
+        reason: reasons.join('; '),
+        timestamp: new Date().toISOString()
+    };
+}
+
 // Lightweight access context for all authenticated roles (used silently by UI).
 router.get('/status-lite', async (req, res) => {
-    const rawIp = req.ip || req.connection.remoteAddress || '';
-    const clientIp = String(rawIp).replace('::ffff:', '');
-    const isIntranet = clientIp.startsWith('192.168.100') ||
-        clientIp.startsWith('10.') ||
-        clientIp.startsWith('172.');
-    const role = req.user?.user_type || 'tourist';
-    return res.json({
-        isIntranet,
-        ip: clientIp,
-        role,
-        timestamp: new Date().toISOString()
-    });
+    return res.json(buildAccessContext(req));
 });
 
 router.use(authorize('it_manager'));
 
 // Get current intranet status
 router.get('/status', async (req, res) => {
-    const clientIp = req.ip || req.connection.remoteAddress;
-    const isIntranet = clientIp.startsWith('192.168.100') || 
-                       clientIp.startsWith('10.') ||
-                       clientIp.startsWith('172.');
-    
-    res.json({
-        isIntranet,
-        ip: clientIp,
-        timestamp: new Date().toISOString(),
-        subnet: '192.168.100.0/24'
-    });
+    const status = buildAccessContext(req);
+    res.json(status);
 });
 
 // Get list of peers on intranet

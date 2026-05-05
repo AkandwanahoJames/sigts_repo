@@ -6,12 +6,15 @@ class AuthManager {
     constructor() {
         this.token = localStorage.getItem('token') || sessionStorage.getItem('token');
         this.user = null;
-        this.sessionTimeout = 24 * 60 * 60 * 1000;
+        this.sessionTimeout = 30 * 60 * 1000;
         this.sessionTimer = null;
         this.failedAttempts = 0;
         this.maxAttempts = 5;
         this.twoFactorPending = false;
         this.pending2FACode = null;
+        this.activityMonitorBound = false;
+        this.activityHandler = null;
+        this.activityThrottleUntil = 0;
         
         if (this.token) {
             try {
@@ -19,6 +22,8 @@ class AuthManager {
                     throw new Error('Legacy demo token');
                 }
                 this.user = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || 'null');
+                this.startSessionTimer();
+                this.bindActivityMonitor();
             } catch(e) {
                 this.token = null;
                 localStorage.removeItem('token');
@@ -337,6 +342,7 @@ class AuthManager {
         API.setToken(this.token);
         
         this.startSessionTimer();
+        this.bindActivityMonitor();
         AppState.currentUser = this.user;
         AppState.authToken = this.token;
         this.failedAttempts = 0;
@@ -356,6 +362,32 @@ class AuthManager {
         }, this.sessionTimeout);
     }
 
+    touchSessionActivity() {
+        if (!this.token || !this.user) return;
+        const now = Date.now();
+        if (now < this.activityThrottleUntil) return;
+        this.activityThrottleUntil = now + 1000;
+        this.startSessionTimer();
+    }
+
+    bindActivityMonitor() {
+        if (this.activityMonitorBound || !this.token || !this.user) return;
+        this.activityHandler = () => this.touchSessionActivity();
+        ['click', 'keydown', 'touchstart', 'mousemove', 'scroll'].forEach((eventName) => {
+            window.addEventListener(eventName, this.activityHandler, { passive: true });
+        });
+        this.activityMonitorBound = true;
+    }
+
+    unbindActivityMonitor() {
+        if (!this.activityMonitorBound || !this.activityHandler) return;
+        ['click', 'keydown', 'touchstart', 'mousemove', 'scroll'].forEach((eventName) => {
+            window.removeEventListener(eventName, this.activityHandler, { passive: true });
+        });
+        this.activityMonitorBound = false;
+        this.activityHandler = null;
+    }
+
     async logout() {
         this.token = null;
         this.user = null;
@@ -365,6 +397,11 @@ class AuthManager {
         sessionStorage.removeItem('token');
         sessionStorage.removeItem('user');
         AppState.currentUser = null;
+        if (this.sessionTimer) {
+            clearTimeout(this.sessionTimer);
+            this.sessionTimer = null;
+        }
+        this.unbindActivityMonitor();
         renderView('login');
     }
 
@@ -389,6 +426,17 @@ class AuthManager {
         });
         if (result?.success) return result;
         return { success: false, error: result?.error || 'Failed to request password reset' };
+    }
+
+    async verifyEmailToken(token) {
+        const t = String(token || '').trim();
+        if (!t) return { success: false, error: 'Verification token is required' };
+        const result = await API.request('/auth/verify-email', {
+            method: 'POST',
+            body: JSON.stringify({ token: t })
+        });
+        if (result?.success) return result;
+        return { success: false, error: result?.error || 'Email verification failed' };
     }
 
     async resetPassword(token, newPassword) {
@@ -816,11 +864,19 @@ class TourGuideManager {
             API.getGuidePerformance()
         ]);
         const myTours = Array.isArray(tours) ? tours : [];
-        const todayStr = new Date().toISOString().split('T')[0];
+        const toLocalYmd = (value) => {
+            const d = value ? new Date(value) : new Date();
+            if (Number.isNaN(d.getTime())) return '';
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        };
+        const todayStr = toLocalYmd(new Date());
         
-        const upcoming = myTours.filter(t => t.scheduled_start?.split('T')[0] > todayStr);
+        const upcoming = myTours.filter(t => toLocalYmd(t.scheduled_start) > todayStr);
         const completed = myTours.filter(t => t.status === 'completed');
-        const today = myTours.filter(t => t.scheduled_start?.split('T')[0] === todayStr);
+        const today = myTours.filter(t => toLocalYmd(t.scheduled_start) === todayStr);
         
         const activeShift = shiftStatus?.shift?.status === 'active' ? shiftStatus.shift : null;
         
@@ -1995,7 +2051,7 @@ class ITManagerAPI {
 
     async getLiveOperations() {
         const settled = await Promise.allSettled([
-            API.getAdminActiveUsers(5),
+            API.getAdminActiveUsers(30),
             Intranet.getIntranetStatus(),
             API.request('/sync/status')
         ]);

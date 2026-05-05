@@ -8,7 +8,7 @@ const { pool } = require('../config/database');
 const { REQUIREMENTS } = require('../config/requirements');
 const { authenticateJWT } = require('../middleware/auth');
 const { logger } = require('../utils/logger');
-const { sendPasswordResetEmail, sendActivityNotificationEmail } = require('../services/emailService');
+const { sendVerificationEmail, sendPasswordResetEmail, sendActivityNotificationEmail } = require('../services/emailService');
 const refreshTokenService = require('../services/refreshTokenService');
 const crypto = require('crypto');
 
@@ -37,11 +37,13 @@ const JWT_SECRET = getJwtSecret();
 const BCRYPT_ROUNDS = REQUIREMENTS.security.bcryptRounds || 12;
 const REFRESH_JWT_SECRET = process.env.JWT_REFRESH_SECRET || `${JWT_SECRET}-refresh`;
 const MFA_JWT_SECRET = process.env.JWT_MFA_SECRET || `${JWT_SECRET}-mfa`;
+const EMAIL_VERIFICATION_JWT_SECRET = process.env.JWT_EMAIL_VERIFICATION_SECRET || JWT_SECRET;
 const ACCESS_TOKEN_TTL = REQUIREMENTS.security.jwtAccessTtl || '24h';
 const REFRESH_TOKEN_TTL = process.env.JWT_REFRESH_TTL || '7d';
 const ENFORCE_PARK_GEOFENCE =
     process.env.ENFORCE_PARK_GEOFENCE === 'true' || process.env.NODE_ENV === 'production';
-const GEOFENCE_BYPASS_ROLES = new Set(['it_manager', 'admin']);
+const GEOFENCE_BYPASS_ROLES = new Set();
+let usersEmailVerifiedReady = null;
 
 function getRequestCoordinates(req) {
     const lat = Number(req.body?.lat ?? req.headers['x-user-lat']);
@@ -69,6 +71,31 @@ function createAccessToken(userId, userType) {
 
 function createRefreshToken(userId, userType) {
     return jwt.sign({ userId, userType, typ: 'refresh' }, REFRESH_JWT_SECRET, { expiresIn: REFRESH_TOKEN_TTL });
+}
+
+function parseVerificationToken(token) {
+    try {
+        const decoded = jwt.verify(String(token || ''), EMAIL_VERIFICATION_JWT_SECRET);
+        if (!decoded || decoded.typ !== 'email_verify' || !decoded.sub) return null;
+        return { userId: decoded.sub };
+    } catch (_) {
+        return null;
+    }
+}
+
+async function ensureUsersEmailVerifiedColumn() {
+    if (usersEmailVerifiedReady) return usersEmailVerifiedReady;
+    usersEmailVerifiedReady = (async () => {
+        await pool.query(
+            `ALTER TABLE users
+             ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT false`
+        );
+        return true;
+    })().catch((error) => {
+        usersEmailVerifiedReady = null;
+        throw error;
+    });
+    return usersEmailVerifiedReady;
 }
 
 function base32Decode(secret) {
@@ -192,6 +219,8 @@ router.post('/register', [
             );
         }
 
+        sendVerificationEmail(user.email, user.user_id).catch((err) => logger.error('Verification email failed:', err.message));
+
         sendActivityNotificationEmail(
             user.email,
             user.username,
@@ -201,7 +230,7 @@ router.post('/register', [
 
         res.status(201).json({
             success: true,
-            message: 'Registration successful',
+            message: 'Registration successful. Verification email sent.',
             user: {
                 id: user.user_id,
                 username: user.username,
@@ -213,6 +242,55 @@ router.post('/register', [
     } catch (error) {
         console.error('Registration error:', error);
         res.status(500).json({ error: 'Registration failed' });
+    }
+});
+
+// =====================================================
+// POST /api/auth/verify-email
+// =====================================================
+router.post('/verify-email', [
+    body('token').notEmpty()
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
+
+    const parsed = parseVerificationToken(req.body.token);
+    if (!parsed) {
+        return res.status(400).json({ error: 'Invalid or expired verification token' });
+    }
+
+    try {
+        await ensureUsersEmailVerifiedColumn();
+        const updated = await pool.query(
+            `UPDATE users
+             SET email_verified = true
+             WHERE user_id = $1
+             RETURNING user_id, email, username, email_verified`,
+            [parsed.userId]
+        );
+
+        if (!updated.rows.length) {
+            return res.status(404).json({ error: 'User not found for verification token' });
+        }
+
+        const user = updated.rows[0];
+        sendActivityNotificationEmail(
+            user.email,
+            user.username,
+            'Email verification completed',
+            'Your email address has been verified successfully on SIGTS.'
+        ).catch((err) => logger.error('Verify-email activity email failed:', err.message));
+
+        return res.json({
+            success: true,
+            message: 'Email verified successfully',
+            email_verified: Boolean(user.email_verified)
+        });
+    } catch (error) {
+        logger.error('Verify email failed:', error.message);
+        return res.status(500).json({ error: 'Failed to verify email' });
     }
 });
 
@@ -302,6 +380,13 @@ router.post('/login', [
                  SET last_lat = $1, last_lng = $2, last_login = CURRENT_TIMESTAMP
                  WHERE user_id = $3`,
                 [coordinates.lat, coordinates.lng, user.user_id]
+            );
+        } else {
+            await pool.query(
+                `UPDATE users
+                 SET last_login = CURRENT_TIMESTAMP
+                 WHERE user_id = $1`,
+                [user.user_id]
             );
         }
 
