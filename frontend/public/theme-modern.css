@@ -8,43 +8,52 @@
 
 /* ----- Design tokens (override) ---------------------------- */
 :root {
-    /* Forest greens */
-    --green-950: #062014;
-    --green-900: #0a2b1a;
-    --green-800: #0f3a25;
-    --green-700: #145430;
-    --green-600: #1c7a44;
-    --green-500: #25a060;
-    --green-400: #4ec384;
+    /* Forest greens (primary system) */
+    --green-950: #04160f;
+    --green-900: #0A2B1A;
+    --green-800: #0F3A25;
+    --green-700: #145430; /* primary */
+    --green-600: #1C7A44;
+    --green-500: #25A060; /* hover / highlights */
+    --green-400: #5AD19B;
 
-    /* Warm yellow accent (Uganda-inspired) */
-    --yellow-50:  #fffbeb;
-    --yellow-100: #fef3c7;
-    --yellow-200: #fde68a;
-    --yellow-300: #fcd34d;
-    --yellow-400: #fbbf24;
-    --yellow-500: #f5b324;
-    --yellow-600: #d99518;
-    --yellow-700: #b87911;
+    /* Safari gold accent (CTA / selected states) */
+    --yellow-50:  #FFFBEB;
+    --yellow-100: #FEF3C7;
+    --yellow-200: #FDE68A;
+    --yellow-300: #FCD34D;
+    --yellow-400: #FBBF24;
+    --yellow-500: #F5B324; /* accent */
+    --yellow-600: #D99518;
+    --yellow-700: #B87911;
 
-    /* Neutral palette */
-    --surface-0: #f7f9fb;
-    --surface-1: #ffffff;
-    --surface-2: #f1f4f7;
-    --surface-3: #e6ebef;
+    /* Neutral palette (mist + warm sand) */
+    --surface-0: #F7F9FB;  /* mist */
+    --surface-1: #FFFFFF;
+    --surface-2: #F1F4F7;
+    --surface-3: #E6EBEF;
 
-    --text-900: #0d1b14;
-    --text-700: #2c3a31;
-    --text-500: #5a6770;
-    --text-400: #8390a0;
+    /* Optional warm surface tint for panels (use sparingly) */
+    --sand-100: #F3E9D2;
 
+    /* Typography */
+    --text-900: #0D1B14;  /* ink */
+    --text-700: #2C3A31;
+    --text-500: #5A6770;
+    --text-400: #8390A0;
+
+    /* Borders */
     --line:        rgba(13, 27, 20, 0.08);
     --line-strong: rgba(13, 27, 20, 0.14);
 
-    --success: #1c7a44;
-    --warning: #d97706;
-    --danger:  #dc2626;
-    --info:    #0891b2;
+    /* Status */
+    --success: #1C7A44;
+    --warning: #D97706;
+    --danger:  #DC2626;
+    --info:    #0891B2;
+
+    /* Signature highlight (optional) */
+    --amber-500: #D6B15E;
 
     /* Flat, single-layer subtle shadows */
     --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
@@ -1832,4 +1841,354 @@ body.auth-page {
         max-width: 100%;
         border-radius: 12px;
     }
+}
+
+/* ----- Pinterest-style visual rhythm upgrades -------------- */
+.quick-grid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.quick-grid .quick-card {
+    grid-column: span 3;
+    min-height: 180px;
+    height: auto;
+    border-radius: 16px;
+    border: 1px solid rgba(13, 27, 20, 0.12);
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+}
+
+.quick-grid .quick-card:nth-child(1) {
+    grid-column: span 6;
+    min-height: 226px;
+}
+
+.quick-grid .quick-card:nth-child(2) {
+    min-height: 198px;
+}
+
+.quick-grid .quick-card:nth-child(3) {
+    min-height: 214px;
+}
+
+.quick-grid .quick-card:nth-child(4) {
+    min-height: 186px;
+}
+
+.quick-grid .quick-card .quick-label {
+    font-size: 1.06rem;
+}
+
+.quick-grid .quick-card .quick-count {
+    font-size: 0.78rem;
+}
+
+.dashboard-feature-grid {
+    grid-template-columns: minmax(0, 1.35fr) minmax(280px, 1fr);
+    align-items: start;
+}
+
+.dashboard-feature-grid .section-card {
+    border-radius: 18px;
+}
+
+.dashboard-feature-grid .section-card #recList {
+    display: grid;
+    gap: 10px;
+}
+
+.dashboard-feature-grid .section-card #recList .rec-card {
+    margin-bottom: 0;
+    border-radius: 12px;
+}
+
+/* Masonry-style browsing for content-heavy screens */
+.animals-list.animals-list--responsive,
+.culture-card-grid {
+    column-count: 3;
+    column-gap: 14px;
+}
+
+.animals-list.animals-list--responsive .animal-card,
+.culture-card-grid .story-card {
+    width: 100%;
+    display: inline-block;
+    margin: 0 0 14px;
+    break-inside: avoid;
+    -webkit-column-break-inside: avoid;
+    border-radius: 14px;
+}
+
+.animals-list.animals-list--responsive .animal-card {
+    padding: 14px;
+}
+
+.culture-card-grid .story-card .story-image {
+    height: 170px;
+}
+
+@media (max-width: 1100px) {
+    .quick-grid .quick-card {
+        grid-column: span 6;
+        min-height: 180px;
+    }
+
+    .quick-grid .quick-card:nth-child(1) {
+        grid-column: span 12;
+    }
+
+    .animals-list.animals-list--responsive,
+    .culture-card-grid {
+        column-count: 2;
+    }
+}
+
+@media (max-width: 700px) {
+    .quick-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .quick-grid .quick-card,
+    .quick-grid .quick-card:nth-child(1) {
+        grid-column: auto;
+        min-height: 156px;
+    }
+
+    .animals-list.animals-list--responsive,
+    .culture-card-grid {
+        column-count: 1;
+    }
+}
+
+/* ============================================================
+   TOP-NOTCH PAGE BACKGROUNDS (role / interface aware)
+   Uses wrapper classes emitted by views: .guide-dashboard, .it-dashboard, .intranet-dashboard
+   Fallback: tourist/default gets a calm forest-paper gradient.
+   ============================================================ */
+
+/* Subtle noise without external assets (cheap “premium” texture) */
+.main-container::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.055;
+    background-image:
+        repeating-linear-gradient(0deg, rgba(13, 27, 20, 0.06) 0 1px, transparent 1px 3px),
+        repeating-linear-gradient(90deg, rgba(13, 27, 20, 0.035) 0 1px, transparent 1px 4px);
+    mix-blend-mode: multiply;
+}
+
+.main-container > * {
+    position: relative;
+    z-index: 1;
+}
+
+/* Default (Tourist + shared content) */
+.main-container {
+    background:
+        radial-gradient(circle at 12% 8%, rgba(245, 179, 36, 0.10), transparent 42%),
+        radial-gradient(circle at 88% 18%, rgba(37, 160, 96, 0.10), transparent 48%),
+        radial-gradient(circle at 30% 92%, rgba(10, 43, 26, 0.08), transparent 48%),
+        linear-gradient(180deg, rgba(247, 249, 251, 1) 0%, rgba(241, 244, 247, 1) 55%, rgba(247, 249, 251, 1) 100%);
+}
+
+/* Guide dashboard: cinematic forest overlay + warm accent */
+.main-container:has(.guide-dashboard) {
+    background:
+        radial-gradient(circle at 10% 12%, rgba(245, 179, 36, 0.14), transparent 44%),
+        radial-gradient(circle at 90% 0%, rgba(37, 160, 96, 0.14), transparent 56%),
+        linear-gradient(180deg, rgba(6, 32, 20, 0.06), rgba(247, 249, 251, 0.92) 38%, rgba(241, 244, 247, 1) 100%),
+        url('/images/gorilla-card.png');
+    background-size: auto, auto, auto, cover;
+    background-position: center, center, center, center 20%;
+    background-repeat: no-repeat;
+    background-attachment: scroll, scroll, scroll, fixed;
+}
+
+.guide-dashboard .section-card {
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(10px);
+    border-color: rgba(13, 27, 20, 0.10);
+}
+
+/* IT Manager: crisp “ops” background (grid + aurora), more contrast */
+.main-container:has(.it-dashboard) {
+    background:
+        radial-gradient(circle at 16% 18%, rgba(37, 160, 96, 0.16), transparent 46%),
+        radial-gradient(circle at 84% 12%, rgba(245, 179, 36, 0.14), transparent 44%),
+        radial-gradient(circle at 70% 92%, rgba(99, 102, 241, 0.12), transparent 46%),
+        linear-gradient(180deg, rgba(247, 249, 251, 1), rgba(241, 244, 247, 1));
+    background-attachment: scroll;
+}
+
+.main-container:has(.it-dashboard)::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.085;
+    background-image:
+        linear-gradient(rgba(13, 27, 20, 0.09) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(13, 27, 20, 0.06) 1px, transparent 1px);
+    background-size: 42px 42px;
+    mask-image: radial-gradient(circle at 50% 20%, rgba(0,0,0,1), rgba(0,0,0,0.10) 62%, rgba(0,0,0,0));
+}
+
+.it-dashboard .section-card {
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(10px);
+    border-color: rgba(13, 27, 20, 0.12);
+}
+
+/* Intranet: secure / “internal” vibe — darker, calmer, with soft vignette */
+.main-container:has(.intranet-dashboard) {
+    background:
+        radial-gradient(circle at 18% 12%, rgba(245, 179, 36, 0.10), transparent 46%),
+        radial-gradient(circle at 88% 12%, rgba(37, 160, 96, 0.10), transparent 54%),
+        linear-gradient(180deg, rgba(10, 43, 26, 0.06), rgba(247, 249, 251, 0.96) 42%, rgba(241, 244, 247, 1) 100%);
+}
+
+.intranet-dashboard .section-card {
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(10px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .main-container:has(.guide-dashboard) {
+        background-attachment: scroll, scroll, scroll, scroll;
+    }
+}
+
+@supports not selector(:has(*)) {
+    /* Graceful fallback: keep the default background for browsers without :has() */
+    .main-container::after { display: none; }
+}
+
+/* ============================================================
+   Shared hero background image (Bwindi hike) + glass system
+   ============================================================ */
+
+:root {
+    --sigts-hero-bg: url('/images/bwindi-forest-hike.png');
+    --glass-bg: rgba(255, 255, 255, 0.78);
+    --glass-bg-strong: rgba(255, 255, 255, 0.88);
+    --glass-border: rgba(255, 255, 255, 0.38);
+    --glass-shadow: 0 18px 44px rgba(2, 12, 8, 0.18);
+
+    /* Cinematic grade (Pinterest-like olive/sepia) */
+    --grade-tint: rgba(86, 92, 62, 0.54);
+    --grade-tint-2: rgba(34, 54, 40, 0.22);
+    --grade-vignette: rgba(5, 10, 7, 0.62);
+    --grade-blur: 12px;
+}
+
+/* Cinematic graded backdrop (fixed, behind all content) */
+.main-content {
+    position: relative;
+    isolation: isolate;
+}
+
+.main-content::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    background-image: var(--sigts-hero-bg);
+    background-size: cover;
+    background-position: center 28%;
+    background-repeat: no-repeat;
+    transform: scale(1.06);
+    filter: blur(var(--grade-blur)) saturate(1.12) contrast(1.06);
+}
+
+.main-content::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background:
+        radial-gradient(circle at 12% 10%, rgba(245, 179, 36, 0.16), transparent 52%),
+        radial-gradient(circle at 88% 12%, rgba(37, 160, 96, 0.14), transparent 58%),
+        linear-gradient(180deg, rgba(7, 20, 14, 0.55) 0%, rgba(247, 249, 251, 0.86) 46%, rgba(241, 244, 247, 0.92) 100%),
+        radial-gradient(circle at 50% 50%, rgba(0,0,0,0.0) 44%, var(--grade-vignette) 100%),
+        linear-gradient(135deg, var(--grade-tint), transparent 58%),
+        linear-gradient(225deg, var(--grade-tint-2), transparent 62%);
+    mix-blend-mode: normal;
+}
+
+/* Let the graded backdrop show through */
+.main-container {
+    background: transparent;
+}
+
+@media (max-width: 900px) {
+    .main-content::before {
+        background-position: center 22%;
+    }
+}
+
+/* Glass treatment: applies across dashboards + content pages */
+.section-card,
+.dashboard-quote-card,
+.profile-header,
+.map-overlay,
+.park-access-panel,
+.ui-modal,
+.ui-modal-rich {
+    background: var(--glass-bg);
+    border: 1px solid rgba(13, 27, 20, 0.10);
+    box-shadow: var(--glass-shadow);
+    backdrop-filter: blur(14px) saturate(1.15);
+    -webkit-backdrop-filter: blur(14px) saturate(1.15);
+}
+
+/* Keep headers slightly stronger for legibility on photo backdrops */
+.content-header {
+    background: rgba(255, 255, 255, 0.86);
+    border-bottom: 1px solid rgba(13, 27, 20, 0.10);
+    backdrop-filter: blur(14px) saturate(1.1);
+    -webkit-backdrop-filter: blur(14px) saturate(1.1);
+}
+
+/* Reduce over-darkening for quote card; keep it “glassy highlight” */
+.dashboard-quote-card {
+    color: var(--text-900);
+    border-color: rgba(245, 179, 36, 0.20);
+    background:
+        radial-gradient(circle at 20% 0%, rgba(245, 179, 36, 0.22), transparent 55%),
+        radial-gradient(circle at 90% 30%, rgba(37, 160, 96, 0.16), transparent 58%),
+        var(--glass-bg-strong);
+}
+
+.dashboard-quote-card blockquote {
+    color: var(--text-900);
+    text-shadow: none;
+}
+
+/* Stronger glass for role dashboards to feel “premium” */
+.guide-dashboard .section-card,
+.it-dashboard .section-card,
+.intranet-dashboard .section-card {
+    background: var(--glass-bg-strong);
+    border: 1px solid rgba(255, 255, 255, 0.46);
+    box-shadow: 0 18px 44px rgba(2, 12, 8, 0.22);
+}
+
+/* Map container keeps solid surface so tiles remain readable */
+.map-container {
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.40);
+    backdrop-filter: blur(10px) saturate(1.05);
+}
+
+/* Ensure text contrast stays crisp on glass */
+.section-header h3,
+.rec-title,
+.animal-name,
+.story-title,
+.announcement-title {
+    color: var(--text-900);
 }

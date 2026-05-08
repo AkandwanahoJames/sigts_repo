@@ -558,7 +558,92 @@ function renderMainLayout(content) {
     const statusText = isOffline ? `Offline mode • ${pending} pending` : (pending ? `Online • ${pending} pending sync` : 'Online');
     const mainContainerClass =
         window.currentView === 'ai_chat' ? 'main-container main-container--tour-help' : 'main-container';
-    return `<div class="app-container"><div id="app-sidebar" class="sidebar"><div class="sidebar-header"><div class="sidebar-brand"><div class="sidebar-logo"><img src="/icons/icon-192.svg" alt="SIGTS logo"></div><div class="sidebar-title">Bwindi SIGTS</div></div></div><div class="sidebar-nav">${navItems.map(item => `<div class="nav-item-vertical ${window.currentView === item.id ? 'active' : ''}" onclick="navigateTo('${item.id}'); closeSidebar();"><div class="nav-icon-vertical">${icon(item.icon, 'icon-md')}</div><div class="nav-label-vertical">${item.label}</div></div>`).join('')}</div><div class="sidebar-logout" onclick="Auth.logout(); closeSidebar();">${icon('logout', 'icon-md')} Logout</div></div><div class="sidebar-backdrop" aria-hidden="true" onclick="closeSidebar()"></div><div class="main-content"><div class="content-header"><button type="button" class="sidebar-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="app-sidebar" onclick="event.stopPropagation(); toggleSidebar();">${icon('menu', 'icon-md')}</button><h1>${getPageTitle(window.currentView)}</h1><div class="header-right"><span id="networkStatusBadge" class="net-status ${isOffline ? 'offline' : 'online'}">${statusText}</span>${renderNotificationBell(user)}<button type="button" class="header-profile" onclick="navigateTo('profile')"><div class="header-avatar ${isITManager ? 'role-it' : (isGuide ? 'role-guide' : 'role-tourist')}">${avatarIcon}</div><div class="header-user-info"><div class="header-user-name">${escapeHtml(user.name)}</div><div class="header-user-role">${escapeHtml(roleLabel)}</div></div></button></div></div><div class="${mainContainerClass}" onclick="closeSidebar()">${renderParkAccessPanel()}${content}</div></div></div>`;}
+    return `<div class="app-container"><div id="app-sidebar" class="sidebar"><div class="sidebar-header"><div class="sidebar-brand"><div class="sidebar-logo"><img src="/icons/icon-192.svg" alt="SIGTS logo"></div><div class="sidebar-title">Bwindi SIGTS</div></div></div><div class="sidebar-nav">${navItems.map(item => `<div class="nav-item-vertical ${window.currentView === item.id ? 'active' : ''}" onclick="navigateTo('${item.id}'); closeSidebar();"><div class="nav-icon-vertical">${icon(item.icon, 'icon-md')}</div><div class="nav-label-vertical">${item.label}</div></div>`).join('')}</div><div class="sidebar-logout" onclick="Auth.logout(); closeSidebar();">${icon('logout', 'icon-md')} Logout</div></div><div class="sidebar-backdrop" aria-hidden="true" onclick="closeSidebar()"></div><div class="main-content"><div class="content-header"><button type="button" class="sidebar-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="app-sidebar" onclick="event.stopPropagation(); toggleSidebar();">${icon('menu', 'icon-md')}</button><h1>${getPageTitle(window.currentView)}</h1><div class="header-right"><span id="networkStatusBadge" class="net-status ${isOffline ? 'offline' : 'online'}">${statusText}</span>${renderNotificationBell(user)}<button type="button" class="header-profile" onclick="navigateTo('profile')"><div class="header-avatar ${isITManager ? 'role-it' : (isGuide ? 'role-guide' : 'role-tourist')}">${avatarIcon}</div><div class="header-user-info"><div class="header-user-name">${escapeHtml(user.name)}</div><div class="header-user-role">${escapeHtml(roleLabel)}</div></div></button></div></div><div class="${mainContainerClass}" onclick="closeSidebar()">${renderParkAccessPanel()}<div id="sigtsViewSlot">${content}</div></div></div></div>`;}
+
+// =====================================================
+// FAST TAB SWITCHING: skeleton-first + caching
+// =====================================================
+let __sigtsRenderNonce = 0;
+const __sigtsViewHtmlCache = new Map(); // key -> { html, at }
+const __sigtsViewInFlight = new Map(); // key -> Promise<string>
+
+function getViewCacheKey(view) {
+    const role = getEffectiveRole(Auth.getCurrentUser() || {});
+    return `${role}::${String(view || '')}`;
+}
+
+function getCachedViewHtml(view) {
+    const key = getViewCacheKey(view);
+    const item = __sigtsViewHtmlCache.get(key);
+    if (!item) return null;
+    if (Date.now() - item.at > 45000) return null;
+    return item.html || null;
+}
+
+function setCachedViewHtml(view, html) {
+    const key = getViewCacheKey(view);
+    __sigtsViewHtmlCache.set(key, { html: String(html || ''), at: Date.now() });
+}
+
+function ensureShimmerKeyframes() {
+    if (document.getElementById('sigtsShimmerStyle')) return;
+    const style = document.createElement('style');
+    style.id = 'sigtsShimmerStyle';
+    style.textContent = `@keyframes sigtsShimmer{0%{transform:translateX(-70%)}100%{transform:translateX(210%)}}`;
+    document.head.appendChild(style);
+}
+
+function renderViewSkeleton(view) {
+    const title = escapeHtml(getPageTitle(view));
+    const card = (lines = 3) => `<div class="section-card" style="opacity:0.92;">
+        <div class="section-header"><h3>${icon('sparkle', 'icon-sm')} Loading ${title}</h3></div>
+        <div style="display:grid;gap:10px;padding:8px 0 2px;">
+            ${Array.from({ length: lines }).map(() => `
+                <div style="height:12px;border-radius:10px;background:rgba(13,27,20,0.08);overflow:hidden;position:relative;">
+                    <div style="height:100%;width:55%;background:linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent);transform:translateX(-70%);animation:sigtsShimmer 1.05s ease-in-out infinite;"></div>
+                </div>`).join('')}
+        </div>
+    </div>`;
+
+    if (view === 'dashboard') return `${card(4)}${card(3)}`;
+    if (view === 'animals' || view === 'culture') return `${card(4)}${card(4)}`;
+    if (view === 'it_dashboard' || view === 'guide_dashboard' || view === 'intranet') return `${card(4)}${card(3)}`;
+    return card(4);
+}
+
+async function computeViewContent(view) {
+    switch (view) {
+        case 'dashboard': return await renderDashboardContent();
+        case 'animals': return await renderAnimalsContent();
+        case 'map': return renderMapContent();
+        case 'culture': return await renderCultureContent();
+        case 'sightings': return await renderSightingsContent();
+        case 'profile': return await renderProfileContent();
+        case 'info': return renderInfoContent();
+        case 'ai_chat': return renderAIChatContent();
+        case 'guide_dashboard': return await renderGuideDashboard();
+        case 'it_dashboard': return await renderITManagerDashboard();
+        case 'it_tour_assignments': return await renderITTourAssignmentsDashboard();
+        case 'intranet': return await renderIntranetDashboard();
+        default: return await renderDashboardContent();
+    }
+}
+
+function getOrComputeViewContent(view) {
+    const key = getViewCacheKey(view);
+    const cached = getCachedViewHtml(view);
+    if (cached) return Promise.resolve(cached);
+    if (__sigtsViewInFlight.has(key)) return __sigtsViewInFlight.get(key);
+    const p = (async () => {
+        const html = await computeViewContent(view);
+        setCachedViewHtml(view, html);
+        return html;
+    })().finally(() => {
+        __sigtsViewInFlight.delete(key);
+    });
+    __sigtsViewInFlight.set(key, p);
+    return p;
+}
 
 function getAnimalIconName(animalName = '') {
     const value = animalName.toLowerCase();
@@ -3856,6 +3941,7 @@ async function renderView(view, options = {}) {
     }
 
     window.currentView = safeView;
+    const renderNonce = ++__sigtsRenderNonce;
 
     if (shouldUpdateHash) {
         const targetHash = `#${safeView}`;
@@ -3879,45 +3965,62 @@ async function renderView(view, options = {}) {
         stopAssignmentDashboardRefresh();
     }
 
-    let content = '';
-    switch (safeView) {
-        case 'login': app.innerHTML = renderLoginScreen(); syncNavDrawerBodyLock(); return;
-        case 'register': app.innerHTML = renderRegisterScreen(); syncNavDrawerBodyLock(); return;
-        case 'dashboard': content = await renderDashboardContent(); break;
-        case 'animals': content = await renderAnimalsContent(); break;
-        case 'map': content = renderMapContent(); break;
-        case 'culture': content = await renderCultureContent(); break;
-        case 'sightings': content = await renderSightingsContent(); break;
-        case 'profile': content = await renderProfileContent(); break;
-        case 'info': content = renderInfoContent(); break;
-        case 'ai_chat': content = renderAIChatContent(); break;
-        case 'guide_dashboard': content = await renderGuideDashboard(); break;
-        case 'it_dashboard': content = await renderITManagerDashboard(); break;
-        case 'it_tour_assignments': content = await renderITTourAssignmentsDashboard(); break;
-        case 'intranet': content = await renderIntranetDashboard(); break;
-        default: content = await renderDashboardContent();
+    // Public views render immediately (no heavy switching needs).
+    if (safeView === 'login') {
+        app.innerHTML = renderLoginScreen();
+        syncNavDrawerBodyLock();
+        return;
+    }
+    if (safeView === 'register') {
+        app.innerHTML = renderRegisterScreen();
+        syncNavDrawerBodyLock();
+        return;
     }
 
-    app.innerHTML = renderMainLayout(content);
+    ensureShimmerKeyframes();
+
+    // 1) Paint instantly: cached view if available, otherwise a lightweight skeleton.
+    const cached = getCachedViewHtml(safeView);
+    app.innerHTML = renderMainLayout(cached || renderViewSkeleton(safeView));
     syncSidebarToggleA11y();
     refreshNetworkStatusBadge();
-    await refreshRareAlertBadge();
-    if (safeView === 'it_dashboard') {
-        startAdminRealtimeUsersRefresh();
+
+    // Never block UX on badge fetches.
+    Promise.resolve().then(() => refreshRareAlertBadge()).catch(() => {});
+
+    // 2) Compute heavy view content and swap only the slot.
+    try {
+        const html = await getOrComputeViewContent(safeView);
+        if (renderNonce !== __sigtsRenderNonce || window.currentView !== safeView) return;
+        const slot = document.getElementById('sigtsViewSlot');
+        if (slot) slot.innerHTML = html;
+        setCachedViewHtml(safeView, html);
+    } catch (err) {
+        if (renderNonce !== __sigtsRenderNonce || window.currentView !== safeView) return;
+        const slot = document.getElementById('sigtsViewSlot');
+        if (slot) {
+            slot.innerHTML = `<div class="section-card"><div class="empty-state">Could not load this tab. ${escapeHtml(String(err?.message || err || ''))}</div></div>`;
+        }
     }
-    if (safeView === 'guide_dashboard') {
-        startGuideDashboardRefresh();
-    }
-    if (safeView === 'it_tour_assignments') {
-        startAssignmentDashboardRefresh();
-    }
+
+    // 3) Post-render hooks (async; do not block switching).
+    if (renderNonce !== __sigtsRenderNonce || window.currentView !== safeView) return;
+
+    if (safeView === 'it_dashboard') startAdminRealtimeUsersRefresh();
+    if (safeView === 'guide_dashboard') startGuideDashboardRefresh();
+    if (safeView === 'it_tour_assignments') startAssignmentDashboardRefresh();
+
     if (safeView === 'map') {
-        await initializeLiveMap();
+        requestAnimationFrame(() => {
+            initializeLiveMap().catch(() => {});
+        });
     } else if (safeView === 'profile') {
-        await loadRecentFeedback();
+        requestAnimationFrame(() => {
+            loadRecentFeedback().catch(() => {});
+        });
     }
     if (safeView === 'ai_chat') {
-        applySIGTSAIPrefill();
+        requestAnimationFrame(() => applySIGTSAIPrefill());
     }
     if (safeView === 'guide_dashboard') {
         requestAnimationFrame(() => {
@@ -3927,7 +4030,7 @@ async function renderView(view, options = {}) {
         });
     }
     if (safeView === 'intranet') {
-        refreshIntranetParkStatusLinks();
+        requestAnimationFrame(() => refreshIntranetParkStatusLinks());
     }
 }
 
