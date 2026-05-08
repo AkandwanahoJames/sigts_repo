@@ -6,6 +6,11 @@ const { pool } = require('../config/database');
 const { authenticateJWT, authorize } = require('../middleware/auth');
 const { hashPassword } = require('../config/auth');
 const { audit } = require('../utils/audit');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+const path = require('path');
+const fs = require('fs');
+const execFileAsync = promisify(execFile);
 
 // All routes require IT Manager role
 router.use(authenticateJWT, authorize('it_manager'));
@@ -336,21 +341,46 @@ router.post('/content/:id/approve', async (req, res) => {
 // =====================================================
 router.post('/backup/create', async (req, res) => {
     try {
-        const backupId = `backup_${Date.now()}`;
-        
-        // This would trigger a pg_dump in production
-        // For now, just log the action
+        const backupScript = path.join(__dirname, '../../scripts/backup.js');
+        const startedAt = Date.now();
+        const run = await execFileAsync(process.execPath, [backupScript, 'backup'], {
+            cwd: path.join(__dirname, '../..'),
+            timeout: 120000
+        });
+        const stdout = String(run.stdout || '');
+        const stderr = String(run.stderr || '');
+        const fileMatch = stdout.match(/Output:\s*(.+)$/m);
+        const backupPath = fileMatch ? fileMatch[1].trim() : null;
+        const backupId = backupPath ? path.basename(backupPath) : `backup_${startedAt}`;
+        const fileStats = backupPath && fs.existsSync(backupPath) ? fs.statSync(backupPath) : null;
+
         await pool.query(
             `INSERT INTO park_performance_reports (report_id, report_type, period_start, period_end, metrics, generated_by)
              VALUES (gen_random_uuid(), 'backup', CURRENT_DATE, CURRENT_DATE, $1, $2)`,
-            [JSON.stringify({ backupId, status: 'created' }), req.user.user_id]
+            [
+                JSON.stringify({
+                    backupId,
+                    status: 'created',
+                    backup_path: backupPath,
+                    size_bytes: fileStats ? Number(fileStats.size) : null,
+                    elapsed_ms: Date.now() - startedAt,
+                    stderr: stderr || null
+                }),
+                req.user.user_id
+            ]
         );
 
-        res.json({ success: true, backup_id: backupId, message: 'Backup created' });
+        res.json({
+            success: true,
+            backup_id: backupId,
+            backup_path: backupPath,
+            size_bytes: fileStats ? Number(fileStats.size) : null,
+            message: 'Backup created'
+        });
 
     } catch (error) {
         console.error('Create backup error:', error);
-        res.status(500).json({ error: 'Failed to create backup' });
+        res.status(500).json({ error: `Failed to create backup: ${error.message}` });
     }
 });
 
@@ -560,6 +590,139 @@ router.put('/users/:id/deactivate', async (req, res) => {
     } catch (error) {
         console.error('Deactivate user error:', error);
         res.status(500).json({ error: 'Failed to deactivate user' });
+    }
+});
+
+// =====================================================
+// GET /api/admin/audit-logs
+// Recent audit log entries for IT manager review.
+// =====================================================
+router.get('/audit-logs', [
+    query('limit').optional().isInt({ min: 1, max: 500 })
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const limit = Number.parseInt(req.query.limit, 10) || 100;
+    try {
+        const result = await pool.query(
+            `SELECT
+                a.id,
+                a.action,
+                a.table_name,
+                a.record_id,
+                a.old_value,
+                a.new_value,
+                a.ip_address,
+                a.user_agent,
+                a.created_at,
+                u.username,
+                u.user_type
+             FROM audit_logs a
+             LEFT JOIN users u ON u.user_id = a.user_id
+             ORDER BY a.created_at DESC
+             LIMIT $1`,
+            [limit]
+        );
+        res.json({ logs: result.rows, limit });
+    } catch (error) {
+        console.error('Get audit logs error:', error);
+        res.status(500).json({ error: 'Failed to load audit logs' });
+    }
+});
+
+// =====================================================
+// GET /api/admin/system-health
+// Light operational health snapshot.
+// =====================================================
+router.get('/system-health', async (req, res) => {
+    try {
+        const dbResult = await pool.query('SELECT NOW() AS now');
+        const syncQueue = await pool.query(
+            `SELECT
+                COUNT(*) FILTER (WHERE status = 'pending') AS pending,
+                COUNT(*) AS total
+             FROM sync_queue`
+        );
+        const geofencePulse = await pool.query(
+            `SELECT COUNT(*) AS updates_last_15m
+             FROM location_history
+             WHERE timestamp > NOW() - INTERVAL '15 minutes'`
+        );
+        const feedbackPulse = await pool.query(
+            `SELECT COUNT(*) AS feedback_last_24h
+             FROM feedback
+             WHERE created_at > NOW() - INTERVAL '24 hours'`
+        );
+
+        res.json({
+            database: dbResult.rows.length ? 'connected' : 'degraded',
+            syncService: Number(syncQueue.rows[0]?.pending || 0) >= 0 ? 'running' : 'degraded',
+            geolocation: Number(geofencePulse.rows[0]?.updates_last_15m || 0) > 0 ? 'active' : 'idle',
+            feedbackIngest: Number(feedbackPulse.rows[0]?.feedback_last_24h || 0) >= 0 ? 'active' : 'idle',
+            checks: {
+                db_time: dbResult.rows[0]?.now || null,
+                pending_sync_items: Number(syncQueue.rows[0]?.pending || 0),
+                total_sync_items: Number(syncQueue.rows[0]?.total || 0),
+                location_updates_last_15m: Number(geofencePulse.rows[0]?.updates_last_15m || 0),
+                feedback_last_24h: Number(feedbackPulse.rows[0]?.feedback_last_24h || 0)
+            }
+        });
+    } catch (error) {
+        console.error('Get system health error:', error);
+        res.status(500).json({ error: 'Failed to load system health' });
+    }
+});
+
+// =====================================================
+// GET /api/admin/schema-status
+// Reports table row counts for key operational tables.
+// =====================================================
+router.get('/schema-status', async (req, res) => {
+    const tables = [
+        'users',
+        'tourists',
+        'tour_guides',
+        'it_managers',
+        'parks',
+        'locations',
+        'animals',
+        'sightings',
+        'cultural_narratives',
+        'tour_routes',
+        'tour_sessions',
+        'safety_tips',
+        'faqs',
+        'feedback',
+        'sync_queue',
+        'audit_logs'
+    ];
+
+    try {
+        const status = {};
+        for (const table of tables) {
+            const exists = await pool.query(
+                `SELECT 1
+                 FROM information_schema.tables
+                 WHERE table_schema = 'public' AND table_name = $1
+                 LIMIT 1`,
+                [table]
+            );
+            if (!exists.rows.length) {
+                status[table] = { exists: false, count: 0, status: 'missing' };
+                continue;
+            }
+            const countResult = await pool.query(`SELECT COUNT(*)::int AS count FROM ${table}`);
+            status[table] = {
+                exists: true,
+                count: Number(countResult.rows[0]?.count || 0),
+                status: 'active'
+            };
+        }
+        res.json({ status });
+    } catch (error) {
+        console.error('Get schema status error:', error);
+        res.status(500).json({ error: 'Failed to load schema status' });
     }
 });
 

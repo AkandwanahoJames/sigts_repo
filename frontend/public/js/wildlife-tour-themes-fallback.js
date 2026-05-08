@@ -1,5 +1,5 @@
 /**
- * Offline / no-API fallback for UNESCO wildlife tour themes (mirror of backend/scripts/data/wildlifeTourThemesRows.js).
+ * Offline / no-API fallback for wildlife tour themes (mirror of backend/scripts/data/wildlifeTourThemesRows.js).
  * Keep in sync when seed briefing copy or image_url values change.
  */
 window.__SIGTS_WILDLIFE_TOUR_THEMES_FALLBACK__ = [
@@ -21,14 +21,14 @@ window.__SIGTS_WILDLIFE_TOUR_THEMES_FALLBACK__ = [
         etiquette_notes:
             'One voice speaks at a time. Phones on silent unless agreed for quick photos under ranger rules. Packs tight so passing groups can stagger safely.',
         suggested_duration_minutes: 35,
-        unesco_note:
-            'UNESCO World Heritage property 682 recognizes exceptional terrestrial biodiversity (scenic natural values and threatened species assemblies) in this montane rainforest complex.',
+        conservation_note:
+            'This montane rainforest complex is widely recognized for exceptional terrestrial biodiversity and threatened species assemblies.',
         image_url:
             'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Bwindi_National_Park.jpg/960px-Bwindi_National_Park.jpg',
         sort_order: 10
     },
     {
-        slug: 'unesco_primates',
+        slug: 'primates',
         session_title: 'Great apes & forest primates slot',
         subtitle: 'Gorilla permit treks plus monkey-focused listening stretches',
         tourist_summary_en:
@@ -45,14 +45,14 @@ window.__SIGTS_WILDLIFE_TOUR_THEMES_FALLBACK__ = [
         etiquette_notes:
             'No flash photography; avoid pointing directly at faces; backpacks off only when ranger signals a safe standstill.',
         suggested_duration_minutes: 40,
-        unesco_note:
-            'World Heritage dossier narratives highlight charismatic primates (mountain gorillas and diverse forest monkeys) as frontline conservation species reliant on anti-poaching and health monitoring.',
+        conservation_note:
+            'Mountain gorillas and diverse forest monkeys remain frontline conservation species reliant on anti-poaching and health monitoring.',
         image_url:
             'https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/Mountain_gorilla_silverback_JJ.jpg/640px-Mountain_gorilla_silverback_JJ.jpg',
         sort_order: 20
     },
     {
-        slug: 'unesco_large_mammals',
+        slug: 'large_mammals',
         session_title: 'Forest elephants & large mammal beat',
         subtitle: 'Wide-ranging mammals that need distance and acoustic patience',
         tourist_summary_en:
@@ -69,14 +69,14 @@ window.__SIGTS_WILDLIFE_TOUR_THEMES_FALLBACK__ = [
         etiquette_notes:
             'Whisper drills. Trekking poles tapped lightly, not hammered, so wildlife hears human rhythm predictably.',
         suggested_duration_minutes: 25,
-        unesco_note:
-            'Large-bodied mammals (including iconic megaherbivores noted in dossier summaries) underscore ecosystem roles shaping forest structure beside dense settlements.',
+        conservation_note:
+            'Large-bodied mammals, including iconic megaherbivores, underscore ecosystem roles shaping forest structure beside dense settlements.',
         image_url:
             'https://upload.wikimedia.org/wikipedia/commons/thumb/3/37/African_forest_elephant_exported_%28square%29.jpg/640px-African_forest_elephant_exported_%28square%29.jpg',
         sort_order: 30
     },
     {
-        slug: 'unesco_albertine_birds',
+        slug: 'albertine_birds',
         session_title: 'Albertine endemic & montane birds module',
         subtitle: 'Specialty passerines from dossier summaries: listening first, glimpses second',
         tourist_summary_en:
@@ -93,14 +93,14 @@ window.__SIGTS_WILDLIFE_TOUR_THEMES_FALLBACK__ = [
         etiquette_notes:
             'Caps brims tipped up with slow pivots. Point using whole-hand arcs rather than shouted compass slang.',
         suggested_duration_minutes: 30,
-        unesco_note:
-            'Outstanding universal value summaries stress exceptional richness of forest-dependent birds (Albertine Rift constituents) for ecological importance at this property.',
+        conservation_note:
+            'Forest-dependent birds, including Albertine Rift specialists, are a major part of this area\'s ecological importance.',
         image_url:
             'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/African_Green_Broadbill.jpg/640px-African_Green_Broadbill.jpg',
         sort_order: 40
     },
     {
-        slug: 'unesco_swallowtails',
+        slug: 'swallowtails',
         session_title: 'Butterfly & light-gap choreography',
         subtitle:
             'Showy Lepidoptera, including swallowtails called out beside broader butterfly richness',
@@ -118,8 +118,8 @@ window.__SIGTS_WILDLIFE_TOUR_THEMES_FALLBACK__ = [
         etiquette_notes:
             'Step off tread only when the flank guide clears space. Ants adore the same sunny edges.',
         suggested_duration_minutes: 20,
-        unesco_note:
-            'Interpretive dossiers reference outstanding lepidopteran richness, with swallowtails as approachable flagship cues when guests need visible motion.',
+        conservation_note:
+            'Lepidopteran richness is a useful interpretation thread, with swallowtails as approachable flagship cues when guests need visible motion.',
         image_url:
             'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Papilio_antimachus.jpg/640px-Papilio_antimachus.jpg',
         sort_order: 50
@@ -143,8 +143,8 @@ window.__SIGTS_WILDLIFE_TOUR_THEMES_FALLBACK__ = [
         etiquette_notes:
             'Steer souvenir conversations away from dubious wildlife artefacts. Mention legal artisan cooperatives.',
         suggested_duration_minutes: 25,
-        unesco_note:
-            'Heritage rationales coupling superlative forests with assemblies of threatened taxa depend on monitoring, law reinforcement, and long political support.',
+        conservation_note:
+            'Long-term protection of superlative forests and threatened taxa depends on monitoring, law reinforcement, and sustained support.',
         image_url:
             'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/A_group_of_imp_chimps.jpg/640px-A_group_of_imp_chimps.jpg',
         sort_order: 60

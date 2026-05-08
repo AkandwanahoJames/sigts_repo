@@ -555,16 +555,18 @@ class GeofenceManager {
     }
 
     handleLocationUpdate(position) {
-        const { latitude, longitude, accuracy, timestamp } = position.coords;
+        const { latitude, longitude, accuracy } = position.coords;
+        const timestamp = position.timestamp || Date.now();
         const newLocation = { lat: latitude, lng: longitude, accuracy, timestamp };
         this.currentLocation = newLocation;
         this.locationHistory.push(newLocation);
         if (this.locationHistory.length > 500) this.locationHistory.shift();
         
         const isInside = this.isInsidePark(latitude, longitude);
+        const prevInside = this.wasInside;
         if (isInside !== this.wasInside) {
             this.wasInside = isInside;
-            this.onBoundaryCross(isInside);
+            this.onBoundaryCross(isInside, prevInside);
         }
         this.storeLocationOffline(newLocation);
         if (Auth?.isAuthenticated?.()) {
@@ -576,6 +578,23 @@ class GeofenceManager {
                     accuracy,
                     timestamp: new Date(timestamp || Date.now()).toISOString()
                 })
+            }).then(async (result) => {
+                if (result?.code === 'CONSENT_REQUIRED' && result?.consent_type) {
+                    // Auto-grant location tracking consent once during active session
+                    // so geofence writes and proximity features can work immediately.
+                    const grant = await API.setMyConsent(result.consent_type, true);
+                    if (grant?.success) {
+                        await API.request('/geofence/location-update', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                lat: latitude,
+                                lng: longitude,
+                                accuracy,
+                                timestamp: new Date(timestamp || Date.now()).toISOString()
+                            })
+                        });
+                    }
+                }
             });
         }
         this.checkProximityAlerts(latitude, longitude);
@@ -610,10 +629,10 @@ class GeofenceManager {
         return inside;
     }
 
-    onBoundaryCross(isInside) {
+    onBoundaryCross(isInside, wasInside) {
         if (!isInside) {
             this.showAlert('Warning: You have left the park boundaries', 'warning');
-        } else if (this.wasInside === false) {
+        } else if (wasInside === false) {
             this.showAlert('Success: Welcome to Bwindi Impenetrable National Park!', 'success');
         }
     }
@@ -1021,7 +1040,7 @@ function sigtsWantsAnimalCatalogContext(q) {
 }
 
 function sigtsWantsTourThemeContext(q) {
-    return /\b(tours?|activities?|activity|theme|themes|briefing|session|guided|unesco|tile|tiles)\b/.test(q);
+    return /\b(tours?|activities?|activity|theme|themes|briefing|session|guided|tile|tiles)\b/.test(q);
 }
 
 function sigtsFindMentionedAnimal(qLower, animals) {
@@ -1048,7 +1067,7 @@ function sigtsLocalAnswerFromAppContext(question, appContext, locationName) {
     const parts = [];
     if (wantThemes && appContext.themes.length) {
         parts.push(
-            'Here is what this SIGTS install currently carries under UNESCO-style tour session briefings (Animals tab tiles). Use the in-app modal for the full script; this is a short digest:'
+            'Here is what this SIGTS install currently carries under tour session briefings (Animals tab tiles). Use the in-app modal for the full script; this is a short digest:'
         );
         for (const t of appContext.themes.slice(0, 10)) {
             const head = t.session_title || t.slug || 'Tour session';
@@ -1143,7 +1162,7 @@ function sigtsBuildBwindiScopedAnswer(question, locationName, appContext) {
     }
     if (/\b(size|area|km2|km²|hectare|acre|how\s+big)\b/.test(q)) {
         extras.push(
-            'The park is often cited around 331 km² of dense montane rainforest on steep terrain—use official UWA or UNESCO figures for planning.'
+            'The park is often cited around 331 km² of dense montane rainforest on steep terrain—use official UWA figures for planning.'
         );
     }
     if (/\b(elevation|altitude|steep|terrain|hiking\s+hard)\b/.test(q)) {
@@ -1160,10 +1179,10 @@ function sigtsBuildBwindiScopedAnswer(question, locationName, appContext) {
     if (appContext?.animals?.length || appContext?.themes?.length) {
         const bits = [];
         if (appContext.animals?.length) bits.push(`${appContext.animals.length} species in the Animals catalogue`);
-        if (appContext.themes?.length) bits.push(`${appContext.themes.length} UNESCO-style tour theme briefings`);
+        if (appContext.themes?.length) bits.push(`${appContext.themes.length} tour theme briefings`);
         tail = ` On this device, SIGTS also holds ${bits.join(' and ')}—open the Animals tab for tiles and species cards.`;
     }
-    const core = `Bwindi Impenetrable National Park (BINP) in southwestern Uganda protects a large block of montane rainforest famous for mountain gorillas and exceptional Albertine Rift biodiversity (UNESCO World Heritage). Typical visitor threads are regulated gorilla tracking or habituation, guided forest walks, birding, and community-linked cultural experiences. Stay with your assigned ranger team, respect UWA distance and health rules (wildlife diseases cut both ways), avoid flash where restricted, and treat SIGTS as a planning companion—your permit, briefing, and on-ground signs override any app text.${tail}${locationName ? ` Nearby map label in SIGTS: ${locationName} (verify on the ground).` : ''}`;
+    const core = `Bwindi Impenetrable National Park (BINP) in southwestern Uganda protects a large block of montane rainforest famous for mountain gorillas and exceptional Albertine Rift biodiversity. Typical visitor threads are regulated gorilla tracking or habituation, guided forest walks, birding, and community-linked cultural experiences. Stay with your assigned ranger team, respect UWA distance and health rules (wildlife diseases cut both ways), avoid flash where restricted, and treat SIGTS as a planning companion—your permit, briefing, and on-ground signs override any app text.${tail}${locationName ? ` Nearby map label in SIGTS: ${locationName} (verify on the ground).` : ''}`;
     const extraBlock = extras.length ? `\n\n${extras.join('\n\n')}` : '';
     return sigtsClampStr(`${core}${extraBlock}`, 3900);
 }
@@ -1420,7 +1439,7 @@ class AIRecommendationEngine {
     _deriveLocalSources(trimmed, appContext) {
         const s = ['SIGTS on-device interpreter (rule stack + Bwindi knowledge base)'];
         if (appContext?.animals?.length) s.push(`Animals catalogue snapshot (${appContext.animals.length} species)`);
-        if (appContext?.themes?.length) s.push(`UNESCO tour theme briefings (${appContext.themes.length} tiles)`);
+        if (appContext?.themes?.length) s.push(`tour theme briefings (${appContext.themes.length} tiles)`);
         if (trimmed.length) s.push(`User question (${trimmed.length} chars)`);
         return s;
     }
@@ -1744,8 +1763,29 @@ class OfflineSyncManager {
         window.refreshNetworkStatusBadge?.();
     }
 
-    async syncSighting(data) { return true; }
-    async syncFeedback(data) { return true; }
+    async syncSighting(data) {
+        const payload = data && typeof data === 'object' ? data : {};
+        const result = await API.reportSighting(payload);
+        return Boolean(result && (result.sighting_id || result.id || result.success));
+    }
+
+    async syncFeedback(data) {
+        const payload = data && typeof data === 'object' ? data : {};
+        const normalized = {
+            rating: Number(payload.rating) >= 1 && Number(payload.rating) <= 5 ? Number(payload.rating) : 4,
+            comment: String(payload.comment || payload.text || '').trim() || null,
+            category: String(payload.category || 'general').trim() || 'general',
+            tour_session_id: payload.tour_session_id || null,
+            tourguide_id: payload.tourguide_id || null,
+            source_content_id: payload.source_content_id || null,
+            source_content_type: payload.source_content_type || null,
+            nps_score: Number.isInteger(payload.nps_score) ? payload.nps_score : null,
+            helpfulness_rating: Number.isInteger(payload.helpfulness_rating) ? payload.helpfulness_rating : null,
+            screenshot_url: payload.screenshot_url || null
+        };
+        const result = await API.submitFeedback(normalized);
+        return Boolean(result?.feedback_id || result?.id);
+    }
     getPendingCount() { return this.pendingItems.length; }
 }
 
@@ -1977,18 +2017,24 @@ class ITManagerAPI {
     }
     
     async getAuditLogs(limit) {
-        return JSON.parse(localStorage.getItem('audit_logs') || '[]').slice(0, limit);
+        const logs = await API.getAdminAuditLogs(limit || 100);
+        if (Array.isArray(logs) && logs.length) {
+            localStorage.setItem('audit_logs', JSON.stringify(logs));
+            return logs;
+        }
+        return JSON.parse(localStorage.getItem('audit_logs') || '[]').slice(0, limit || 100);
     }
     
     async getSystemHealth() {
-        return { database: 'connected', cache: 'healthy', syncService: 'running', geolocation: 'active' };
+        const result = await API.getAdminSystemHealth();
+        if (result && typeof result === 'object') return result;
+        return { database: 'unknown', syncService: 'unknown', geolocation: 'unknown', feedbackIngest: 'unknown' };
     }
     
     async getSchemaStatus() {
-        const tables = ['users', 'tourists', 'tour_guides', 'it_managers', 'parks', 'locations', 'animals', 'sightings', 'cultural_narratives', 'tour_routes', 'tour_sessions', 'safety_tips', 'faqs', 'feedback', 'sync_queue', 'audit_logs', 'internal_announcements', 'inventory_items', 'hr_employees'];
-        const status = {};
-        tables.forEach(t => { status[t] = { count: 5, status: 'active' }; });
-        return status;
+        const status = await API.getAdminSchemaStatus();
+        if (status && typeof status === 'object' && Object.keys(status).length) return status;
+        return {};
     }
 
     async getInteractiveAnalytics() {

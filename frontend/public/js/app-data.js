@@ -21,6 +21,10 @@ const API_BASE_URL = (() => {
     return `${window.location.origin}/api`;
 })();
 class APIService {
+    constructor() {
+        this.refreshPromise = null;
+    }
+
     getLiveCoordinates() {
         const loc = window.Geofence?.currentLocation || window.AppState?.currentLocation;
         if (!loc) return null;
@@ -37,10 +41,68 @@ class APIService {
     setToken(token) {
         if (token) {
             this.token = token;
+            return;
+        }
+        this.token = null;
+    }
+
+    getRefreshToken() {
+        return localStorage.getItem('refreshToken') || sessionStorage.getItem('refreshToken');
+    }
+
+    setRefreshToken(refreshToken, persistent = null) {
+        const persistToLocal = persistent === null
+            ? Boolean(localStorage.getItem('token'))
+            : Boolean(persistent);
+        if (!refreshToken) {
+            localStorage.removeItem('refreshToken');
+            sessionStorage.removeItem('refreshToken');
+            return;
+        }
+        if (persistToLocal) {
+            localStorage.setItem('refreshToken', refreshToken);
+            sessionStorage.removeItem('refreshToken');
+        } else {
+            sessionStorage.setItem('refreshToken', refreshToken);
+            localStorage.removeItem('refreshToken');
         }
     }
 
-    async request(endpoint, options = {}) {
+    async refreshAccessToken() {
+        const refreshToken = this.getRefreshToken();
+        if (!refreshToken) return null;
+        if (this.refreshPromise) return this.refreshPromise;
+        this.refreshPromise = (async () => {
+            try {
+                const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ refreshToken })
+                });
+                const payload = await response.json().catch(() => null);
+                if (!response.ok || !payload?.success || !payload?.token) {
+                    this.setToken(null);
+                    this.setRefreshToken(null);
+                    return null;
+                }
+                const persistToLocal = Boolean(localStorage.getItem('token'));
+                if (persistToLocal) localStorage.setItem('token', payload.token);
+                else sessionStorage.setItem('token', payload.token);
+                this.setToken(payload.token);
+                if (payload.refreshToken) {
+                    this.setRefreshToken(payload.refreshToken, persistToLocal);
+                }
+                return payload.token;
+            } catch (_) {
+                return null;
+            } finally {
+                this.refreshPromise = null;
+            }
+        })();
+        return this.refreshPromise;
+    }
+
+    async request(endpoint, options = {}, meta = {}) {
         if (window.Auth?.touchSessionActivity) {
             window.Auth.touchSessionActivity();
         }
@@ -102,6 +164,16 @@ class APIService {
             }
 
             if (!response.ok) {
+                const canRetryWithRefresh =
+                    response.status === 401
+                    && !meta._retriedAfterRefresh
+                    && !/^\/auth\/(login|refresh|guest)/.test(String(endpoint || ''));
+                if (canRetryWithRefresh) {
+                    const newToken = await this.refreshAccessToken();
+                    if (newToken) {
+                        return this.request(endpoint, options, { ...meta, _retriedAfterRefresh: true });
+                    }
+                }
                 if (payload && typeof payload === 'object') {
                     return { ...payload, status: response.status };
                 }
@@ -298,7 +370,7 @@ class APIService {
         return animals.find((a) => a.animal_id == id || a.id == id);
     }
 
-    /** UNESCO wildlife theme tiles: guide session scripts (migration 009 + seed 004). */
+    /** Wildlife theme tiles: guide session scripts (migration 009 + seed 004). */
     async getWildlifeTourThemes() {
         const result = await this.request('/wildlife-tour-themes');
         if (result?.themes && Array.isArray(result.themes)) {
@@ -581,6 +653,22 @@ class APIService {
         return result || { count: 0, users: [] };
     }
 
+    async getAdminAuditLogs(limit = 100) {
+        const result = await this.request(`/admin/audit-logs?limit=${encodeURIComponent(limit)}`);
+        if (Array.isArray(result?.logs)) return result.logs;
+        return [];
+    }
+
+    async getAdminSystemHealth() {
+        const result = await this.request('/admin/system-health');
+        return result || null;
+    }
+
+    async getAdminSchemaStatus() {
+        const result = await this.request('/admin/schema-status');
+        return result?.status || {};
+    }
+
     // Sync queue
     async syncOfflineData(pendingItems) {
         const result = await this.request('/sync/upload', {
@@ -658,6 +746,23 @@ class APIService {
             body: JSON.stringify(payload)
         });
         return result;
+    }
+
+    async getMyConsents() {
+        const result = await this.request('/users/me/consents');
+        if (Array.isArray(result?.consents)) return result.consents;
+        return [];
+    }
+
+    async setMyConsent(consentType, granted, policyVersion = 'v1') {
+        return this.request('/users/me/consents', {
+            method: 'POST',
+            body: JSON.stringify({
+                consent_type: String(consentType || '').trim(),
+                granted: Boolean(granted),
+                policy_version: policyVersion
+            })
+        });
     }
 
     async getSightingsHeatmap(filters = {}) {
@@ -780,6 +885,14 @@ class APIService {
     async listBackupRecords() {
         const result = await this.request('/admin/backup/list');
         return result || { backups: [] };
+    }
+
+    async createBackupRecord() {
+        const result = await this.request('/admin/backup/create', {
+            method: 'POST',
+            body: JSON.stringify({})
+        });
+        return result || null;
     }
 
     async bulkImportAnimals(animals) {

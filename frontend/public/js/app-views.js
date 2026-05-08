@@ -938,10 +938,10 @@ function applySIGTSAIPrefill() {
     }
 }
 
-/** Session storage key: selected UNESCO / tour thematic filter on the Animals tab */
+/** Session storage key: selected tour thematic filter on the Animals tab */
 const SIGTS_TOUR_FOCUS_KEY = 'sigts_tour_focus';
 
-const BWINDI_UNESCO_TOUR_THEMES = [
+const BWINDI_TOUR_THEMES = [
     {
         id: 'all',
         icon: 'grid',
@@ -949,28 +949,28 @@ const BWINDI_UNESCO_TOUR_THEMES = [
         subtitle: 'Browse everything in SIGTS'
     },
     {
-        id: 'unesco_primates',
+        id: 'primates',
         icon: 'paw',
         title: 'Great apes & monkeys',
         subtitle: 'Gorillas, chimps & primate richness (WHC text)'
     },
     {
-        id: 'unesco_large_mammals',
+        id: 'large_mammals',
         icon: 'elephant',
         title: 'Elephants & large mammals',
         subtitle: 'Wide-ranging fauna beyond primates'
     },
     {
-        id: 'unesco_albertine_birds',
+        id: 'albertine_birds',
         icon: 'bird',
         title: 'Albertine bird icons',
         subtitle: 'Passerines singled out under criterion x'
     },
     {
-        id: 'unesco_swallowtails',
+        id: 'swallowtails',
         icon: 'leaf',
         title: 'Swallowtail butterflies',
-        subtitle: 'Canopy Lepidoptera called out by UNESCO'
+        subtitle: 'Canopy Lepidoptera highlights'
     },
     {
         id: 'globally_threatened',
@@ -991,7 +991,7 @@ function animalMatchesBwindiTourFocus(animal, focusKey = 'all') {
     const blob = `${name} ${sci}`;
 
     switch (focusKey) {
-        case 'unesco_primates': {
+        case 'primates': {
             if (/bird|broadbill|flycatcher|warbler|swallowtail|butterfly|turaco|\bbee-eagle\b|\beagle\b/.test(blob)) return false;
             return (
                 /\b(monkey|gorilla|chimp|chimpan|baboon|colobus|mangabey|guenon|potto|galago)\b/i.test(blob)
@@ -999,13 +999,13 @@ function animalMatchesBwindiTourFocus(animal, focusKey = 'all') {
                 || /\b(pan gorilla|cercopithecus|chlorocebus|alophocebus|lophocebus|papio|papionini|perodicticus)\b/.test(blob)
             );
         }
-        case 'unesco_large_mammals': {
-            if (animalMatchesBwindiTourFocus(animal, 'unesco_primates')) return false;
+        case 'large_mammals': {
+            if (animalMatchesBwindiTourFocus(animal, 'primates')) return false;
             if (/bird|flycatcher|warbler|broadbill|swallowtail|butterfly|\bbat\b/.test(blob)) return false;
             if (/\b(mouse|rat|shrew|squirrel|dormouse)\b/i.test(blob)) return false;
             return /elephant|duiker|buffalo|bushbuck|tragelaphus|cape buffalo|bushpig|hog|hyaena|civet|leopard|golden cat|caracal|forest hog|hylochoerus/i.test(blob);
         }
-        case 'unesco_albertine_birds': {
+        case 'albertine_birds': {
             if (/swallowtail|butterfly|papilio\b/.test(blob)) return false;
             const needles = [
                 'broadbill', 'green broadbill', 'grauer', 'warbler', 'turner', 'eremomela', 'chapin', 'flycatcher',
@@ -1014,7 +1014,7 @@ function animalMatchesBwindiTourFocus(animal, focusKey = 'all') {
             ];
             return needles.some((n) => name.includes(n));
         }
-        case 'unesco_swallowtails':
+        case 'swallowtails':
             return /swallowtail|papilio\b|dardanus/i.test(blob);
         case 'globally_threatened': {
             const s = String(animal.conservation_status || '').toLowerCase().replace(/\s+/g, '_');
@@ -1026,7 +1026,7 @@ function animalMatchesBwindiTourFocus(animal, focusKey = 'all') {
 }
 
 function getValidatedAnimalTourFocus() {
-    const valid = new Set(BWINDI_UNESCO_TOUR_THEMES.map((t) => t.id));
+    const valid = new Set(BWINDI_TOUR_THEMES.map((t) => t.id));
     try {
         const raw = sessionStorage.getItem(SIGTS_TOUR_FOCUS_KEY);
         const k = typeof raw === 'string' ? raw.trim() : 'all';
@@ -1041,7 +1041,7 @@ function tourFocusSpeciesCount(animals, focusKey) {
 }
 
 function renderBwindiTourThemeStrip(animals, activeFocus, imageBySlug = {}) {
-    const cards = BWINDI_UNESCO_TOUR_THEMES.map((t) => {
+    const cards = BWINDI_TOUR_THEMES.map((t) => {
         const count = t.id === 'all' ? animals.length : tourFocusSpeciesCount(animals, t.id);
         const active = activeFocus === t.id ? ' tour-focus-card--active' : '';
         const badge = `<span class="tour-focus-count">${count}</span>`;
@@ -1072,9 +1072,9 @@ function renderBwindiTourThemeStrip(animals, activeFocus, imageBySlug = {}) {
         </div>`;
     }).join('');
     return `<section class="section-card tour-focus-section" aria-labelledby="tour-focus-heading">
-        <div class="section-header"><h3 id="tour-focus-heading">${icon('target', 'icon-sm')} Pick a UNESCO tour wildlife theme</h3></div>
+        <div class="section-header"><h3 id="tour-focus-heading">${icon('target', 'icon-sm')} Pick a wildlife tour theme</h3></div>
         <p class="animals-page-blurb tour-focus-explainer">
-            These themes mirror biodiversity groups emphasized for Bwindi Impenetrable National Park (<a href="https://whc.unesco.org/en/list/682/" target="_blank" rel="noopener noreferrer">UNESCO list 682</a>).
+            These themes mirror biodiversity groups commonly used for Bwindi ranger sessions.
             <strong>Tap the card body</strong> to open scripted session briefings for guides and guests; use <strong>Match species grid</strong> to filter tiles below mid-tour.
         </p>
         <div class="tour-focus-grid" role="list">${cards}</div>
@@ -1088,7 +1088,7 @@ window.navigateToAIWithPrompt = async function navigateToAIWithPrompt(promptText
 };
 
 window.setAnimalTourFocus = async function setAnimalTourFocus(key) {
-    const k = BWINDI_UNESCO_TOUR_THEMES.some((t) => t.id === key) ? key : 'all';
+    const k = BWINDI_TOUR_THEMES.some((t) => t.id === key) ? key : 'all';
     try {
         sessionStorage.setItem(SIGTS_TOUR_FOCUS_KEY, k);
     } catch (_) {
@@ -1136,7 +1136,7 @@ function openWildlifeTourThemeBriefingModal(theme) {
         ${talkList ? `<h4 class="ui-modal-section-title">${icon('note', 'icon-sm')} Talking points</h4>${talkList}` : ''}
         ${theme.safety_notes ? `<h4 class="ui-modal-section-title">${icon('shield', 'icon-sm')} Safety & distance</h4><p>${escapeHtml(theme.safety_notes)}</p>` : ''}
         ${theme.etiquette_notes ? `<h4 class="ui-modal-section-title">${icon('info', 'icon-sm')} Guest etiquette</h4><p>${escapeHtml(theme.etiquette_notes)}</p>` : ''}
-        ${theme.unesco_note ? `<h4 class="ui-modal-section-title">${icon('book', 'icon-sm')} Conservation framing</h4><p>${escapeHtml(theme.unesco_note)}</p>` : ''}
+        ${theme.conservation_note ? `<h4 class="ui-modal-section-title">${icon('book', 'icon-sm')} Conservation framing</h4><p>${escapeHtml(theme.conservation_note)}</p>` : ''}
         ${theme.suggested_duration_minutes
         ? `<p class="ui-modal-muted">Suggested pacing: about <strong>${escapeHtml(String(theme.suggested_duration_minutes))}</strong> minutes. Stretch or trim with ranger discretion.</p>`
         : ''}`;
@@ -1353,29 +1353,12 @@ async function renderAnimalsContent() {
         return `<div class="section-card"><div class="empty-state">No animal records available yet. Run backend seed to load the Bwindi catalogue.</div></div>`;
     }
 
-    const themeRows = await Content.getWildlifeTourThemes();
-    const imageBySlug = {};
-    if (Array.isArray(themeRows)) {
-        themeRows.forEach((row) => {
-            const u = row && typeof row.image_url === 'string' ? row.image_url.trim() : '';
-            if (row?.slug && u) imageBySlug[row.slug] = u;
-        });
-    }
+    const filtered = animals;
+    const filterBanner = '';
 
-    const focusKey = getValidatedAnimalTourFocus();
-    let filtered = animals.filter((a) => animalMatchesBwindiTourFocus(a, focusKey));
-    const focusMeta = BWINDI_UNESCO_TOUR_THEMES.find((t) => t.id === focusKey);
-    let filterBanner = '';
-    if (focusKey !== 'all' && !filtered.length) {
-        filterBanner = `<div class="tour-filter-note tour-filter-note--fallback" role="status">Nothing in this catalogue matched <strong>${escapeHtml(focusMeta?.title || 'that theme')}</strong> yet, so we’re showing every species instead. Choose another UNESCO theme above or rerun the extended seed script.</div>`;
-        filtered = animals;
-    } else if (focusKey !== 'all') {
-        filterBanner = `<div class="tour-filter-note" role="status">${icon('leaf', 'icon-sm')} Showing <strong>${filtered.length}</strong> species for <strong>${escapeHtml(focusMeta?.title || focusKey)}</strong>. UNESCO reference: list <a href="https://whc.unesco.org/en/list/682/" target="_blank" rel="noopener noreferrer">682</a>.</div>`;
-    }
+    const tourStrip = '';
 
-    const tourStrip = renderBwindiTourThemeStrip(animals, focusKey, imageBySlug);
-
-    const intro = `<div class="section-card animals-page-intro"><div class="section-header"><h3>${icon('leaf', 'icon-sm')} Bwindi biodiversity</h3></div><div class="animals-page-blurb">Use the UNESCO theme tiles to match the block your guide is running, or stay on <strong>All species</strong>. Gorillas get the limelight, but primates, Albertine forest birds, elephants, butterflies, and other Red List taxa are why this forest is on the World Heritage list. Open a species card for ranger-style notes. Tour help is optional if you want to expand a topic in your own words.</div><div class="info-chip-row"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${JSON.stringify('Bwindi newcomer checklist: main sectors, wet vs dry pacing, gorilla visit etiquette (short bullets).')})">${icon('target', 'icon-sm')} Tour help: first trek</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${JSON.stringify('Birding from main Bwindi trailheads: which Albertine specialties are realistic without playback or nest pressure?')})">${icon('bird', 'icon-sm')} Tour help: birding</button></div></div>`;
+    const intro = `<div class="section-card animals-page-intro"><div class="section-header"><h3>${icon('leaf', 'icon-sm')} Bwindi biodiversity</h3></div><div class="animals-page-blurb">Browse the species catalogue for ranger-style notes across primates, forest birds, elephants, butterflies, and other Red List taxa. Use Tour help if you want AI-assisted prompts before or after your trek.</div><div class="info-chip-row"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${JSON.stringify('Bwindi newcomer checklist: main sectors, wet vs dry pacing, gorilla visit etiquette (short bullets).')})">${icon('target', 'icon-sm')} Tour help: first trek</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${JSON.stringify('Birding from main Bwindi trailheads: which Albertine specialties are realistic without playback or nest pressure?')})">${icon('bird', 'icon-sm')} Tour help: birding</button></div></div>`;
 
     const cards = filtered.map((animal) => renderAnimalSpeciesCardHtml(animal)).join('');
 
@@ -2140,12 +2123,12 @@ async function renderProfileContent() {
 function renderInfoContent() {
     const planPrompt = JSON.stringify(
         'One-week low-footprint trekking plan in southwest Uganda, Bwindi core: daily rhythm, water, altitude, tipping, rainforest kit, radio check with guides.');
-    const unescoPrompt = JSON.stringify(
-        'Bwindi World Heritage (criteria vii and x): plain-language gist for tourists. Why the listing matters for protection.');
+    const conservationPrompt = JSON.stringify(
+        'Bwindi conservation overview in plain language for tourists: key species groups, protection pressures, and why responsible trekking matters.');
     const birdPrompt = JSON.stringify(
         'Rough bird tally people quote for Bwindi; Albertine families worth learning without stressing nests or playback.');
 
-    return `<div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Park snapshot</h3></div><div class="park-info-copy">Roughly <strong>331 km²</strong> of steep montane rainforest on the Albertine Rift shoulder. UNESCO cites exceptional biodiversity: gorillas, deep bird lists, elephants, thick primate mixes, layered trees and ferns (<a href="https://whc.unesco.org/en/list/682/" target="_blank" rel="noopener noreferrer">official summary</a>). SIGTS stitches maps, ranger copy, offline packs, and this app’s Tour help tab so groups can cross-check ecology, etiquette, culture, and safety on the trail.</div><div class="info-chip-row"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${unescoPrompt});">${icon('book', 'icon-sm')} Tour help: UNESCO gist</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${birdPrompt});">${icon('bird', 'icon-sm')} Tour help: birds</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${planPrompt});">${icon('map', 'icon-sm')} Tour help: week pacing</button></div><button type="button" class="small-btn ghost-btn" style="margin-top:10px;" onclick="submitContentHelpfulness('info', '', 'Park snapshot')">${icon('target', 'icon-sm')} Helpful?</button></div>
+    return `<div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Park snapshot</h3></div><div class="park-info-copy">Roughly <strong>331 km²</strong> of steep montane rainforest on the Albertine Rift shoulder, known for mountain gorillas, rich birdlife, elephants, diverse primates, and dense montane vegetation. SIGTS stitches maps, ranger copy, offline packs, and this app’s Tour help tab so groups can cross-check ecology, etiquette, culture, and safety on the trail.</div><div class="info-chip-row"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${conservationPrompt});">${icon('book', 'icon-sm')} Tour help: conservation gist</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${birdPrompt});">${icon('bird', 'icon-sm')} Tour help: birds</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${planPrompt});">${icon('map', 'icon-sm')} Tour help: week pacing</button></div><button type="button" class="small-btn ghost-btn" style="margin-top:10px;" onclick="submitContentHelpfulness('info', '', 'Park snapshot')">${icon('target', 'icon-sm')} Helpful?</button></div>
     <div class="section-card"><div class="section-header"><h3>${icon('clock', 'icon-sm')} Opening Hours</h3></div><div style="padding:16px;">Typical UWA gate window: <strong>06:00 to 19:00</strong> (confirm with your issued permit).<div class="info-chip-row" style="margin-top:10px;"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${JSON.stringify('Packing: dawn gorilla briefing vs afternoon forest walk in Bwindi.')});">${icon('target', 'icon-sm')} Tour help: gear timing</button></div><button class="small-btn" style="margin-top:10px;" onclick="submitContentHelpfulness('info', '', 'Opening Hours')">${icon('target', 'icon-sm')} Helpful?</button></div></div>
     <div class="section-card"><div class="section-header"><h3>${icon('phone', 'icon-sm')} Emergency</h3></div><div style="padding:16px;">${icon('shield', 'icon-sm')} UWA / emergency coordination: replace placeholder with live operations desk numbers before production.<br><button type="button" class="small-btn" style="margin-top:10px;" onclick="navigateToAIWithPrompt(${JSON.stringify('Trail injury before medics: who gets called first on a Bwindi trek (order of escalation).')});">${icon('target', 'icon-sm')} Tour help: casualty chain</button><br><button class="small-btn" style="margin-top:10px;" onclick="submitContentHelpfulness('info', '', 'Emergency Contacts')">${icon('target', 'icon-sm')} Helpful?</button></div></div>`;
 }
@@ -2836,9 +2819,15 @@ window.itOpsPeekAnalyticsAnomalies = async function () {
         showToast(d?.error || 'Anomalies request failed.', 'danger');
         return;
     }
-    const n = (d?.anomalies || []).length;
-    showToast(`${n} anomaly row(s); details in console (F12).`, n ? 'info' : 'success');
-    console.info('[SIGTS] analytics anomalies', d);
+    const rows = Array.isArray(d?.anomalies) ? d.anomalies : [];
+    const content = rows.length
+        ? `<div class="seasonal-list">${rows.slice(0, 30).map((a) => `<div class="seasonal-item">${escapeHtml(String(a.day || 'N/A'))} - count ${escapeHtml(String(a.count || 0))} - z ${escapeHtml(String(a.zscore || 0))}</div>`).join('')}</div>`
+        : '<div class="empty-state">No anomaly rows found for this threshold.</div>';
+    showRichContentModal({
+        title: 'Analytics anomalies',
+        bodyHtml: content,
+        footerHtml: `<button type="button" class="small-btn ghost-btn" onclick="document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();">${icon('x', 'icon-sm')} Close</button>`
+    });
 };
 
 window.itOpsQueueModelRetrain = async function () {
@@ -2855,8 +2844,18 @@ window.itOpsRunReportBuild = async function () {
     else {
         const keys = r?.sections ? Object.keys(r.sections) : [];
         const errs = r?.section_errors ? Object.keys(r.section_errors) : [];
-        showToast(`Report built: ${keys.length} section(s); ${errs.length} error(s). See console.`, errs.length ? 'warning' : 'success');
-        console.info('[SIGTS] report build', r);
+        const sectionRows = keys.length
+            ? keys.map((k) => `<div class="seasonal-item"><strong>${escapeHtml(k)}</strong> loaded</div>`).join('')
+            : '<div class="seasonal-item">No sections were generated.</div>';
+        const errRows = errs.length
+            ? `<h4 class="ui-modal-section-title">${icon('shield', 'icon-sm')} Section errors</h4><div class="seasonal-list">${errs.map((k) => `<div class="seasonal-item">${escapeHtml(k)}: ${escapeHtml(String(r.section_errors[k] || 'error'))}</div>`).join('')}</div>`
+            : '';
+        showRichContentModal({
+            title: 'Report build result',
+            bodyHtml: `<div class="seasonal-list">${sectionRows}</div>${errRows}`,
+            footerHtml: `<button type="button" class="small-btn ghost-btn" onclick="document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();">${icon('x', 'icon-sm')} Close</button>`
+        });
+        showToast(`Report built: ${keys.length} section(s); ${errs.length} error(s).`, errs.length ? 'warning' : 'success');
     }
 };
 
@@ -2897,8 +2896,14 @@ window.itOpsRunLatestSchedule = async function () {
         showToast(run?.error || 'Failed to run report schedule.', 'danger');
         return;
     }
+    const report = run?.report || {};
+    const delivered = Number(run?.emails_attempted || 0);
+    showRichContentModal({
+        title: 'Schedule execution result',
+        bodyHtml: `<div class="seasonal-list"><div class="seasonal-item"><strong>Schedule:</strong> ${escapeHtml(latest.name || latest.schedule_id)}</div><div class="seasonal-item"><strong>Emails attempted:</strong> ${escapeHtml(String(delivered))}</div><div class="seasonal-item"><strong>Generated at:</strong> ${escapeHtml(String(report.generated_at || 'N/A'))}</div></div>`,
+        footerHtml: `<button type="button" class="small-btn ghost-btn" onclick="document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();">${icon('x', 'icon-sm')} Close</button>`
+    });
     showToast(`Schedule "${latest.name || latest.schedule_id}" executed.`, 'success');
-    console.info('[SIGTS] schedule run', run);
 };
 
 window.itOpsExportAnalyticsPrompt = async function () {
@@ -2937,9 +2942,16 @@ window.itOpsExportAnalyticsPrompt = async function () {
             showToast(out?.error || 'Export failed.', 'danger');
             return;
         }
-        const keys = Object.keys(out || {}).length;
-        showToast(`JSON export ready with ${keys} top-level key(s). See console.`, 'success');
-        console.info('[SIGTS] analytics export', out);
+        const keys = Object.keys(out || {});
+        const rows = keys.length
+            ? keys.map((k) => `<div class="seasonal-item"><strong>${escapeHtml(k)}</strong></div>`).join('')
+            : '<div class="seasonal-item">No export keys returned.</div>';
+        showRichContentModal({
+            title: 'Analytics JSON export summary',
+            bodyHtml: `<div class="seasonal-list">${rows}</div>`,
+            footerHtml: `<button type="button" class="small-btn ghost-btn" onclick="document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();">${icon('x', 'icon-sm')} Close</button>`
+        });
+        showToast(`JSON export ready with ${keys.length} top-level key(s).`, 'success');
     }
 };
 
@@ -2951,8 +2963,15 @@ window.itOpsPeekTrainingJobs = async function () {
         return;
     }
     const jobs = Array.isArray(r?.jobs) ? r.jobs : [];
-    showToast(`${jobs.length} training job(s) loaded; details in console.`, jobs.length ? 'info' : 'success');
-    console.info('[SIGTS] training jobs', jobs);
+    const html = jobs.length
+        ? `<div class="seasonal-list">${jobs.slice(0, 40).map((j) => `<div class="seasonal-item"><strong>${escapeHtml(j.model_key || 'model')}</strong> - ${escapeHtml(j.status || 'queued')} (${escapeHtml(String(j.job_id || ''))})</div>`).join('')}</div>`
+        : '<div class="empty-state">No training jobs found.</div>';
+    showRichContentModal({
+        title: 'Training jobs',
+        bodyHtml: html,
+        footerHtml: `<button type="button" class="small-btn ghost-btn" onclick="document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();">${icon('x', 'icon-sm')} Close</button>`
+    });
+    showToast(`${jobs.length} training job(s) loaded.`, jobs.length ? 'info' : 'success');
 };
 
 function openTourAssignmentModal({ mode, guides, routes }) {
@@ -3121,14 +3140,36 @@ window.itOpsAssignWeeklyToursPrompt = async function () {
 };
 
 window.itOpsPeekBackupsList = async function () {
-    const r = await API.request('/admin/backup/list');
+    if (!requireITManagerAccess('backup operations')) return;
+    const create = await showConfirmDialog('Create a new backup now? This can take up to a few minutes.');
+    if (create) {
+        const created = await API.createBackupRecord();
+        if (created?.error || created?.status >= 400) {
+            showToast(created?.error || 'Backup creation failed', 'danger');
+            return;
+        }
+        showToast(`Backup created: ${created.backup_id || 'new artifact'}`, 'success');
+    }
+    const r = await API.listBackupRecords();
     if (r?.status >= 400 || r?.error) {
         showToast(r?.error || 'Backup list failed', 'danger');
         return;
     }
-    const n = (r?.backups || []).length;
-    showToast(`${n} backup record(s); see console for list.`, 'info');
-    console.info('[SIGTS] backups', r?.backups);
+    const backups = Array.isArray(r?.backups) ? r.backups : [];
+    const n = backups.length;
+    const html = backups.length
+        ? `<div class="seasonal-list">${backups.slice(0, 40).map((b) => {
+            const m = b.metrics && typeof b.metrics === 'object' ? b.metrics : {};
+            const id = m.backupId || b.report_id || 'backup';
+            return `<div class="seasonal-item"><strong>${escapeHtml(String(id))}</strong><br><small>${escapeHtml(String(b.generated_at || ''))}</small></div>`;
+        }).join('')}</div>`
+        : '<div class="empty-state">No backups found.</div>';
+    showRichContentModal({
+        title: `Backup records (${n})`,
+        bodyHtml: html,
+        footerHtml: `<button type="button" class="small-btn ghost-btn" onclick="document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();">${icon('x', 'icon-sm')} Close</button>`
+    });
+    showToast(`${n} backup record(s) loaded.`, 'info');
 };
 
 window.saveLanguagePreference = async function () {
