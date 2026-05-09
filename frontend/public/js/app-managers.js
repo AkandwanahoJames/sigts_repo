@@ -704,7 +704,7 @@ class ContentManager {
                 { animal_id: '00000000-0000-4000-8000-000000000006', name: 'Great Blue Turaco', scientific_name: 'Corythaeola cristata', conservation_status: 'least_concern', description: 'Africa\'s largest turaco glides between fruiting figs with heavy wingbeats and loud calls. It flags healthy canopy fruiting and seed-dispersal webs that gorillas and butterflies also rely on — best enjoyed with binoculars and without playback harassment at nests.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Great_Blue_Turaco.jpg/960px-Great_Blue_Turaco.jpg'], fun_facts: ['Cow-like calls at dawn', 'Important fig seed disperser'] },
                 { animal_id: '00000000-0000-4000-8000-000000000007', name: 'African Fish Eagle', scientific_name: 'Haliaeetus vocifer', conservation_status: 'least_concern', description: 'Fish eagles tie Bwindi visitors to Great Lakes soundscapes — whistled duets carry even when birds commute along forest-edge rivers. They anchor lessons on watershed health, riparian buffers, and how interior forests connect to regional water security.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/AfricanFishEagle.jpeg/960px-AfricanFishEagle.jpeg'], fun_facts: ['Piercing call is an African soundmark', 'Pairs reuse huge stick nests'] },
                 { animal_id: '00000000-0000-4000-8000-000000000008', name: 'Rwenzori Turaco', scientific_name: 'Ruwenzorornis johnstoni', conservation_status: 'least_concern', description: 'This Albertine endemic flashes ruby primaries between moss-forest crowns. Croaking duets carry through mist, so listening skills matter as much as optics — guides pair sightings with elevation and bamboo transitions to explain micro-endemism.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Ruwenzori_Turaco.jpg/960px-Ruwenzori_Turaco.jpg'], fun_facts: ['Croaks in dripping moss forest', 'Frugivore of canopy masts'] },
-                { animal_id: '00000000-0000-4000-8000-000000000009', name: 'African Green Broadbill', scientific_name: 'Pseudocalyptomena graueri', conservation_status: 'vulnerable', description: 'A chunky Albertine endemic tied to mossy crowns and canopy fruiting pulses. Guides cherish its nasal whistle drifting through dripping forest — a flagship species for explaining playback ethics, boardwalk pacing, and why understorey trampling harms breeders.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/African_Green_Broadbill.jpg/960px-African_Green_Broadbill.jpg'], fun_facts: ['Gleans along mossy limbs', 'Sensitive to playback pressure'] },
+                { animal_id: '00000000-0000-4000-8000-000000000009', name: 'African Green Broadbill', scientific_name: 'Pseudocalyptomena graueri', conservation_status: 'vulnerable', description: 'A chunky Albertine endemic tied to mossy crowns and canopy fruiting pulses. Guides cherish its nasal whistle drifting through dripping forest — a flagship species for explaining playback ethics, boardwalk pacing, and why understorey trampling harms breeders.', image_urls: ['/images/african-green-broadbill.png'], fun_facts: ['Gleans along mossy limbs', 'Sensitive to playback pressure'] },
                 { animal_id: '00000000-0000-4000-8000-00000000000a', name: 'Handsome Francolin', scientific_name: 'Pternistis nobilis', conservation_status: 'vulnerable', description: 'Albertine endemic partridge duetting at first light on bamboo-fern ridges. Pairs call across ravines before trekking lines arrive — a soundtrack species for discussing buffer-zone hunting regulations and why dogs are excluded from park trails.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/6/65/Handsome_spurfowl_%28Pternistis_nobilis%29.jpg/960px-Handsome_spurfowl_%28Pternistis_nobilis%29.jpg'], fun_facts: ['Pairs call across ravines', 'Bamboo-fern understory specialist'] },
                 { animal_id: '00000000-0000-4000-8000-00000000000b', name: 'Bar-tailed Trogon', scientific_name: 'Apaloderma vittatum', conservation_status: 'least_concern', description: 'Jewel-like trogon of mid-canopy perches — tail bars flash when it pivots. A favourite Albertine photo target that lets guides discuss fig masts, mixed-flock etiquette, and why flash photography stays off on sensitive species.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Bar-tailed_Trogon_%28Apaloderma_vittatum%29_%2845634509165%29.jpg/960px-Bar-tailed_Trogon_%28Apaloderma_vittatum%29_%2845634509165%29.jpg'], fun_facts: ['Tail bars flash when it turns', 'Nests in tree holes'] },
                 { animal_id: '00000000-0000-4000-8000-00000000000c', name: "Johnston's Chameleon", scientific_name: 'Trioceros johnstoni', conservation_status: 'least_concern', description: 'Three-horned chameleon of Bwindi shrubs — photographed in situ on park trails. Rangers ask guests not to touch because skin oils and handling stress dehydrate animals quickly. Independent eye rotation makes them superb ambush hunters on mid-level branches.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/d/db/Camale%C3%B3n_%28Trioceros_johnstoni%29%2C_parque_nacional_de_la_Selva_Impenetrable_de_Bwindi%2C_Uganda%2C_2024-02-01%2C_DD_89.jpg/960px-Camale%C3%B3n_%28Trioceros_johnstoni%29%2C_parque_nacional_de_la_Selva_Impenetrable_de_Bwindi%2C_Uganda%2C_2024-02-01%2C_DD_89.jpg'], fun_facts: ['Eyes move independently', 'Do not touch—skin stress harms quickly'] }
@@ -1497,7 +1497,7 @@ class AIRecommendationEngine {
 
         const payload = {
             question: trimmed,
-            language: AppState.userPreferences?.language || 'en',
+            language: 'en',
             client_time: new Date().toISOString()
         };
 
@@ -1616,7 +1616,7 @@ class AIRecommendationEngine {
             rel += Math.min(0.15, popScore('story', s.narrative_id || s.id) * 0.02);
             return {
                 id: String(s.narrative_id || s.id),
-                name: s.title_en || s.title_local || 'Story',
+                name: s.title_en || 'Story',
                 type: 'cultural',
                 tags: ['culture'],
                 relevanceScore: Math.min(0.99, rel)
@@ -2111,6 +2111,95 @@ class ITManagerAPI {
             peers: (valueOf(0)?.users || []),
             intranetStatus: valueOf(1) || {},
             syncStatus: valueOf(2) || {}
+        };
+    }
+
+    /** Bundled predictive analytics + reporting datasets (§3.1.1.11); filters via options. */
+    async getPredictiveAnalyticsData(opts = {}) {
+        const days = Math.min(365, Math.max(1, Number(opts.days) || 14));
+        const end = new Date();
+        const start = new Date(Date.now() - days * 86400000);
+        const startIso = start.toISOString();
+        const endIso = end.toISOString();
+        const congestionDate =
+            opts.congestionDate && String(opts.congestionDate).trim()
+                ? String(opts.congestionDate).slice(0, 10)
+                : endIso.slice(0, 10);
+        const animalId = opts.animalId ? String(opts.animalId).trim() : '';
+        const interval = ['hour', 'day', 'week'].includes(opts.interval) ? opts.interval : 'day';
+
+        const settled = await Promise.allSettled([
+            API.getAnalyticsDashboard(startIso, endIso, congestionDate),
+            API.getVisitorFlowAnalytics(startIso, endIso, interval),
+            API.getCongestionPredictions(congestionDate),
+            API.getPeakTimes(startIso, endIso),
+            API.getResourceAllocation(congestionDate),
+            API.getSightingsTrends(startIso, endIso, animalId || undefined),
+            API.getPopularContent(14),
+            API.getSatisfactionAnalytics(startIso, endIso),
+            API.getDemographicsAnalytics(),
+            API.getAnalyticsAnomalies(2.5)
+        ]);
+        const val = (i, fallback) =>
+            settled[i].status === 'fulfilled' && settled[i].value != null ? settled[i].value : fallback;
+        settled.forEach((r, i) => {
+            if (r.status === 'rejected') {
+                console.warn(`[ITAPI] predictive analytics call ${i} failed:`, r.reason);
+            }
+        });
+
+        const dashboard = val(0, {}) || {};
+        const visitorFlow = val(1, {}) || {};
+        const congestion = val(2, {}) || {};
+        const peakTimes = val(3, {}) || {};
+        const resourceAlloc = val(4, {}) || {};
+        const sightings = val(5, {}) || {};
+        const popular = val(6, []) || [];
+        const satisfaction = val(7, {}) || {};
+        const demographics = val(8, {}) || {};
+        const anomalies = val(9, {}) || {};
+
+        const visitorTimeline = visitorFlow.timeline || dashboard.visitor_flow?.timeline || [];
+        const topLocations = visitorFlow.top_locations || visitorFlow.popular_routes || [];
+        const dwellTimes = visitorFlow.dwell_times || [];
+
+        return {
+            range: { start: startIso, end: endIso, days, congestionDate, interval },
+            visitorFlow: {
+                timeline: visitorTimeline,
+                popularRoutes: topLocations,
+                dwellTimes,
+                averageDwell: visitorFlow.average_dwell_time ?? null
+            },
+            congestion: {
+                predictions: congestion.predictions || [],
+                recommendations: congestion.recommendations || []
+            },
+            peakTimes: {
+                byHour: peakTimes.by_hour || [],
+                byDayOfWeek: peakTimes.by_day_of_week || [],
+                peakHour: peakTimes.peak_hour || null,
+                peakDay: peakTimes.peak_day || null
+            },
+            resourceAllocation: resourceAlloc.recommendations || [],
+            sightings: {
+                trend: sightings.trend || [],
+                species: sightings.species_breakdown || []
+            },
+            popularContent: Array.isArray(popular) ? popular : [],
+            satisfaction: {
+                overall: satisfaction.overall ?? satisfaction.avg_rating ?? 0,
+                satisfactionRate: satisfaction.satisfaction_rate ?? 0,
+                totalRatings: satisfaction.total_ratings ?? 0,
+                trend: satisfaction.trend || []
+            },
+            demographics: demographics || {},
+            anomalies: anomalies.anomalies || [],
+            anomalyStats: anomalies.stats || {},
+            dashboardExtras: {
+                congestionForecast: dashboard.congestion_forecast || [],
+                anomalyAlerts: dashboard.anomaly_alerts || []
+            }
         };
     }
 

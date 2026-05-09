@@ -34,7 +34,7 @@ router.get('/profile', authenticateJWT, async (req, res) => {
         // Get base user info
         const userResult = await pool.query(
             `SELECT user_id, username, email, phone, first_name, last_name, 
-                    user_type, created_at, last_login, language_pref, profile_pic_url,
+                    user_type, created_at, last_login, profile_pic_url,
                     email_verified
              FROM users WHERE user_id = $1`,
             [userId]
@@ -94,7 +94,6 @@ router.put('/profile', authenticateJWT, [
     body('firstName').optional().trim().escape(),
     body('lastName').optional().trim().escape(),
     body('phone').optional().trim(),
-    body('language_pref').optional().isIn(['en', 'fr', 'sw', 'ruk']),
     body('nationality').optional().trim(),
     body('interests').optional().isArray()
 ], async (req, res) => {
@@ -104,7 +103,7 @@ router.put('/profile', authenticateJWT, [
     }
 
     const userId = req.user.user_id;
-    const { firstName, lastName, phone, language_pref, profile_pic_url, nationality, interests } = req.body;
+    const { firstName, lastName, phone, profile_pic_url, nationality, interests } = req.body;
 
     try {
         // Update base user info
@@ -123,10 +122,6 @@ router.put('/profile', authenticateJWT, [
         if (phone !== undefined) {
             updates.push(`phone = $${paramIndex++}`);
             values.push(phone);
-        }
-        if (language_pref !== undefined) {
-            updates.push(`language_pref = $${paramIndex++}`);
-            values.push(language_pref);
         }
         if (profile_pic_url !== undefined) {
             updates.push(`profile_pic_url = $${paramIndex++}`);
@@ -168,7 +163,7 @@ router.put('/profile', authenticateJWT, [
         // Get updated profile
         const updatedResult = await pool.query(
             `SELECT user_id, username, email, phone, first_name, last_name, user_type,
-                    language_pref, profile_pic_url
+                    profile_pic_url
              FROM users WHERE user_id = $1`,
             [userId]
         );

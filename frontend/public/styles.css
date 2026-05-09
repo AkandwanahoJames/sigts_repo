@@ -7,30 +7,32 @@
    ===================================================== */
 
 :root {
-    --green-950: #062814;
-    --green-900: #0A3219;
-    --green-800: #123F22;
-    --green-700: #1F5F35;
-    --green-600: #2D7446;
-    --green-500: #3E8A59;
+    /* Base tokens align with theme-modern “clover” palette */
+    --green-950: #0b1e26;
+    --green-900: #18333d;
+    --green-800: #1c3a34;
+    --green-700: #1c621b;
+    --green-600: #419310;
+    --green-500: #4fa814;
+    --green-400: #a5ec60;
 
-    --cream-50: #FFFEFA;
-    --cream-100: #FAF7EF;
-    --cream-200: #F2EDE2;
-    --cream-300: #E8DFCE;
+    --cream-50: #fbfefd;
+    --cream-100: #f1f8f4;
+    --cream-200: #e8f2ec;
+    --cream-300: #dae8e5;
 
-    --sand-500: #D9B96E;
-    --sand-600: #C9A45A;
+    --sand-500: #a5ec60;
+    --sand-600: #82c943;
 
-    --text-900: #1F2F24;
-    --text-700: #3F4D42;
-    --text-500: #6D756C;
-    --text-400: #8B9188;
+    --text-900: #0b1e26;
+    --text-700: #18333d;
+    --text-500: #487070;
+    --text-400: #6d8a8c;
 
-    --line: rgba(31, 47, 36, 0.10);
-    --line-strong: rgba(31, 47, 36, 0.16);
+    --line: rgba(24, 51, 61, 0.10);
+    --line-strong: rgba(24, 51, 61, 0.16);
 
-    --success: #2E7D32;
+    --success: #419310;
     --warning: #D9A441;
     --danger: #C0392B;
     --info: #2A9D8F;
@@ -1282,10 +1284,237 @@ svg {
 }
 
 /* Tour help composer: global .auth-input { width:100% } must not hide Mic / Send */
+.section-card.ai-chat-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 56vh;
+}
+
+.section-card.ai-chat-panel .ai-chat-messages {
+    flex: 1 1 auto;
+    min-height: 220px;
+    max-height: 52vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-bottom: 8px;
+}
+
+.section-card.ai-chat-panel .ai-chat-composer {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content max-content;
+    gap: 8px;
+    align-items: center;
+    padding: 10px 16px 14px;
+    background: var(--cream-50);
+    border-top: 1px solid var(--line);
+}
+
 .section-card.ai-chat-panel .ai-chat-composer .auth-input {
-    width: auto !important;
+    width: 100% !important;
     max-width: 100%;
     min-width: 0;
+}
+
+.section-card.ai-chat-panel .ai-chat-composer .small-btn,
+.section-card.ai-chat-panel .ai-chat-composer .login-btn {
+    width: auto !important;
+    min-width: 78px;
+    white-space: nowrap;
+    flex: 0 0 auto;
+}
+
+/* Keep controls visible on narrow phones: input first row, buttons second row */
+@media (max-width: 560px) {
+    .section-card.ai-chat-panel .ai-chat-composer {
+        grid-template-columns: minmax(0, 1fr) max-content;
+        grid-template-areas:
+            "input input"
+            "mic send";
+        row-gap: 8px;
+    }
+
+    .section-card.ai-chat-panel .ai-chat-composer #aiChatInput {
+        grid-area: input;
+    }
+
+    .section-card.ai-chat-panel .ai-chat-composer #aiChatMicBtn {
+        grid-area: mic;
+        justify-self: start;
+    }
+
+    .section-card.ai-chat-panel .ai-chat-composer .login-btn {
+        grid-area: send;
+        justify-self: end;
+    }
+}
+
+/* AI chat layout: park card = natural height; chat column fills remaining space (rows were reversed before, causing overlap). */
+body.ai-chat-view .main-container.main-container--tour-help {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 16px;
+    min-height: calc(100vh - 110px);
+    align-content: stretch;
+    align-items: stretch;
+    width: min(100%, 1120px);
+    padding-top: 18px;
+    padding-bottom: 22px;
+}
+
+/* Slot stacks transcript card + composer; fills row 2 so messages scroll above composer, not under park card */
+body.ai-chat-view #sigtsViewSlot {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+    min-width: 0;
+}
+
+body.ai-chat-view .park-access-panel {
+    align-self: start;
+    width: 100%;
+}
+
+body.ai-chat-view .section-card.ai-chat-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    padding-bottom: 0;
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+body.ai-chat-view .section-card.ai-chat-panel .ai-chat-messages {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    padding: 4px 14px 14px;
+}
+
+body.ai-chat-view .ai-chat-composer-float {
+    position: relative;
+    bottom: auto;
+    flex-shrink: 0;
+    z-index: 2;
+    width: 100%;
+    margin-top: 0;
+}
+
+body.ai-chat-view .ai-chat-composer-float .ai-chat-composer {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+    background: #fff;
+    padding: 10px 12px;
+}
+
+@media (max-width: 960px) {
+    body.ai-chat-view .main-container.main-container--tour-help {
+        min-height: calc(100vh - 96px);
+        width: 100%;
+        padding-top: 14px;
+        padding-bottom: 16px;
+        gap: 12px;
+        grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    body.ai-chat-view .section-card.ai-chat-panel .ai-chat-messages {
+        padding: 2px 10px 12px;
+    }
+}
+
+/* Keep first card from tucking under sticky header during momentum scroll */
+body.ai-chat-view .main-container.main-container--tour-help > :first-child {
+    scroll-margin-top: 96px;
+}
+
+/* Park access and chat cards breathe better on tour-help screen */
+body.ai-chat-view .park-access-panel,
+body.ai-chat-view .section-card.ai-chat-panel {
+    margin: 0;
+}
+
+/* Final typography + spacing polish (AI chat view only) */
+body.ai-chat-view .park-access-panel {
+    padding: 16px 18px;
+    gap: 12px;
+}
+
+body.ai-chat-view .park-access-head h3 {
+    font-size: 15px;
+    letter-spacing: -0.01em;
+}
+
+body.ai-chat-view .park-access-panel p {
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+body.ai-chat-view .park-access-meta {
+    gap: 10px;
+}
+
+body.ai-chat-view .park-chip {
+    font-size: 12px;
+    padding: 6px 11px;
+}
+
+body.ai-chat-view .ai-prefill-banner {
+    margin: 0 18px 12px;
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+body.ai-chat-view .section-card.ai-chat-panel .rec-card.ai-chat-message {
+    margin-bottom: 10px;
+}
+
+body.ai-chat-view .section-card.ai-chat-panel .rec-title {
+    font-size: 15px;
+    font-weight: 850;
+    margin-bottom: 4px;
+}
+
+body.ai-chat-view .section-card.ai-chat-panel .rec-reason {
+    font-size: 15px;
+    line-height: 1.58;
+}
+
+body.ai-chat-view .ai-chat-meta-block {
+    margin-top: 8px;
+}
+
+body.ai-chat-view .ai-chat-sources-ul {
+    margin: 6px 0 0 18px;
+    padding: 0;
+    display: grid;
+    gap: 4px;
+}
+
+body.ai-chat-view .ai-chat-feedback-row {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+body.ai-chat-view .ai-chat-composer-float .ai-chat-composer .auth-input {
+    min-height: 46px;
+    font-size: 15px;
+}
+
+body.ai-chat-view .ai-chat-composer-float .ai-chat-composer .small-btn,
+body.ai-chat-view .ai-chat-composer-float .ai-chat-composer .login-btn {
+    min-height: 44px;
+    padding-inline: 14px;
+    font-weight: 800;
 }
 
 /* Intro / explainer cards: avoid clipping body + action chips (globals use overflow:hidden on .section-card) */
@@ -1560,6 +1789,36 @@ body.detail-modal-open {
 .profile-dept {
     opacity: 0.78;
     font-size: 13px;
+}
+
+/* Profile: one vertical rhythm, no stacked cards colliding */
+.profile-page {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+    max-width: min(100%, 680px);
+    margin-inline: auto;
+    padding-bottom: 8px;
+}
+
+.profile-page .profile-header {
+    margin-bottom: 0;
+    flex-shrink: 0;
+}
+
+.profile-page .section-card {
+    min-width: 0;
+}
+
+.profile-page .section-card-body {
+    padding: 16px 18px 18px;
+    display: grid;
+    gap: 14px;
+}
+
+.profile-page .profile-menu {
+    margin-top: 0;
 }
 
 .menu-item {

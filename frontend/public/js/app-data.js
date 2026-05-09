@@ -405,7 +405,7 @@ class APIService {
         return Array.isArray(cached) ? cached.find((t) => t.slug === s) || null : null;
     }
 
-    /** Full cultural narrative (includes narrative_en narrative_local, etc.). */
+    /** Full cultural narrative (English content path). */
     async getCulturalNarrativeById(id) {
         const result = await this.request(`/cultural/${id}`);
         if (result?.narrative_id) return result;
@@ -638,8 +638,12 @@ class APIService {
         return [];
     }
 
-    async getSatisfactionAnalytics() {
-        const result = await this.request('/analytics/satisfaction');
+    async getSatisfactionAnalytics(startIso = '', endIso = '') {
+        const qs = new URLSearchParams();
+        if (startIso) qs.set('start', startIso);
+        if (endIso) qs.set('end', endIso);
+        const suffix = qs.toString() ? `?${qs}` : '';
+        const result = await this.request(`/analytics/satisfaction${suffix}`);
         return result || null;
     }
 
@@ -739,7 +743,7 @@ class APIService {
         return result?.success ? result.feedback : null;
     }
 
-    // User profile updates (language/preferences)
+    // User profile updates (preferences)
     async updateUserProfile(payload) {
         const result = await this.request('/users/profile', {
             method: 'PUT',
@@ -921,7 +925,7 @@ const AppState = {
         cultural: []
     },
     userPreferences: {
-        language: localStorage.getItem('language') || RUNTIME_CONFIG.DEFAULT_LANGUAGE || 'en',
+        language: 'en',
         theme: localStorage.getItem('theme') || 'light',
         offlineMode: localStorage.getItem('offlineMode') === 'true',
         notifications: true,
