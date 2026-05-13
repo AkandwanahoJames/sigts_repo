@@ -96,7 +96,7 @@ window.__SIGTS_WILDLIFE_TOUR_THEMES_FALLBACK__ = [
         conservation_note:
             'Forest-dependent birds, including Albertine Rift specialists, are a major part of this area\'s ecological importance.',
         image_url:
-            'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/African_Green_Broadbill.jpg/640px-African_Green_Broadbill.jpg',
+            'https://upload.wikimedia.org/wikipedia/commons/d/d2/Grauer%27s_broadbill_%28Pseudocalyptomena_graueri%29_01_%28cropped%29.jpg',
         sort_order: 40
     },
     {

@@ -8,6 +8,7 @@ const { pool } = require('../config/database');
 const { REQUIREMENTS } = require('../config/requirements');
 const { authenticateJWT } = require('../middleware/auth');
 const { logger } = require('../utils/logger');
+const { audit } = require('../utils/audit');
 const { sendVerificationEmail, sendPasswordResetEmail, sendActivityNotificationEmail } = require('../services/emailService');
 const refreshTokenService = require('../services/refreshTokenService');
 const crypto = require('crypto');
@@ -165,7 +166,7 @@ router.post('/register', [
     body('username').isLength({ min: 3 }).trim(),
     body('email').isEmail().normalizeEmail(),
     body('password').isLength({ min: 4 }),
-    body('phone').optional().trim(),
+    body('phone').trim().isLength({ min: 6, max: 32 }).withMessage('Phone number is required'),
     body('userType').optional().isIn(['tourist', 'guide', 'it_manager'])
 ], async (req, res) => {
     const errors = validationResult(req);
@@ -174,6 +175,10 @@ router.post('/register', [
     }
 
     const { username, email, password, firstName, lastName, phone, userType } = req.body;
+    const emailNorm = String(email || '').toLowerCase();
+    if (emailNorm.endsWith('@guest.sigts.local')) {
+        return res.status(400).json({ error: 'This email domain is reserved for temporary guest sessions' });
+    }
 
     try {
         // Check if user exists
@@ -194,7 +199,7 @@ router.post('/register', [
             `INSERT INTO users (user_id, username, password_hash, email, first_name, last_name, phone, user_type, is_active)
              VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, true)
              RETURNING user_id, username, email, user_type`,
-            [username, hashedPassword, email, firstName || '', lastName || '', phone || null, userType || 'tourist']
+            [username, hashedPassword, email, firstName || '', lastName || '', String(phone || '').trim(), userType || 'tourist']
         );
 
         const user = result.rows[0];
@@ -390,35 +395,34 @@ router.post('/login', [
             );
         }
 
-        if (user.user_type === 'it_manager') {
-            const mfaResult = await pool.query(
-                `SELECT mfa_secret, enabled
-                 FROM user_mfa_configs
-                 WHERE user_id = $1`,
-                [user.user_id]
+        const mfaResult = await pool.query(
+            `SELECT mfa_secret, enabled
+             FROM user_mfa_configs
+             WHERE user_id = $1`,
+            [user.user_id]
+        );
+
+        if (mfaResult.rows[0]?.enabled) {
+            const mfaToken = jwt.sign(
+                { userId: user.user_id, userType: user.user_type, typ: 'mfa_pending' },
+                MFA_JWT_SECRET,
+                { expiresIn: '10m' }
             );
 
-            if (mfaResult.rows[0]?.enabled) {
-                const mfaToken = jwt.sign(
-                    { userId: user.user_id, userType: user.user_type, typ: 'mfa_pending' },
-                    MFA_JWT_SECRET,
-                    { expiresIn: '10m' }
-                );
-
-                const phoneRow = await pool.query(`SELECT phone FROM users WHERE user_id = $1`, [user.user_id]);
-                return res.json({
-                    success: true,
-                    mfaRequired: true,
-                    mfaToken,
-                    smsMfaAvailable: Boolean((phoneRow.rows[0]?.phone || '').trim()),
-                    user: {
-                        id: user.user_id,
-                        username: user.username,
-                        name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
-                        role: user.user_type
-                    }
-                });
-            }
+            const phoneRow = await pool.query(`SELECT phone FROM users WHERE user_id = $1`, [user.user_id]);
+            return res.json({
+                success: true,
+                mfaRequired: true,
+                mfaToken,
+                smsMfaAvailable: Boolean((phoneRow.rows[0]?.phone || '').trim()),
+                user: {
+                    id: user.user_id,
+                    username: user.username,
+                    email: user.email,
+                    name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+                    role: user.user_type
+                }
+            });
         }
 
         const accessToken = createAccessToken(user.user_id, user.user_type);
@@ -436,6 +440,7 @@ router.post('/login', [
             user: {
                 id: user.user_id,
                 username: user.username,
+                email: user.email,
                 name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
                 role: user.user_type
             }
@@ -617,6 +622,7 @@ router.post('/refresh', [
 
         return res.json({
             success: true,
+            token: accessToken,
             accessToken,
             refreshToken: rotated.token
         });
@@ -628,13 +634,9 @@ router.post('/refresh', [
 
 // =====================================================
 // POST /api/auth/mfa/setup
-// IT manager configures authenticator-based MFA
+// Authenticator-based MFA (optional for tourist, guide, and IT manager)
 // =====================================================
 router.post('/mfa/setup', authenticateJWT, async (req, res) => {
-    if (req.user.user_type !== 'it_manager') {
-        return res.status(403).json({ error: 'MFA setup is currently restricted to IT manager accounts' });
-    }
-
     try {
         const secret = generateBase32Secret();
         const label = encodeURIComponent(`SIGTS:${req.user.username || req.user.email || req.user.user_id}`);
@@ -668,10 +670,6 @@ router.post('/mfa/setup', authenticateJWT, async (req, res) => {
 router.post('/mfa/verify-setup', authenticateJWT, [
     body('code').notEmpty()
 ], async (req, res) => {
-    if (req.user.user_type !== 'it_manager') {
-        return res.status(403).json({ error: 'MFA setup verification is restricted to IT manager accounts' });
-    }
-
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
         return res.status(400).json({ errors: errors.array() });
@@ -728,7 +726,7 @@ router.post('/mfa/complete', [
         }
 
         const userResult = await pool.query(
-            `SELECT user_id, username, first_name, last_name, user_type, is_active
+            `SELECT user_id, username, email, first_name, last_name, user_type, is_active
              FROM users
              WHERE user_id = $1
              LIMIT 1`,
@@ -762,6 +760,11 @@ router.post('/mfa/complete', [
             clientContext(req)
         );
 
+        await pool.query(
+            `UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE user_id = $1`,
+            [user.user_id]
+        );
+
         return res.json({
             success: true,
             token: accessToken,
@@ -770,6 +773,7 @@ router.post('/mfa/complete', [
             user: {
                 id: user.user_id,
                 username: user.username,
+                email: user.email,
                 name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
                 role: user.user_type
             }
@@ -780,7 +784,7 @@ router.post('/mfa/complete', [
 });
 
 // =====================================================
-// POST /api/auth/mfa/sms/send — optional SMS ladder for IT managers (§3.1.1.1)
+// POST /api/auth/mfa/sms/send — optional SMS ladder during MFA login (3.1.1.1)
 // Requires phone on profile; integrates with Twilio when env vars provided.
 // =====================================================
 router.post('/mfa/sms/send', [body('mfaToken').notEmpty()], async (req, res) => {
@@ -795,8 +799,8 @@ router.post('/mfa/sms/send', [body('mfaToken').notEmpty()], async (req, res) => 
             `SELECT user_id, phone, user_type FROM users WHERE user_id = $1 AND is_active = true`,
             [decoded.userId]
         );
-        if (!u.rows.length || u.rows[0].user_type !== 'it_manager') {
-            return res.status(403).json({ error: 'SMS MFA is only offered for pending IT sessions' });
+        if (!u.rows.length) {
+            return res.status(401).json({ error: 'Invalid MFA session' });
         }
         const rawPhone = String(u.rows[0].phone || '').trim();
         if (!rawPhone) {
@@ -844,7 +848,7 @@ router.post('/mfa/sms/send', [body('mfaToken').notEmpty()], async (req, res) => 
                 return res.status(502).json({ error: 'SMS provider refused the message. Use authenticator OTP or try again.' });
             }
         } else {
-            logger.info(`SMS MFA stub: code for IT user ${decoded.userId} digits=${code}`);
+            logger.info(`SMS MFA stub: code for user ${decoded.userId} digits=${code}`);
         }
 
         const devReturn = process.env.NODE_ENV !== 'production' && process.env.SMS_MFA_DEV_RETURN === 'true';
@@ -893,7 +897,7 @@ router.post('/mfa/sms/complete', [
         await pool.query(`UPDATE sms_mfa_challenges SET consumed = true WHERE challenge_id = $1`, [row.challenge_id]);
 
         const userResult = await pool.query(
-            `SELECT user_id, username, first_name, last_name, user_type
+            `SELECT user_id, username, email, first_name, last_name, user_type
              FROM users WHERE user_id = $1`,
             [decoded.userId]
         );
@@ -904,6 +908,10 @@ router.post('/mfa/sms/complete', [
             user.user_type,
             clientContext(req)
         );
+        await pool.query(
+            `UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE user_id = $1`,
+            [user.user_id]
+        );
         return res.json({
             success: true,
             token: accessToken,
@@ -912,6 +920,7 @@ router.post('/mfa/sms/complete', [
             user: {
                 id: user.user_id,
                 username: user.username,
+                email: user.email,
                 name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
                 role: user.user_type
             }
@@ -997,18 +1006,48 @@ router.post('/guest', [
 // =====================================================
 router.post('/deactivate', authenticateJWT, async (req, res) => {
     try {
+        if (req.user.is_guest) {
+            return res.status(400).json({
+                error: 'Guest sessions cannot be deactivated',
+                message: 'Sign out to end a guest session.'
+            });
+        }
+
+        const confirmed = req.body?.confirm === true || req.body?.confirm === 'true';
+        if (!confirmed) {
+            return res.status(400).json({
+                error: 'Confirmation required',
+                message: 'Send { "confirm": true } to deactivate your account.',
+                code: 'CONFIRM_REQUIRED'
+            });
+        }
+
         const userResult = await pool.query(
-            `SELECT email, username
+            `SELECT user_id, email, username, is_active
              FROM users
              WHERE user_id = $1
              LIMIT 1`,
             [req.user.user_id]
         );
 
+        const prev = userResult.rows[0] || null;
+
+        await refreshTokenService.revokeAllFamiliesForUser(req.user.user_id, 'account_deactivated');
+
         await pool.query(
             `UPDATE users SET is_active = false WHERE user_id = $1`,
             [req.user.user_id]
         );
+
+        if (prev) {
+            await audit(req, {
+                action: 'user.self_deactivate',
+                table_name: 'users',
+                record_id: req.user.user_id,
+                old_value: prev,
+                new_value: { ...prev, is_active: false }
+            });
+        }
 
         if (userResult.rows.length > 0) {
             const user = userResult.rows[0];

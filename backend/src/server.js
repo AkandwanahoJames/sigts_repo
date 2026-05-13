@@ -28,7 +28,7 @@ const { REQUIREMENTS, ensureSecurityConfiguration } = require('./config/requirem
 ensureSecurityConfiguration();
 
 // Import middleware
-const { authenticateJWT, authorize, ipWhitelist } = require('./middleware/auth');
+const { authenticateJWT, authorize, ipWhitelist, rejectGuestAccounts } = require('./middleware/auth');
 const { requireInsidePark } = require('./middleware/parkGeofence');
 const { errorHandler, notFound } = require('./middleware/errorHandler');
 const { correlationId } = require('./middleware/correlationId');
@@ -51,6 +51,7 @@ const intranetRoutes = require('./routes/intranet');
 const feedbackRoutes = require('./routes/feedback');
 const geoRoutes = require('./routes/geo');
 const guideMessagesRoutes = require('./routes/guideMessages');
+const publicParkContentRoutes = require('./routes/publicParkContent');
 
 // Initialize Express app
 const app = express();
@@ -76,8 +77,15 @@ app.use(helmet({
 }));
 
 // CORS configuration
-const allowedOrigins = process.env.CLIENT_URL ? process.env.CLIENT_URL.split(',') : 
-    ['http://localhost:3000', 'http://localhost:3001', 'http://192.168.100.40:3000', 'http://127.0.0.1:3000'];
+const allowedOrigins = process.env.CLIENT_URL ? process.env.CLIENT_URL.split(',').map((s) => s.trim()).filter(Boolean) : 
+    [
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'http://localhost:5173',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:5173',
+        'http://192.168.100.40:3000'
+    ];
 
 app.use(cors({
     origin: function (origin, callback) {
@@ -311,16 +319,19 @@ app.post('/api/auth/create-test-user', async (req, res) => {
 // Public routes
 app.use('/api/auth', authRoutes);
 
+// Catalogue & visitor information ( FAQs, safety, weather, §3.1.1.3 )
+app.use('/api', publicParkContentRoutes);
+
 // Protected routes - route modules already enforce auth/roles.
 app.use('/api/users', userRoutes);
 app.use('/api/animals', animalRoutes);
 app.use('/api/wildlife-tour-themes', wildlifeTourThemesRoutes);
 app.use('/api/locations', locationRoutes);
-app.use('/api/sightings', authenticateJWT, requireInsidePark({ bypassRoles: ['it_manager'] }), sightingRoutes);
-app.use('/api/tours', authenticateJWT, requireInsidePark({ bypassRoles: ['it_manager'] }), tourRoutes);
+app.use('/api/sightings', authenticateJWT, rejectGuestAccounts, requireInsidePark({ bypassRoles: ['it_manager'] }), sightingRoutes);
+app.use('/api/tours', authenticateJWT, rejectGuestAccounts, requireInsidePark({ bypassRoles: ['it_manager'] }), tourRoutes);
 app.use('/api/cultural', culturalRoutes);
 app.use('/api/geofence', geofenceRoutes);
-app.use('/api/sync', authenticateJWT, requireInsidePark({ bypassRoles: ['it_manager'] }), syncRoutes);
+app.use('/api/sync', authenticateJWT, rejectGuestAccounts, requireInsidePark({ bypassRoles: ['it_manager'] }), syncRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/geo', authenticateJWT, geoRoutes);
 app.use('/api/guides/messages', guideMessagesRoutes);

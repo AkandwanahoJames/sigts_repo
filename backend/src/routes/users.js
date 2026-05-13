@@ -3,8 +3,10 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const { pool } = require('../config/database');
-const { authenticateJWT, authorize } = require('../middleware/auth');
+const { authenticateJWT, authorize, rejectGuestAccounts } = require('../middleware/auth');
 const { canViewMedicalNotes } = require('../services/medicalNotesAccess');
+const { audit } = require('../utils/audit');
+const refreshTokenService = require('../services/refreshTokenService');
 let usersEmailVerifiedReady = null;
 
 async function ensureUsersEmailVerifiedColumn() {
@@ -90,7 +92,7 @@ router.get('/profile', authenticateJWT, async (req, res) => {
 // PUT /api/users/profile
 // Update user profile
 // =====================================================
-router.put('/profile', authenticateJWT, [
+router.put('/profile', authenticateJWT, rejectGuestAccounts, [
     body('firstName').optional().trim().escape(),
     body('lastName').optional().trim().escape(),
     body('phone').optional().trim(),
@@ -340,10 +342,40 @@ router.delete('/deactivate', authenticateJWT, async (req, res) => {
     const userId = req.user.user_id;
 
     try {
+        if (req.user.is_guest) {
+            return res.status(400).json({ error: 'Guest sessions cannot be deactivated this way' });
+        }
+        const confirmed = req.body?.confirm === true || req.body?.confirm === 'true';
+        if (!confirmed) {
+            return res.status(400).json({
+                error: 'Confirmation required',
+                code: 'CONFIRM_REQUIRED',
+                message: 'Send { "confirm": true } in the request body'
+            });
+        }
+
+        const before = await pool.query(
+            'SELECT user_id, username, email, is_active FROM users WHERE user_id = $1',
+            [userId]
+        );
+        if (before.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        await refreshTokenService.revokeAllFamiliesForUser(userId, 'account_deactivated');
+
         await pool.query(
             'UPDATE users SET is_active = false WHERE user_id = $1',
             [userId]
         );
+
+        await audit(req, {
+            action: 'user.self_deactivate',
+            table_name: 'users',
+            record_id: userId,
+            old_value: before.rows[0] || null,
+            new_value: { ...(before.rows[0] || {}), is_active: false }
+        });
 
         res.json({ success: true, message: 'Account deactivated' });
 
@@ -357,7 +389,7 @@ router.delete('/deactivate', authenticateJWT, async (req, res) => {
 // GET /api/users/:id (Admin only)
 // Get user by ID
 // =====================================================
-router.get('/:id', authenticateJWT, authorize('it_manager'), async (req, res) => {
+router.get('/:id', authenticateJWT, authorize('it_manager', 'admin'), async (req, res) => {
     const { id } = req.params;
 
     try {

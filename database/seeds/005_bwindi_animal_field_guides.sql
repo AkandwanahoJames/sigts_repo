@@ -20,7 +20,7 @@ WHERE name = 'African Elephant';
 
 UPDATE animals SET
   description = 'The great blue turaco (Corythaeola cristata) is Africa''s largest turaco — a canopy heavyweight that glides between fruiting figs with heavy wingbeats and loud ''cow-cow'' calls. In Bwindi it signals healthy mid-storey fruit masts and seed-dispersal networks that gorillas, monkeys, and butterflies also exploit. Guides often locate birds by sound first, then point out yellow bill tips and cobalt wing panels against mossy branches. Responsible viewing means no playback harassment at nests, steady binocular use, and staying on marked lines so understory breeders are not trampled.',
-  image_urls = ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Great_Blue_Turaco.jpg/960px-Great_Blue_Turaco.jpg']
+  image_urls = ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Great_Blue_Turaco.jpg/960px-Great_Blue_Turaco.jpg']
 WHERE name = 'Great Blue Turaco';
 
 UPDATE animals SET
@@ -35,12 +35,12 @@ WHERE name = 'Black-and-white Colobus';
 
 UPDATE animals SET
   description = 'The African fish eagle (Haliaeetus vocifer) ties Bwindi visitors to the broader Great Lakes soundscape — its whistled duets evoke lakeshores even when birds commute along forest-edge rivers. Fish, waterbirds, and carrion anchor its diet, while tall emergents provide command perches. Guides use it to discuss watershed health, pesticide runoff risks, and why riparian buffers matter for parks downstream of steep Bwindi catchments.',
-  image_urls = ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/AfricanFishEagle.jpeg/960px-AfricanFishEagle.jpeg']
+  image_urls = ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/d/d6/African_fish_eagle_%28Haliaeetus_vocifer%29_with_fish.jpg/960px-African_fish_eagle_%28Haliaeetus_vocifer%29_with_fish.jpg']
 WHERE name = 'African Fish Eagle';
 
 UPDATE animals SET
   description = 'Rwenzori turacos (Ruwenzorornis johnstoni) flash ruby primaries when they flap between moss-forest crowns — an Albertine Rift endemic that anchors many ridge-top birding lists. Croaking duets carry through mist, so listening posts matter as much as optics. Guides pair sightings with elevation, bamboo transitions, and seasonal fruiting to explain micro-endemism without pressuring birds with excessive playback.',
-  image_urls = ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Ruwenzori_Turaco.jpg/960px-Ruwenzori_Turaco.jpg']
+  image_urls = ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/9/93/Ruwenzori_Turaco%2C_Rwenzori_National_Park%2C_Uganda.jpg/960px-Ruwenzori_Turaco%2C_Rwenzori_National_Park%2C_Uganda.jpg']
 WHERE name = 'Rwenzori Turaco';
 
 UPDATE animals SET

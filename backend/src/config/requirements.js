@@ -5,7 +5,11 @@ const REQUIREMENTS = {
     security: {
         jwtAccessTtl: process.env.JWT_ACCESS_TTL || '24h',
         bcryptRounds: parseInt(process.env.BCRYPT_ROUNDS || '12', 10),
-        enforceJwtSecretInProduction: true
+        enforceJwtSecretInProduction: true,
+        sessionIdleTimeoutMinutes: (() => {
+            const n = parseInt(process.env.SESSION_IDLE_TIMEOUT_MINUTES || '30', 10);
+            return Number.isFinite(n) && n >= 0 ? n : 30;
+        })()
     },
     performance: {
         apiRequestBodyLimit: process.env.API_BODY_LIMIT || '10mb',

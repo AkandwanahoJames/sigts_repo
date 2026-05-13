@@ -69,7 +69,7 @@ module.exports = [
         etiquette_notes: 'Caps brims tipped up with slow pivots. Point using whole-hand arcs rather than shouted compass slang.',
         suggested_duration_minutes: 30,
         unesco_note: 'Outstanding universal value summaries stress exceptional richness of forest-dependent birds (Albertine Rift constituents) for ecological importance at this property.',
-        image_url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/African_Green_Broadbill.jpg/640px-African_Green_Broadbill.jpg',
+        image_url: 'https://upload.wikimedia.org/wikipedia/commons/d/d2/Grauer%27s_broadbill_%28Pseudocalyptomena_graueri%29_01_%28cropped%29.jpg',
         sort_order: 40
     },
     {

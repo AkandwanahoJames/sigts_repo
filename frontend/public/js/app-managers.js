@@ -28,8 +28,10 @@ class AuthManager {
                 this.token = null;
                 localStorage.removeItem('token');
                 localStorage.removeItem('user');
+                localStorage.removeItem('refreshToken');
                 sessionStorage.removeItem('token');
                 sessionStorage.removeItem('user');
+                sessionStorage.removeItem('refreshToken');
                 this.user = null;
             }
         }
@@ -42,10 +44,12 @@ class AuthManager {
         const confirmPassword = userData.confirmPassword || '';
         const fullName = userData.fullName?.trim() || '';
         const userType = userData.userType || 'tourist';
-        
+        const phone = String(userData.phone || '').trim();
+
         if (!username || username.length < 3) return { success: false, error: 'Username must be at least 3 characters' };
         if (!email) return { success: false, error: 'Email is required' };
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { success: false, error: 'Valid email required' };
+        if (!phone || phone.length < 6) return { success: false, error: 'Phone number is required (at least 6 characters)' };
         if (!password || password.length < 4) return { success: false, error: 'Password must be at least 4 characters' };
         if (password !== confirmPassword) return { success: false, error: 'Passwords do not match' };
         
@@ -61,6 +65,7 @@ class AuthManager {
                 password,
                 firstName,
                 lastName,
+                phone,
                 userType
             })
         });
@@ -168,7 +173,7 @@ class AuthManager {
                         body: JSON.stringify({ mfaToken: mfaTok, code: smsCode.trim() })
                     });
                     if (smsDone?.success && smsDone.token && smsDone.user) {
-                        return this.completeLogin(smsDone.user, smsDone.token, rememberMe);
+                        return this.completeLogin(smsDone.user, smsDone.token, rememberMe, smsDone.refreshToken);
                     }
                     window.showToast?.(smsDone?.error || 'SMS MFA failed.', 'danger');
                 }
@@ -183,7 +188,7 @@ class AuthManager {
                 })
             });
             if (mfaResult?.success && mfaResult.token && mfaResult.user) {
-                return this.completeLogin(mfaResult.user, mfaResult.token, rememberMe);
+                return this.completeLogin(mfaResult.user, mfaResult.token, rememberMe, mfaResult.refreshToken);
             }
             return { success: false, error: mfaResult?.error || 'MFA verification failed' };
         }
@@ -193,7 +198,7 @@ class AuthManager {
                 const loginEnd = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                 console.debug(`[auth] total login flow completed in ${Math.round(loginEnd - loginStart)}ms`);
             }
-            return this.completeLogin(result.user, result.token, rememberMe);
+            return this.completeLogin(result.user, result.token, rememberMe, result.refreshToken);
         }
 
         const demoCredentials = {
@@ -297,7 +302,7 @@ class AuthManager {
                 const loginEnd = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                 console.debug(`[auth] demo login flow completed in ${Math.round(loginEnd - loginStart)}ms`);
             }
-            return this.completeLogin(demo.user, demo.token, rememberMe);
+            return this.completeLogin(demo.user, demo.token, rememberMe, null);
         }
 
         // (failed-attempt counter intentionally not incremented during testing)
@@ -317,10 +322,10 @@ class AuthManager {
         this.twoFactorPending = false;
         this.pending2FACode = null;
         const demoToken = `demo.${btoa(String(user.id || user.user_id || 'user')).replace(/=+$/g, '')}.token`;
-        return this.completeLogin(user, demoToken, true);
+        return this.completeLogin(user, demoToken, true, null);
     }
 
-    completeLogin(user, token, rememberMe) {
+    completeLogin(user, token, rememberMe, refreshToken = null) {
         this.user = {
             user_id: user.id || user.user_id,
             name: user.name || user.username || 'User',
@@ -330,6 +335,7 @@ class AuthManager {
             userType: user.userType || user.role || user.user_type,
             department: user.department || ''
         };
+        if (user.isGuest || user.guest) this.user.isGuest = true;
         this.token = token;
         
         if (rememberMe) {
@@ -340,6 +346,9 @@ class AuthManager {
             sessionStorage.setItem('user', JSON.stringify(this.user));
         }
         API.setToken(this.token);
+        if (typeof API.setRefreshToken === 'function') {
+            API.setRefreshToken(refreshToken || null, rememberMe);
+        }
         
         this.startSessionTimer();
         this.bindActivityMonitor();
@@ -392,10 +401,15 @@ class AuthManager {
         this.token = null;
         this.user = null;
         API.setToken(null);
+        if (typeof API.setRefreshToken === 'function') {
+            API.setRefreshToken(null);
+        }
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+        localStorage.removeItem('refreshToken');
         sessionStorage.removeItem('token');
         sessionStorage.removeItem('user');
+        sessionStorage.removeItem('refreshToken');
         AppState.currentUser = null;
         if (this.sessionTimer) {
             clearTimeout(this.sessionTimer);
@@ -498,7 +512,8 @@ class AuthManager {
             const loggedIn = this.completeLogin(
                 { ...result.user, user_type: result.user.role || result.user.user_type, isGuest: true },
                 result.token,
-                false
+                false,
+                result.refreshToken
             );
             if (loggedIn.success) {
                 loggedIn.user.isGuest = true;
@@ -687,9 +702,85 @@ function wildlifeTourThemesEmbedFallbackList() {
 
 class ContentManager {
     constructor() {
+        this.bookmarksStorageKey = 'sigts_bookmarks_v1';
         this.initStorage();
-        this.bookmarks = JSON.parse(localStorage.getItem('bookmarks') || '[]');
+        this.bookmarks = this.readBookmarks();
         this.useAPI = true; // Set to false to force localStorage only
+        this.maybeMigrateLegacyBookmarks();
+    }
+
+    maybeMigrateLegacyBookmarks() {
+        try {
+            const legacy = localStorage.getItem('bookmarks');
+            if (!legacy || legacy === '[]') return;
+            const parsed = JSON.parse(legacy);
+            if (!Array.isArray(parsed) || !parsed.length) return;
+            const next = [...this.bookmarks];
+            parsed.forEach((row) => {
+                if (!row || !row.type || !row.id) return;
+                if (!next.some((b) => b.type === row.type && String(b.id) === String(row.id))) next.push(row);
+            });
+            this.bookmarks = next;
+            localStorage.removeItem('bookmarks');
+            this.persistBookmarks();
+        } catch (_) {
+            /**/
+        }
+    }
+
+    readBookmarks() {
+        try {
+            const raw = localStorage.getItem(this.bookmarksStorageKey);
+            const parsed = raw ? JSON.parse(raw) : [];
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (_) {
+            return [];
+        }
+    }
+
+    persistBookmarks(list) {
+        const rows = Array.isArray(list) ? list : this.bookmarks;
+        this.bookmarks = rows;
+        try {
+            localStorage.setItem(this.bookmarksStorageKey, JSON.stringify(rows));
+        } catch (_) {
+            /**/
+        }
+        try {
+            if (typeof window !== 'undefined' && typeof window.invalidateSigtsViewCache === 'function') {
+                window.invalidateSigtsViewCache('dashboard');
+                window.invalidateSigtsViewCache('saved');
+            }
+        } catch (_) {
+            /**/
+        }
+    }
+
+    isBookmarked(type, id) {
+        const sid = String(id || '').trim();
+        return this.bookmarks.some((b) => b.type === type && String(b.id) === sid);
+    }
+
+    toggleBookmark(payload) {
+        const type = String(payload?.type || '').trim();
+        const id = String(payload?.id || '').trim();
+        const title = String(payload?.title || id || '').trim();
+        if (!type || !id) return false;
+        const ix = this.bookmarks.findIndex((b) => b.type === type && String(b.id) === id);
+        if (ix >= 0) {
+            const next = this.bookmarks.slice();
+            next.splice(ix, 1);
+            this.persistBookmarks(next);
+            return false;
+        }
+        const row = {
+            type,
+            id,
+            title,
+            savedAt: new Date().toISOString()
+        };
+        this.persistBookmarks(this.bookmarks.concat(row));
+        return true;
     }
 
     initStorage() {
@@ -701,7 +792,7 @@ class ContentManager {
                 { animal_id: '00000000-0000-4000-8000-000000000003', name: 'African Forest Elephant', scientific_name: 'Loxodonta cyclotis', conservation_status: 'endangered', description: 'Forest elephants engineer seed dispersal and mineral-lick circuits through closed canopy. They are smaller and rounder-eared than savanna elephants and typically vanish before tourists see whole herds — guides read snapped branches, fresh dung, and shoulder prints on muddy poles instead.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/9/92/African_forest_elephant_%28Loxodonta_cyclotis%29_calf.jpg/960px-African_forest_elephant_%28Loxodonta_cyclotis%29_calf.jpg'], fun_facts: ['Smaller ears than savanna relatives', 'Mineral licks draw night visits'] },
                 { animal_id: '00000000-0000-4000-8000-000000000004', name: 'Black-and-white Colobus', scientific_name: 'Colobus guereza', conservation_status: 'least_concern', description: 'Colobus stream white tail banners across canopy gaps while digesting tough leaves with specialized gut microbes. Newborns are pure white — a favourite teaching moment for linking primate behaviour to quiet trail etiquette and intact upper-forest structure.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Black-and-white_Colobus_Monkeys.jpg/960px-Black-and-white_Colobus_Monkeys.jpg'], fun_facts: ['Newborns are pure white', 'Leaves fermented by gut microbes'] },
                 { animal_id: '00000000-0000-4000-8000-000000000005', name: 'Blue Monkey', scientific_name: 'Cercopithecus mitis', conservation_status: 'least_concern', description: 'Sykes or blue monkeys form mid-canopy troops that stitch fruit masts to insect pulses. Alarm barks coordinate escapes when crowned eagles or noisy trekking lines approach — a practical cue for guides to pace groups and modulate voices.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Zanzibar_Sykes%27_monkey_%28Cercopithecus_mitis%29_female_and_juveniles.jpg/960px-Zanzibar_Sykes%27_monkey_%28Cercopithecus_mitis%29_female_and_juveniles.jpg'], fun_facts: ['Also called Sykes monkey regionally', 'Alarm barks coordinate escapes'] },
-                { animal_id: '00000000-0000-4000-8000-000000000006', name: 'Great Blue Turaco', scientific_name: 'Corythaeola cristata', conservation_status: 'least_concern', description: 'Africa\'s largest turaco glides between fruiting figs with heavy wingbeats and loud calls. It flags healthy canopy fruiting and seed-dispersal webs that gorillas and butterflies also rely on — best enjoyed with binoculars and without playback harassment at nests.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Great_Blue_Turaco.jpg/960px-Great_Blue_Turaco.jpg'], fun_facts: ['Cow-like calls at dawn', 'Important fig seed disperser'] },
+                { animal_id: '00000000-0000-4000-8000-000000000006', name: 'Great Blue Turaco', scientific_name: 'Corythaeola cristata', conservation_status: 'least_concern', description: 'Africa\'s largest turaco glides between fruiting figs with heavy wingbeats and loud calls. It flags healthy canopy fruiting and seed-dispersal webs that gorillas and butterflies also rely on — best enjoyed with binoculars and without playback harassment at nests.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Great_Blue_Turaco.jpg/960px-Great_Blue_Turaco.jpg'], fun_facts: ['Cow-like calls at dawn', 'Important fig seed disperser'] },
                 { animal_id: '00000000-0000-4000-8000-000000000007', name: 'African Fish Eagle', scientific_name: 'Haliaeetus vocifer', conservation_status: 'least_concern', description: 'Fish eagles tie Bwindi visitors to Great Lakes soundscapes — whistled duets carry even when birds commute along forest-edge rivers. They anchor lessons on watershed health, riparian buffers, and how interior forests connect to regional water security.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/AfricanFishEagle.jpeg/960px-AfricanFishEagle.jpeg'], fun_facts: ['Piercing call is an African soundmark', 'Pairs reuse huge stick nests'] },
                 { animal_id: '00000000-0000-4000-8000-000000000008', name: 'Rwenzori Turaco', scientific_name: 'Ruwenzorornis johnstoni', conservation_status: 'least_concern', description: 'This Albertine endemic flashes ruby primaries between moss-forest crowns. Croaking duets carry through mist, so listening skills matter as much as optics — guides pair sightings with elevation and bamboo transitions to explain micro-endemism.', image_urls: ['https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Ruwenzori_Turaco.jpg/960px-Ruwenzori_Turaco.jpg'], fun_facts: ['Croaks in dripping moss forest', 'Frugivore of canopy masts'] },
                 { animal_id: '00000000-0000-4000-8000-000000000009', name: 'African Green Broadbill', scientific_name: 'Pseudocalyptomena graueri', conservation_status: 'vulnerable', description: 'A chunky Albertine endemic tied to mossy crowns and canopy fruiting pulses. Guides cherish its nasal whistle drifting through dripping forest — a flagship species for explaining playback ethics, boardwalk pacing, and why understorey trampling harms breeders.', image_urls: ['/images/african-green-broadbill.png'], fun_facts: ['Gleans along mossy limbs', 'Sensitive to playback pressure'] },
@@ -743,7 +834,7 @@ class ContentManager {
             let offline = readOffline();
             const online = typeof navigator === 'undefined' || navigator.onLine;
             const cacheEpochKey = 'sigts_animal_cache_epoch';
-            const cacheEpoch = '20260504';
+            const cacheEpoch = '20260511';
             if (
                 online
                 && offline.length > 0
@@ -833,15 +924,31 @@ class ContentManager {
 
     async downloadOfflineContent() {
         // Fetch fresh data from API and store in localStorage
-        const animals = await API.getAnimals();
-        const locations = await API.getLocations();
-        const stories = await API.getCulturalStories();
-        const themes = await API.getWildlifeTourThemes();
+        const [animals, locations, stories, themes, faqs, tips, guide, catalogMeta] = await Promise.all([
+            API.getAnimals(),
+            API.getLocations(),
+            API.getCulturalStories(),
+            API.getWildlifeTourThemes(),
+            API.getFaqs().catch(() => []),
+            API.getSafetyTips().catch(() => []),
+            API.getParkGuide().catch(() => []),
+            API.getContentCatalogMeta().catch(() => null)
+        ]);
 
         if (animals && animals.length) localStorage.setItem('offline_animals', JSON.stringify(animals));
         if (locations && locations.length) localStorage.setItem('offline_locations', JSON.stringify(locations));
         if (stories && stories.length) localStorage.setItem('cultural_stories', JSON.stringify(stories));
         if (themes && themes.length) localStorage.setItem('offline_wildlife_themes', JSON.stringify(themes));
+        try {
+            if (Array.isArray(faqs) && faqs.length) localStorage.setItem('offline_faqs_cache', JSON.stringify(faqs));
+            if (Array.isArray(tips) && tips.length) localStorage.setItem('offline_safety_tips_cache', JSON.stringify(tips));
+            if (Array.isArray(guide) && guide.length) localStorage.setItem('offline_park_guide_cache', JSON.stringify(guide));
+            if (catalogMeta && typeof catalogMeta === 'object') {
+                localStorage.setItem('offline_catalog_meta_cache', JSON.stringify(catalogMeta));
+            }
+        } catch (_) {
+            /**/
+        }
         
         AppState.cachedContent.version++;
         localStorage.setItem('offline_version', AppState.cachedContent.version);
@@ -1056,9 +1163,11 @@ function sigtsFindMentionedAnimal(qLower, animals) {
 }
 
 /** Mirrors backend `buildAnswerFromAppContext` for offline / failed API. */
-function sigtsLocalAnswerFromAppContext(question, appContext, locationName) {
+function sigtsLocalAnswerFromAppContext(latestUserPlain, mergedThreadPlain, appContext, locationName) {
+    void mergedThreadPlain;
     if (!appContext) return null;
-    const q = sigtsNormalizeQuestion(question);
+    const q = sigtsNormalizeQuestion(latestUserPlain);
+    if (!q.length || sigtsIsBareSocialUtterance(q)) return null;
     const mentioned = sigtsFindMentionedAnimal(q, appContext.animals);
     const wantAnimals = Boolean(appContext.animals?.length && (sigtsWantsAnimalCatalogContext(q) || mentioned));
     const wantThemes = Boolean(appContext.themes?.length && sigtsWantsTourThemeContext(q));
@@ -1084,7 +1193,7 @@ function sigtsLocalAnswerFromAppContext(question, appContext, locationName) {
         const sample = appContext.animals.slice(0, 28).map((a) => a.name);
         const extra = n > sample.length ? ` …and ${n - sample.length} more in the full Animals list` : '';
         parts.push(
-            `Animals catalogue on this device: ${n} species. Examples: ${sample.join(', ')}.${extra} Open each species card for ranger-style notes, status, and etiquette—always defer to your guide and posted park rules.`
+            `Animals catalogue for Bwindi: ${n} species. Examples: ${sample.join(', ')}.${extra} Open each species card for ranger-style notes, status, and etiquette—always defer to your guide and posted park rules.`
         );
         if (mentioned) {
             const sci = mentioned.scientific_name ? ` (${mentioned.scientific_name})` : '';
@@ -1137,6 +1246,38 @@ function sigtsIsNatureTourismTopic(q) {
     );
 }
 
+/** Match backend `isBareSocialUtterance` — must use the latest visitor message only, never the merged transcript. */
+function sigtsIsBareSocialUtterance(qlLatest) {
+    const inner = String(qlLatest || '')
+        .trim()
+        .replace(/^[\u00a1\u00bf]+\s*/i, '')
+        .replace(/^[!….,\-–—:;'`"]+/, '')
+        .replace(/[!….,\-–—:;'`"]+$/, '')
+        .trim();
+    if (!inner || inner.length > 112) return false;
+    if (sigtsLooksClearlyOffTopic(inner)) return false;
+
+    return (
+        /^(hi|hello|hey|yo|sup|howdy|greetings)(\s+(there|everyone|everybody|team|buddy|friend|sir|madam|folks|again))?$/i.test(
+            inner
+        ) ||
+        /^good\s+(morning|afternoon|evening)(\s+(there|everyone|everybody|all))?$/i.test(inner) ||
+        /^thank\s+you(\s+(so\s+much|very\s+much|again))?$/i.test(inner) ||
+        /^thanks(\s+(so\s+much|a\s+lot|again))?$/i.test(inner) ||
+        /^ty$/i.test(inner) ||
+        /^(ok+|okay+)(\s+(thanks|thank\s+you))?$/i.test(inner) ||
+        /^(morning|afternoon)$/i.test(inner) ||
+        /^what'?s\s+up(\s+(buddy|friend|there))?$/i.test(inner)
+    );
+}
+
+function sigtsSocialGreetingReply(locationName) {
+    const geo = locationName
+        ? ` If the map thumbnail is open, SIGTS loosely pins you near “${locationName}”—still verify on paper maps and ranger briefings.`
+        : '';
+    return `Hi there—glad you’re here. I’m the in-app Bwindi guide: think of me as a calm voice before you meet your ranger team.${geo} Are you tilting toward gorilla-day logistics, forest walking & bird snippets, Culture stories here in SIGTS, or something else entirely?`;
+}
+
 function sigtsBuildBwindiScopedAnswer(question, locationName, appContext) {
     const q = sigtsNormalizeQuestion(question);
     const extras = [];
@@ -1180,48 +1321,77 @@ function sigtsBuildBwindiScopedAnswer(question, locationName, appContext) {
         const bits = [];
         if (appContext.animals?.length) bits.push(`${appContext.animals.length} species in the Animals catalogue`);
         if (appContext.themes?.length) bits.push(`${appContext.themes.length} tour theme briefings`);
-        tail = ` On this device, SIGTS also holds ${bits.join(' and ')}—open the Animals tab for tiles and species cards.`;
+        tail = ` SIGTS for Bwindi also holds ${bits.join(' and ')} here—open the Animals tab for tiles and species cards.`;
     }
     const core = `Bwindi Impenetrable National Park (BINP) in southwestern Uganda protects a large block of montane rainforest famous for mountain gorillas and exceptional Albertine Rift biodiversity. Typical visitor threads are regulated gorilla tracking or habituation, guided forest walks, birding, and community-linked cultural experiences. Stay with your assigned ranger team, respect UWA distance and health rules (wildlife diseases cut both ways), avoid flash where restricted, and treat SIGTS as a planning companion—your permit, briefing, and on-ground signs override any app text.${tail}${locationName ? ` Nearby map label in SIGTS: ${locationName} (verify on the ground).` : ''}`;
     const extraBlock = extras.length ? `\n\n${extras.join('\n\n')}` : '';
     return sigtsClampStr(`${core}${extraBlock}`, 3900);
 }
 
+/** Merge prior user/assistant turns so short follow-ups still match Bwindi rule paths offline. */
+function sigtsComposeLocalThreadQuestion(question, history) {
+    const q = String(question || '').trim();
+    const rows = Array.isArray(history) ? history : [];
+    if (!rows.length) return q;
+    const chunks = [];
+    for (const h of rows.slice(-24)) {
+        const role = h.role === 'assistant' ? 'Assistant' : 'Visitor';
+        const text = String(h.text || '').trim().slice(0, 1800);
+        if (!text) continue;
+        chunks.push(`${role}: ${text}`);
+    }
+    if (!chunks.length) return q;
+    chunks.push(`Follow-up: ${q}`);
+    let out = chunks.join('\n\n');
+    if (out.length > 8000) out = out.slice(-8000);
+    return out;
+}
+
 /**
  * Same decision order as backend `buildRuleBasedAnswer` — used when /ai/chat is unavailable
  * or returns no answer, so Tour help stays useful offline.
+ * @param {string} trimmed - Latest visitor message only.
+ * @param {string|null} mergedThread - Same shape as backend merge (Assistant + Visitor + Follow-up); optional.
  */
-function sigtsLocalTourHelpCompose(trimmed, appContext, locationName) {
-    const q = sigtsNormalizeQuestion(trimmed);
-    if (!q) return 'Please enter a question.';
-    if (sigtsLooksClearlyOffTopic(q)) {
-        return 'Tour help in SIGTS is limited to Bwindi Impenetrable National Park, trekking, wildlife, maps, culture, and what this app stores. Rephrase within that scope.';
+function sigtsLocalTourHelpCompose(trimmed, mergedThread, appContext, locationName) {
+    const ql = sigtsNormalizeQuestion(trimmed);
+    const threadRaw =
+        mergedThread != null && String(mergedThread).trim() !== '' ? String(mergedThread) : String(trimmed);
+    const qt = sigtsNormalizeQuestion(threadRaw);
+
+    if (!ql) return 'Please enter a question.';
+    if (sigtsLooksClearlyOffTopic(ql)) {
+        return 'I chat about Bwindi Impenetrable National Park only—trekking, gorillas & other wildlife context in SIGTS, map POIs cached here, Culture-tab stories, etiquette, permits in broad terms (confirm exact fees with UWA), packing, weather patterns, Buhoma/Ruhija/Rushaga/Nkuringo sector framing.\n\nThat question looks unrelated. Try something like muddy-trail footwear, gorilla-distance etiquette, Albertine birds as a visitor, Batwa-linked cultural narratives in the app—always within Bwindi.';
     }
 
-    if (q.includes('gorilla')) {
-        return `Mountain gorillas are one of Bwindi's flagship species. Keep a minimum distance of 7 meters, avoid flash photography, and follow your guide's instructions at all times.${locationName ? ` You are currently near ${locationName}.` : ''}`;
-    }
-    if (q.includes('safety') || q.includes('safe')) {
-        return `Safety guidelines: stay on marked trails, keep safe wildlife distance, move in groups when possible, and report emergencies immediately to park rangers.${locationName ? ` Current nearby landmark: ${locationName}.` : ''}`;
-    }
-    if (q.includes('weather') || q.includes('rain')) {
-        return 'Bwindi conditions can change quickly. Carry a light rain layer, water, and non-slip hiking footwear for both dry and wet seasons.';
-    }
-    if (q.includes('culture') || q.includes('batwa')) {
-        return 'Bwindi offers verified cultural narratives and Batwa heritage stories. You can open the Culture module in SIGTS to explore storyteller-approved content.';
-    }
-    if (q.includes('route') || q.includes('map') || q.includes('direction')) {
-        return `Routes and POIs: use the Map screen in SIGTS.${locationName ? ` Latest fix near ${locationName} (landmark name only; verify on the ground).` : ''}`;
+    if (sigtsIsBareSocialUtterance(ql)) {
+        return sigtsSocialGreetingReply(locationName);
     }
 
-    const fromCat = sigtsLocalAnswerFromAppContext(trimmed, appContext, locationName);
+    if (/\bgorilla\b/i.test(ql)) {
+        return `Totally fair—gorillas are why most of us memorize “Bwindi” in the first place. Stay calm, whisper when guides whisper, skip flash forever, keep that ~7 m bubble, and let rangers reposition you if branches narrow the sightline.${locationName ? ` Looks like SIGTS loosely tags you near “${locationName}”—verify with your group’s ranger map.` : ''} Want etiquette for mud & gloves next, or how Culture stories sit alongside trekking briefings?`;
+    }
+    if (/\bsafety\b/i.test(ql) || /\bsafe\b/i.test(ql)) {
+        return `Safety first—it’s steep forest, slippery roots, and occasional wildlife corridors. Stick to ranger lines, shout if you tumble (so the sweep hears you), hydrate before you slam elevation, and never split the formation for a selfie.${locationName ? ` SIGTS pings you loosely around “${locationName}”; never treat that dot as evacuation intel.` : ''} Need health/packing angles or large-mammal etiquette?`;
+    }
+    if (/\b(weather|rain|rainy)\b/i.test(ql)) {
+        return `Cloud forest mood: mist can flirt with sunshine on the same ascent. Toss a breathable rain shell plus quick-drying layers in your sack even if sunrise looks tame—trail shoes with real bite trump fashion trainers every time.\n\nIf you’d rather talk dry-season pacing vs rainforest drizzle psychology, poke me either way.`;
+    }
+    if (/\b(culture|cultural|batwa|bakiga)\b/i.test(ql)) {
+        return `Culture here isn’t garnish—it’s intertwined with stewardship of the ridges. Dive into SIGTS Culture cards for narrator-approved Batwa/Bakiga stories, then treat community visits like listening sessions: ask before recording, honor taboos spelled out inside each card, and defer to interpreters on compensation norms.\n\nCurious where cultural walks meet gorilla-sector logistics? Say the word.`;
+    }
+    if (/\b(route|routes|map|direction)\b/i.test(ql)) {
+        return `Map tab is your campfire GPS inside SIGTS: gate labels, lodges, viewpoints, and ranger POIs—but paper park maps still win offline surprises.${locationName ? ` Rough pin: “${locationName}”; please double-check onsite.` : ''} Want sector-by-sector moods (Buhoma vs Rushaga energy) instead?`;
+    }
+
+    const fromCat = sigtsLocalAnswerFromAppContext(trimmed, threadRaw, appContext, locationName);
     if (fromCat) return fromCat;
 
-    if (sigtsIsBwindiParkContextQuery(q) || sigtsIsNatureTourismTopic(q)) {
-        return sigtsBuildBwindiScopedAnswer(trimmed, locationName, appContext);
+    if (sigtsIsBwindiParkContextQuery(qt) || sigtsIsNatureTourismTopic(qt)) {
+        return sigtsBuildBwindiScopedAnswer(threadRaw, locationName, appContext);
     }
 
-    return 'Ask about Bwindi or BINP (Buhoma, Ruhija, Rushaga, Nkuringo), forest trekking, UWA rules, wildlife, maps, culture, or what the Animals and Culture tabs show. I match your wording to those topics.';
+    return `Hmm—I’m happiest when we’re unpacking Bwindi together: trekking headspace, mammal & bird breadcrumbs in the Animals catalogue, Culture narrators stored here, FAQs, soggy-boot logistics, permits at a conceptual level (UWA tariffs change), or sector vibes across Buhoma, Ruhija, Rushaga, Nkuringo.\n\nI’ll gently bounce truly off-grid topics.\n\nPick one itch—mud dread, binocular ethics, Batwa storyline timing, whichever—and we’ll riff from this cached SIGTS playbook offline.`;
 }
 
 /** 3.1.1.6 — local persistence for profiling, popularity, feedback, offline query log */
@@ -1478,7 +1648,8 @@ class AIRecommendationEngine {
         return scored.slice(0, limit);
     }
 
-    async askQuestion(question) {
+    async askQuestion(question, options = {}) {
+        const history = Array.isArray(options.history) ? options.history : [];
         const trimmed = (question || '').trim();
         if (!trimmed) {
             return { answer: 'Please enter a question.', meta: {} };
@@ -1512,6 +1683,10 @@ class AIRecommendationEngine {
             };
         }
 
+        if (history.length) {
+            payload.history = history.slice(-24);
+        }
+
         const timeHint = this.buildTimeContextNote();
 
         try {
@@ -1543,7 +1718,8 @@ class AIRecommendationEngine {
         }
 
         const locName = null;
-        const localAnswer = sigtsLocalTourHelpCompose(trimmed, appContext, locName);
+        const threadQ = history.length ? sigtsComposeLocalThreadQuestion(trimmed, history) : null;
+        const localAnswer = sigtsLocalTourHelpCompose(trimmed, threadQ, appContext, locName);
         const meta = {
             local_fallback: true,
             offline: typeof navigator !== 'undefined' ? !navigator.onLine : false,
@@ -2005,7 +2181,8 @@ class ITManagerAPI {
                 email: u.email,
                 full_name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username,
                 user_type: u.user_type,
-                department: u.department || ''
+                department: u.department || '',
+                is_active: u.is_active !== false
             }));
         }
 

@@ -6,10 +6,27 @@
 // =====================================================
 
 const RUNTIME_CONFIG = window.__SIGTS_CONFIG__ || {};
+
+/** Ensure catalogue calls hit `/api/...` (common mis-set: API_URL=http://host:8000 without /api). */
+function normalizeSigtsApiBaseUrl(raw) {
+    const base = String(raw || '').trim().replace(/\/+$/, '');
+    if (!base) return '';
+    const lower = base.toLowerCase();
+    if (lower.endsWith('/api')) return base;
+    try {
+        const u = new URL(base);
+        const p = u.pathname || '/';
+        if (p === '/' || p === '') return `${base}/api`;
+    } catch (_) {
+        /**/
+    }
+    return base;
+}
+
 const API_BASE_URL = (() => {
     const configuredBase = RUNTIME_CONFIG.API_URL || window.__SIGTS_API_BASE__;
     if (typeof configuredBase === 'string' && configuredBase.trim()) {
-        return configuredBase.replace(/\/$/, '');
+        return normalizeSigtsApiBaseUrl(configuredBase);
     }
 
     const host = window.location.hostname;
@@ -18,7 +35,7 @@ const API_BASE_URL = (() => {
         return 'http://localhost:8000/api';
     }
 
-    return `${window.location.origin}/api`;
+    return normalizeSigtsApiBaseUrl(window.location.origin) || `${window.location.origin}/api`;
 })();
 class APIService {
     constructor() {
@@ -80,19 +97,20 @@ class APIService {
                     body: JSON.stringify({ refreshToken })
                 });
                 const payload = await response.json().catch(() => null);
-                if (!response.ok || !payload?.success || !payload?.token) {
+                const newAccess = payload?.accessToken || payload?.token;
+                if (!response.ok || !payload?.success || !newAccess) {
                     this.setToken(null);
                     this.setRefreshToken(null);
                     return null;
                 }
                 const persistToLocal = Boolean(localStorage.getItem('token'));
-                if (persistToLocal) localStorage.setItem('token', payload.token);
-                else sessionStorage.setItem('token', payload.token);
-                this.setToken(payload.token);
+                if (persistToLocal) localStorage.setItem('token', newAccess);
+                else sessionStorage.setItem('token', newAccess);
+                this.setToken(newAccess);
                 if (payload.refreshToken) {
                     this.setRefreshToken(payload.refreshToken, persistToLocal);
                 }
-                return payload.token;
+                return newAccess;
             } catch (_) {
                 return null;
             } finally {
@@ -164,6 +182,10 @@ class APIService {
             }
 
             if (!response.ok) {
+                if (response.status === 401 && payload?.code === 'SESSION_IDLE_EXPIRED') {
+                    await window.Auth?.logout?.();
+                    return { ...payload, status: response.status };
+                }
                 const canRetryWithRefresh =
                     response.status === 401
                     && !meta._retriedAfterRefresh
@@ -422,6 +444,106 @@ class APIService {
         return JSON.parse(localStorage.getItem('offline_locations') || '[]');
     }
 
+    async getLocationById(id) {
+        const sid = encodeURIComponent(String(id || '').trim());
+        if (!sid) return null;
+        const result = await this.request(`/locations/${sid}`);
+        if (result?.location_id) return result;
+        const list = await this.getLocations();
+        return Array.isArray(list)
+            ? list.find((loc) => String(loc.location_id || loc.id || '') === String(id))
+            : null;
+    }
+
+    /** §3.1.1.3 visitor catalogue (public endpoints; cached offline below). */
+    async getFaqs(category) {
+        const qs = category ? `?category=${encodeURIComponent(category)}` : '';
+        const result = await this.request(`/faqs${qs}`);
+        if (result?.faqs && Array.isArray(result.faqs)) {
+            try {
+                localStorage.setItem('offline_faqs_cache', JSON.stringify(result.faqs));
+            } catch (_) {
+                /**/
+            }
+            return result.faqs;
+        }
+        try {
+            const raw = localStorage.getItem('offline_faqs_cache');
+            return raw ? JSON.parse(raw) : [];
+        } catch (_) {
+            return [];
+        }
+    }
+
+    async markFaqHelpful(faqId) {
+        return this.request(`/faqs/${encodeURIComponent(String(faqId))}/helpful`, {
+            method: 'POST'
+        });
+    }
+
+    async getSafetyTips(category) {
+        const qs = category ? `?category=${encodeURIComponent(category)}` : '';
+        const result = await this.request(`/safety-tips${qs}`);
+        if (result?.tips && Array.isArray(result.tips)) {
+            try {
+                localStorage.setItem('offline_safety_tips_cache', JSON.stringify(result.tips));
+            } catch (_) {
+                /**/
+            }
+            return result.tips;
+        }
+        try {
+            const raw = localStorage.getItem('offline_safety_tips_cache');
+            return raw ? JSON.parse(raw) : [];
+        } catch (_) {
+            return [];
+        }
+    }
+
+    async getParkGuide(category) {
+        const qs = category ? `?category=${encodeURIComponent(category)}` : '';
+        const result = await this.request(`/park-guide${qs}`);
+        if (result?.items && Array.isArray(result.items)) {
+            try {
+                localStorage.setItem('offline_park_guide_cache', JSON.stringify(result.items));
+            } catch (_) {
+                /**/
+            }
+            return result.items;
+        }
+        try {
+            const raw = localStorage.getItem('offline_park_guide_cache');
+            return raw ? JSON.parse(raw) : [];
+        } catch (_) {
+            return [];
+        }
+    }
+
+    async getContentCatalogMeta() {
+        const result = await this.request('/content-catalog-meta');
+        if (result?.updated_at || result?.counts) {
+            try {
+                localStorage.setItem('offline_catalog_meta_cache', JSON.stringify(result));
+            } catch (_) {
+                /**/
+            }
+            return result;
+        }
+        try {
+            const raw = localStorage.getItem('offline_catalog_meta_cache');
+            return raw ? JSON.parse(raw) : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    /** Weather capsule for dashboard / Info tab (offline-friendly fallback inside ContentManager too). */
+    async getParkWeatherForecast() {
+        const result = await this.request('/weather');
+        if (result?.success && result.data) return result.data;
+        return null;
+    }
+
     // Cultural stories endpoints
     async getCulturalStories() {
         const result = await this.request('/cultural');
@@ -673,6 +795,21 @@ class APIService {
         return result?.status || {};
     }
 
+    /** Self-service: sets `is_active` false and sends activity email when configured (POST /api/auth/deactivate). */
+    async deactivateMyAccount() {
+        return this.request('/auth/deactivate', {
+            method: 'POST',
+            body: JSON.stringify({ confirm: true })
+        });
+    }
+
+    /** IT desk: deactivate another user (PUT /api/admin/users/:id/deactivate). */
+    async adminDeactivateUser(userId) {
+        const id = encodeURIComponent(String(userId || '').trim());
+        if (!id) return { success: false, error: 'User id required' };
+        return this.request(`/admin/users/${id}/deactivate`, { method: 'PUT' });
+    }
+
     // Sync queue
     async syncOfflineData(pendingItems) {
         const result = await this.request('/sync/upload', {
@@ -741,6 +878,13 @@ class APIService {
             })
         });
         return result?.success ? result.feedback : null;
+    }
+
+    // User profile (GET /api/users/profile)
+    async fetchUserProfile() {
+        const result = await this.request('/users/profile');
+        if (result?.error || result?.status >= 400) return null;
+        return result;
     }
 
     // User profile updates (preferences)

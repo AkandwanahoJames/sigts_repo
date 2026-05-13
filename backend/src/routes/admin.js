@@ -12,8 +12,8 @@ const path = require('path');
 const fs = require('fs');
 const execFileAsync = promisify(execFile);
 
-// All routes require IT Manager role
-router.use(authenticateJWT, authorize('it_manager'));
+// IT operations desk: IT managers and system admins (user_type admin)
+router.use(authenticateJWT, authorize('it_manager', 'admin'));
 
 // =====================================================
 // GET /api/admin/stats
@@ -561,7 +561,7 @@ router.put('/alert-rules/:id', async (req, res) => {
 
 // =====================================================
 // PUT /api/admin/users/:id/deactivate
-// Deactivate a user account (admin only)
+// Deactivate a user account (IT manager / admin)
 // =====================================================
 router.put('/users/:id/deactivate', async (req, res) => {
     const { id } = req.params;
@@ -571,6 +571,14 @@ router.put('/users/:id/deactivate', async (req, res) => {
             'SELECT user_id, username, is_active FROM users WHERE user_id = $1',
             [id]
         );
+
+        if (before.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        if (before.rows[0].is_active === false) {
+            return res.json({ success: true, message: 'Account was already inactive', alreadyInactive: true });
+        }
 
         await pool.query(
             'UPDATE users SET is_active = false WHERE user_id = $1',

@@ -25,14 +25,14 @@ UPDATE animals SET
   description = 'The fish-eagle breeds near lakes and large rivers rather than dense interior forest, but overlapping bird communities connect Bwindi to regional waterways. Its piercing call is beloved across East Africa.',
   habitat = 'Lakeshore and river corridors near forest edges',
   conservation_status = 'least_concern',
-  image_urls = ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/AfricanFishEagle.jpeg/960px-AfricanFishEagle.jpeg']
+  image_urls = ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/d/d6/African_fish_eagle_%28Haliaeetus_vocifer%29_with_fish.jpg/960px-African_fish_eagle_%28Haliaeetus_vocifer%29_with_fish.jpg']
 WHERE name = 'African Fish Eagle';
 
 UPDATE animals SET
   description = 'The great blue turaco is a heavyweight fruit eater of tall forest canopy. Loud calls and flashy wings reveal its presence before you spot the bird.',
   habitat = 'Canopy layers of evergreen and bamboo-mixed montane forest',
   conservation_status = 'least_concern',
-  image_urls = ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Great_Blue_Turaco.jpg/960px-Great_Blue_Turaco.jpg']
+  image_urls = ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Great_Blue_Turaco.jpg/960px-Great_Blue_Turaco.jpg']
 WHERE name = 'Great Blue Turaco';
 
 INSERT INTO animals (name, scientific_name, description, conservation_status, habitat, diet, lifespan, fun_facts, image_urls)
@@ -97,7 +97,7 @@ SELECT
   'Frugivore with seasonal leaf supplementation',
   'About 15 years in managed care extrapolated',
   ARRAY['Feeds on parasol-tree fruits tracked by birding guides', 'Wing feathers flash crimson mid-flight'],
-  ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Ruwenzori_Turaco.jpg/960px-Ruwenzori_Turaco.jpg']
+  ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/9/93/Ruwenzori_Turaco%2C_Rwenzori_National_Park%2C_Uganda.jpg/960px-Ruwenzori_Turaco%2C_Rwenzori_National_Park%2C_Uganda.jpg']
 WHERE NOT EXISTS (SELECT 1 FROM animals WHERE name = 'Rwenzori Turaco');
 
 INSERT INTO animals (name, scientific_name, description, conservation_status, habitat, diet, lifespan, fun_facts, image_urls)
@@ -123,7 +123,7 @@ SELECT
   'Mixed frugivore-insectivore',
   'Wild lifespan poorly documented in demos',
   ARRAY['Feeds quietly using wide gape gleaning', 'Range spans both sides of western Rift crest with micro-endemism'],
-  ARRAY['https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/African_Green_Broadbill.jpg/960px-African_Green_Broadbill.jpg']
+  ARRAY['https://upload.wikimedia.org/wikipedia/commons/d/d2/Grauer%27s_broadbill_%28Pseudocalyptomena_graueri%29_01_%28cropped%29.jpg']
 WHERE NOT EXISTS (SELECT 1 FROM animals WHERE name = 'African Green Broadbill');
 
 -- --- Additional taxa explicitly highlighted in UNESCO dossier 682 (criterion x synthesis) ---

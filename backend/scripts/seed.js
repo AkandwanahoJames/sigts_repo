@@ -43,6 +43,7 @@ const BWINDI_SQL_SEED_FILES = [
     { file: '003_bwindi_extended_content.sql', label: 'Bwindi extended species + demo cultural narratives' },
     { file: '004_bwindi_biodiversity_catalog.sql', label: 'Bwindi biodiversity tour-guide catalogue' },
     { file: '005_bwindi_animal_field_guides.sql', label: 'Bwindi species field-guide copy + catalogue imagery refresh' },
+    { file: '006_bwindi_animals_deep_enrichment.sql', label: 'Bwindi deep ecology copy + verified Commons imagery' },
 ];
 
 /**
@@ -286,6 +287,84 @@ async function seedFAQs() {
     log(`  ✓ Seeded ${faqs.length} FAQs`, 'green');
 }
 
+// Practical destination snippets (structured categories feed the Info tab)
+async function seedDestinationInfo() {
+    log('\n🗂️ Seeding park guide (destination info)...', 'blue');
+
+    if (await isDataSeeded('destination_info')) {
+        log('  ○ Destination info already seeded, skipping...', 'yellow');
+        return;
+    }
+
+    const items = [
+        {
+            category: 'entry_fees',
+            title: 'Permits & daily park fees',
+            content_en:
+                'Gorilla permits are issued separately via UWA and are the largest single cost. '
+                + 'General park tariffs vary by residency; carry USD or UGX as directed on your voucher. '
+                + 'Fees support rangers, health monitoring programmes for habituated primates, and community revenue-sharing.',
+            sort_order: 1
+        },
+        {
+            category: 'rules',
+            title: 'Trail conduct & visitation rules',
+            content_en:
+                'Stay behind your assigned ranger, keep voices low on primate trails, pack out litter, '
+                + 'observe minimum viewing distances, and never feed wildlife. Flash photography may be prohibited on sensitive species.',
+            sort_order: 2
+        },
+        {
+            category: 'facilities',
+            title: 'Facilities inside sector gates',
+            content_en:
+                'Expect basic briefing shelters, ranger posts, signage to trailheads, and limited sanitation at remote posts. '
+                + 'Lodging sits mainly in gateway communities — download an offline SIGTS pack before long forest days.',
+            sort_order: 3
+        },
+        {
+            category: 'health',
+            title: 'Health & preparedness',
+            content_en:
+                'Altitude and humidity accumulate quickly — hydrate, pace ascents, and carry personal medications. '
+                + 'Discuss malaria prophylaxis with your clinician; use repellent mornings and dusk.',
+            sort_order: 4,
+            is_emergency: false
+        }
+    ];
+
+    const parkRows = await pool.query('SELECT park_id FROM parks LIMIT 1');
+    if (!parkRows.rows.length) {
+        log('  ○ No park row yet — skipping destination info', 'yellow');
+        return;
+    }
+    const parkId = parkRows.rows[0].park_id;
+
+    let inserted = 0;
+    for (const row of items) {
+        const dup = await pool.query(
+            `SELECT 1 FROM destination_info WHERE park_id = $1 AND category = $2 AND title = $3 LIMIT 1`,
+            [parkId, row.category, row.title]
+        );
+        if (dup.rows.length) continue;
+        await pool.query(
+            `INSERT INTO destination_info (destinfo_id, park_id, category, title, content_en, sort_order, is_active, is_emergency)
+             VALUES (gen_random_uuid(), $1, $2::varchar, $3::varchar, $4::text, $5::integer, true, COALESCE($6::boolean,false))`,
+            [
+                parkId,
+                row.category,
+                row.title,
+                row.content_en,
+                row.sort_order ?? 10,
+                Boolean(row.is_emergency)
+            ]
+        );
+        inserted++;
+    }
+
+    log(`  ✓ Seeded destination_info (${inserted} new rows)`, 'green');
+}
+
 // Seed user
 async function seedTestUser() {
     log('\n👤 Seeding Test User...', 'blue');
@@ -325,6 +404,7 @@ async function seed() {
         await seedAnimals();
         await seedSafetyTips();
         await seedFAQs();
+        await seedDestinationInfo();
         await seedTestUser();
         try {
             log('\n🗺️ Seeding interactive map dataset...', 'blue');

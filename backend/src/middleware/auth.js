@@ -4,6 +4,10 @@ const { pool } = require('../config/database');
 const { logger } = require('../utils/logger');
 const { REQUIREMENTS } = require('../config/requirements');
 
+const SESSION_IDLE_MINUTES = Number.isFinite(REQUIREMENTS.security.sessionIdleTimeoutMinutes)
+    ? REQUIREMENTS.security.sessionIdleTimeoutMinutes
+    : 30;
+
 // Get JWT secret with production enforcement
 function getJwtSecret() {
     const secret = process.env.JWT_SECRET;
@@ -87,7 +91,9 @@ async function authenticateJWT(req, res, next) {
         
         // Verify user still exists and is active
         const result = await pool.query(
-            `SELECT user_id, username, email, user_type, is_active, language_pref
+            `SELECT user_id, username, email, user_type, is_active, language_pref,
+                    last_location_time, last_login, created_at,
+                    (LOWER(COALESCE(email, '')) LIKE '%@guest.sigts.local') AS is_guest
              FROM users WHERE user_id = $1`,
             [decoded.userId]
         );
@@ -109,6 +115,22 @@ async function authenticateJWT(req, res, next) {
         }
         
         req.user = result.rows[0];
+
+        if (SESSION_IDLE_MINUTES > 0) {
+            const row = result.rows[0];
+            const lastActivity = row.last_location_time || row.last_login || row.created_at;
+            if (lastActivity) {
+                const idleMs = SESSION_IDLE_MINUTES * 60 * 1000;
+                if (Date.now() - new Date(lastActivity).getTime() > idleMs) {
+                    return res.status(401).json({
+                        success: false,
+                        error: 'Session expired',
+                        message: `Your session ended after ${SESSION_IDLE_MINUTES} minutes of inactivity. Please sign in again.`,
+                        code: 'SESSION_IDLE_EXPIRED'
+                    });
+                }
+            }
+        }
 
         // Lightweight auth heartbeat for "currently logged-in users" visibility.
         // We intentionally don't block request flow on heartbeat update errors.
@@ -149,6 +171,22 @@ async function authenticateJWT(req, res, next) {
             message: 'Invalid token'
         });
     }
+}
+
+/**
+ * Guest sessions (park-only temporary accounts) may browse core content but
+ * must not use staff workflows or data sync APIs.
+ */
+function rejectGuestAccounts(req, res, next) {
+    if (req.user?.is_guest) {
+        return res.status(403).json({
+            success: false,
+            error: 'Access denied',
+            message: 'Guest sessions cannot use this feature. Create a full account to continue.',
+            code: 'GUEST_FORBIDDEN'
+        });
+    }
+    next();
 }
 
 /**
@@ -217,5 +255,6 @@ module.exports = {
     comparePassword,
     authenticateJWT,
     authorize,
+    rejectGuestAccounts,
     ipWhitelist
 };

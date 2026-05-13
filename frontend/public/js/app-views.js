@@ -54,7 +54,16 @@ function buildTourHelpMetaHtml(meta) {
         parts.push(`<p class="ai-chat-voice"><strong>Voice transcript</strong> ${escapeHtml(meta.voice_transcript)}</p>`);
     }
     if (meta.nlp_mode) {
-        parts.push(`<p class="ai-chat-nlp"><span class="ui-modal-muted">NLP mode</span> ${escapeHtml(meta.nlp_mode)}</p>`);
+        const nm = String(meta.nlp_mode);
+        const readable =
+            nm === 'rule_kb_v1'
+                ? 'Bwindi rules + curated facts (consistent when offline)'
+                : nm === 'llm_grounded_v1'
+                  ? 'AI assistant grounded on SIGTS FAQs, safety copy, guides, themes & species rows'
+                  : nm === 'rule_kb_v1_fallback'
+                    ? 'Rules + curated facts (API mode unavailable — same as offline backup)'
+                    : nm;
+        parts.push(`<p class="ai-chat-nlp"><span class="ui-modal-muted">How answers are built</span> ${escapeHtml(readable)}</p>`);
     }
     if (meta.local_fallback) {
         parts.push('<p class="ai-chat-offline-flag">Offline AI mode: cached rules and catalogue on this device.</p>');
@@ -98,6 +107,128 @@ function formatTourHelpAnswerHtml(rawText) {
     }
 
     return htmlBlocks.join('');
+}
+
+/** Blend server/local rule answers into a normal chatbot-style voice; scope stays Bwindi-only. */
+function formatBwindiChatAssistantPresentation(rawAnswer) {
+    const a = String(rawAnswer || '').replace(/\r\n/g, '\n').trim();
+    if (!a) {
+        return "I didn't get a reply from the assistant—try a short question about Bwindi trekking, wildlife, maps, culture, permits in general terms, safety, or packing.";
+    }
+    const outOfScope =
+        /I.m specialised for visits to Bwindi Impenetrable National Park through SIGTS:/i.test(a) ||
+        /I can only answer SIGTS\/Bwindi topics/i.test(a) ||
+        /I chat about Bwindi Impenetrable National Park only/i.test(a) ||
+        /Tour help in SIGTS is limited/i.test(a) ||
+        /^Please enter a question\.$/i.test(a);
+    if (outOfScope) return a;
+    if (/\b(ranger|guide|UWA)\b.*\b(always|first|override)\b/i.test(a) || /\bcomes first on the trail\b/i.test(a)) {
+        return a;
+    }
+    return `${a}\n\n— On the trail, your ranger, guide, and posted UWA rules always override anything I say here.`;
+}
+
+const SIGTS_CHAT_HISTORY_KEY = 'sigts_bwindi_chat_history_v1';
+const SIGTS_CHAT_HISTORY_MAX_TURNS = 36;
+
+function readSigtsChatTurns() {
+    try {
+        const raw = localStorage.getItem(SIGTS_CHAT_HISTORY_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+        return [];
+    }
+}
+
+function writeSigtsChatTurns(turns) {
+    try {
+        localStorage.setItem(SIGTS_CHAT_HISTORY_KEY, JSON.stringify(turns));
+    } catch (_) {
+        /**/
+    }
+}
+
+function clearSigtsChatHistoryStorage() {
+    try {
+        localStorage.removeItem(SIGTS_CHAT_HISTORY_KEY);
+    } catch (_) {
+        /**/
+    }
+}
+
+function slimSigtsChatMetaForStorage(meta) {
+    if (!meta || typeof meta !== 'object') return {};
+    const out = {};
+    if (meta.local_fallback != null) out.local_fallback = meta.local_fallback;
+    if (meta.offline != null) out.offline = meta.offline;
+    if (Array.isArray(meta.sources)) out.sources = meta.sources.slice(0, 8);
+    if (meta.location_name) out.location_name = String(meta.location_name).slice(0, 200);
+    if (meta.nlp_mode) out.nlp_mode = String(meta.nlp_mode).slice(0, 48);
+    if (meta.history_turns_client != null) out.history_turns_client = meta.history_turns_client;
+    if (meta.time_context) out.time_context = String(meta.time_context).slice(0, 280);
+    if (meta.response_time_ms != null) out.response_time_ms = meta.response_time_ms;
+    return out;
+}
+
+function sigtsPriorTurnsToApiHistory(priorTurns) {
+    const hist = [];
+    for (const t of priorTurns) {
+        const u = String(t?.user || '').trim().slice(0, 2000);
+        const a = String(t?.answerRaw || '').trim().slice(0, 2000);
+        if (!u) continue;
+        hist.push({ role: 'user', text: u });
+        if (a) hist.push({ role: 'assistant', text: a });
+    }
+    return hist.slice(-24);
+}
+
+function renderSigtsStoredTurnHtml(turn) {
+    const presented = formatBwindiChatAssistantPresentation(String(turn?.answerRaw || ''));
+    const formattedAnswer = formatTourHelpAnswerHtml(presented);
+    const metaBlock = buildTourHelpMetaHtml(turn.meta && typeof turn.meta === 'object' ? turn.meta : {});
+    return `<div class="ai-chat-turn ai-chat-turn--user" role="article"><div class="ai-chat-bubble ai-chat-bubble--user"><div class="ai-chat-bubble-text">${escapeHtml(
+        String(turn?.user || '')
+    )}</div></div></div><div class="ai-chat-turn ai-chat-turn--assistant" role="article"><span class="ai-chat-turn-label">Bwindi assistant</span><div class="ai-chat-bubble ai-chat-bubble--assistant"><div class="ai-chat-bubble-text ai-chat-response-block">${formattedAnswer}</div></div>${metaBlock}</div>`;
+}
+
+function getSigtsChatInitialMessagesHtml() {
+    const turns = readSigtsChatTurns().filter((t) => t && typeof t.user === 'string');
+    if (!turns.length) return getSigtsChatWelcomeHtml();
+    const banner = `<div class="ai-chat-history-banner"><div class="ai-chat-history-banner-inner"><span class="ai-chat-history-banner-title">${icon('clock', 'icon-sm')} Chat history</span> <span class="ui-modal-muted">${turns.length} exchange${
+        turns.length === 1 ? '' : 's'
+    } saved on this device.</span> <button type="button" class="small-btn ghost-btn" onclick="clearSigtsChatThread()">Start fresh</button></div></div>`;
+    return `${banner}${turns.map(renderSigtsStoredTurnHtml).join('')}`;
+}
+
+function getSigtsChatWelcomeHtml() {
+    const starters = [
+        'What should I wear for a muddy gorilla trek in Bwindi?',
+        'What is the usual visitor distance rule around mountain gorillas?',
+        'How is Buhoma different from Rushaga for a first-time visitor?',
+        'What should I carry for rain and cold under the canopy?',
+        'Where can I read Batwa-linked cultural stories in SIGTS?',
+        'What mammals besides gorillas do people sometimes discuss for Bwindi?'
+    ];
+    const chips = starters
+        .map(
+            (s) =>
+                `<button type="button" class="sigts-chat-starter" onclick="sigtsChatQuickAsk(${JSON.stringify(s)})">${escapeHtml(s)}</button>`
+        )
+        .join('');
+    return `<div class="ai-chat-welcome-wrap">
+        <div class="ai-chat-turn ai-chat-turn--assistant ai-chat-turn--welcome">
+            <span class="ai-chat-turn-label">Bwindi assistant</span>
+            <div class="ai-chat-bubble ai-chat-bubble--assistant">
+                <div class="ai-chat-bubble-text"><p>${escapeHtml(
+                    "Hi — I’m SIGTS’s Bwindi-focused assistant. Ask about gorilla visits, gates and sectors (Buhoma, Ruhija, Rushaga, Nkuringo), wildlife & birds in plain visitor language, etiquette, trekking fitness, Cultural narratives in the Culture tab, map POIs synced to this phone, FAQs, permits in general wording (confirm prices with UWA), or safety basics."
+                )}</p><p>${escapeHtml(
+                    'I’m not a doctor, lawyer, or live dispatch—emergencies go to your guide and official park channels. Offline, I use the same rule pack as when you’re online.'
+                )}</p></div>
+            </div>
+        </div>
+        <div class="ai-chat-starters" aria-label="Suggested questions"><span class="sigts-chat-starters-title">Try asking</span><div class="sigts-chat-starters-row">${chips}</div></div>
+    </div>`;
 }
 
 const SIGTS_MIC_MAX_TRANSCRIPT_CHARS = 320;
@@ -144,6 +275,7 @@ function icon(name, className = '') {
         user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
         ticket: '<path d="M3 9a3 3 0 0 0 0 6v4h18v-4a3 3 0 0 0 0-6V5H3z"/><path d="M12 5v14"/>',
         chart: '<path d="M4 19V5"/><path d="M4 19h16"/><rect x="7" y="11" width="3" height="5"/><rect x="12" y="8" width="3" height="8"/><rect x="17" y="6" width="3" height="10"/>',
+        activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
         building: '<path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 10h1.8M9 13.5h1.8M13.2 10H15M13.2 13.5H15"/><path d="M10.5 21v-4h3v4"/>',
         logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
         bell: '<path d="M15 17H5l1.5-2v-4a5.5 5.5 0 1 1 11 0v4L19 17z"/><path d="M10 19a2 2 0 0 0 4 0"/>',
@@ -176,7 +308,15 @@ function icon(name, className = '') {
         key: '<circle cx="7.5" cy="12" r="3.5"/><path d="M11 12h10"/><path d="M18 12v3"/><path d="M15 12v2"/>',
         userPlus: '<circle cx="10" cy="8" r="4"/><path d="M3 21a7 7 0 0 1 14 0"/><path d="M19 8v6M16 11h6"/>',
         smile: '<circle cx="12" cy="12" r="9"/><path d="M8 10h.01M16 10h.01"/><path d="M8 15c1.2 1.2 2.3 1.8 4 1.8s2.8-.6 4-1.8"/>',
-        x: '<path d="M6 18L18 6M6 6l12 12"/>'
+        bookmark: '<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>',
+        chevronRight: '<polyline points="9 18 15 12 9 6"/>',
+        mic: '<path d="M12 14a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v4a3 3 0 0 0 3 3z"/><path d="M19 11a7 7 0 0 1-14 0"/><path d="M12 19v3"/><path d="M9 21h6"/>',
+        search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
+        x: '<path d="M6 18L18 6M6 6l12 12"/>',
+        trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1v2"/>',
+        edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+        message: '<path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/>',
+        check: '<polyline points="20 6 9 17 4 12"/>'
     };
     const content = icons[name] || icons.info;
     return `<svg class="${classes}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${content}</svg>`;
@@ -215,18 +355,35 @@ function getRecommendationPhotoClass(item = {}, index = 0) {
 }
 
 function getPageTitle(view) {
-    const titles = { dashboard: 'Dashboard', animals: 'Animals', map: 'Map', culture: 'Culture', sightings: 'Sightings', profile: 'Profile', info: 'Info', ai_chat: "Let's Chat", guide_dashboard: 'Guide Dashboard', it_dashboard: 'Admin Dashboard', it_predictive_analytics: 'Predictive Analytics', it_tour_assignments: 'Tour Session Assignments', intranet: 'Intranet Hub' };
+    const titles = {
+        dashboard: 'Home',
+        animals: 'Animals',
+        map: 'Map',
+        culture: 'Culture',
+        sightings: 'Sightings',
+        saved: 'Saved',
+        profile: 'Profile',
+        info: 'Info',
+        ai_chat: 'Bwindi assistant',
+        guide_dashboard: 'Guide Dashboard',
+        it_dashboard: 'Admin Dashboard',
+        it_predictive_analytics: 'Predictive Analytics',
+        it_tour_assignments: 'Tour Session Assignments',
+        intranet: 'Intranet Hub'
+    };
     return titles[view] || 'SIGTS Platform';
 }
 
 function getPageSubtitle(view) {
     const subtitles = {
-        dashboard: "Welcome back, explore today's recommendations.",
+        dashboard: "Search, browse categories, and pick up saved species or places.",
+        saved: 'Bookmarks from your visits — tap to reopen details.',
         guide_dashboard: 'Track tours, guests, and active shifts.',
         it_dashboard: 'Monitor users, sync status, and platform health.',
         it_predictive_analytics: 'Historical signals, forecasts, exports, and schedules for park operations.',
         it_tour_assignments: 'Assign and manage guide tour sessions.',
-        intranet: 'Manage staff communication and operations.'
+        intranet: 'Manage staff communication and operations.',
+        ai_chat: 'Chat-style help for Bwindi Impenetrable National Park only — not generic travel or medical advice.'
     };
     return subtitles[view] || 'Role-based access with secure operational controls.';
 }
@@ -240,6 +397,7 @@ const APP_VIEWS = new Set([
     'map',
     'culture',
     'sightings',
+    'saved',
     'profile',
     'info',
     'ai_chat',
@@ -263,12 +421,18 @@ function getEffectiveRole(user) {
 }
 
 const SHARED_APP_VIEWS = new Set([
-    'dashboard', 'animals', 'map', 'culture', 'sightings', 'profile', 'info', 'ai_chat'
+    'dashboard', 'animals', 'map', 'culture', 'sightings', 'saved', 'profile', 'info', 'ai_chat'
+]);
+
+/** Temporary guest sessions: browse-only core park content (3.1.1.1). */
+const GUEST_ALLOWED_VIEWS = new Set([
+    'dashboard', 'animals', 'map', 'culture', 'info', 'ai_chat', 'profile'
 ]);
 
 /** Whether the given role may open `view` (excludes login/register). */
-function canUserAccessView(role, view) {
+function canUserAccessView(role, view, user = null) {
     if (PUBLIC_VIEWS.has(view)) return true;
+    if (user?.isGuest && !GUEST_ALLOWED_VIEWS.has(view)) return false;
     if (view === 'it_dashboard' || view === 'it_predictive_analytics' || view === 'it_tour_assignments' || view === 'intranet') return role === 'it_manager';
     if (view === 'guide_dashboard') return role === 'guide';
     return SHARED_APP_VIEWS.has(view);
@@ -276,6 +440,7 @@ function canUserAccessView(role, view) {
 
 /** Default home screen after login / app open when no deep link hash is set. */
 function getLandingViewForUser(user) {
+    if (user?.isGuest) return 'dashboard';
     const role = String(user?.userType || user?.role || user?.user_type || 'tourist').trim();
     if (role === 'guide') return 'guide_dashboard';
     if (role === 'it_manager') return 'it_dashboard';
@@ -458,6 +623,23 @@ function renderLiveUserRows(peers = []) {
     }).join('');
 }
 
+/** IT dashboard: directory rows with per-account deactivation (server-backed). */
+function renderItAccountDirectory(users, currentUserId) {
+    if (!Array.isArray(users) || !users.length) {
+        return `<div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Account directory</h3></div><div class="seasonal-list"><div class="seasonal-item">No accounts returned. Use a live IT session and check connectivity.</div></div></div>`;
+    }
+    const rows = users.slice(0, 100).map((u) => {
+        const id = escAttrBareUuid(u.user_id);
+        const active = u.is_active !== false;
+        const self = String(u.user_id || '') === String(currentUserId || '');
+        const action = active
+            ? `<button type="button" class="small-btn danger" onclick="adminDeactivateAccountPrompt('${id}'${self ? ',true' : ''})">Deactivate</button>`
+            : '<span class="status-badge neutral">Inactive</span>';
+        return `<div class="seasonal-item" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;"><div><strong>${escapeHtml(u.username || '')}</strong> <span class="ui-modal-muted">${escapeHtml(u.user_type || '')}</span>${self ? ' <span class="status-badge warning">You</span>' : ''}<br><small>${escapeHtml(u.email || '')}</small></div><div>${action}</div></div>`;
+    }).join('');
+    return `<div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Account directory</h3></div><p class="animals-page-blurb" style="margin:0 0 8px;">Deactivate blocks sign-in until an IT manager sets the account active again (user maintenance).</p><div class="seasonal-list" style="max-height:320px;overflow:auto;">${rows}</div></div>`;
+}
+
 async function refreshAdminRealtimeUsers() {
     if (window.currentView !== 'it_dashboard') return;
     const listNode = document.getElementById('adminLiveUsersList');
@@ -532,6 +714,36 @@ function renderNotificationBell(user) {
     return '';
 }
 
+/** Bottom tab bar on narrow screens for tourists/guides-without-extra-roles pattern (park visitor UX). */
+function renderMobileTouristTabbar() {
+    const user = Auth.getCurrentUser() || {};
+    const isGuest = Boolean(user.isGuest);
+    const tabs = isGuest
+        ? [
+            ['dashboard', 'home', 'Home'],
+            ['animals', 'paw', 'Species'],
+            ['map', 'map', 'Map'],
+            ['profile', 'user', 'You']
+        ]
+        : [
+            ['dashboard', 'home', 'Home'],
+            ['animals', 'paw', 'Species'],
+            ['map', 'map', 'Map'],
+            ['saved', 'bookmark', 'Saved'],
+            ['profile', 'user', 'You']
+        ];
+    const btns = tabs
+        .map(
+            ([id, ic, lab]) =>
+                `<button type="button" class="sigts-mobile-tab ${window.currentView === id ? 'is-active' : ''}" onclick="navigateTo('${id}')">${icon(
+                    ic,
+                    'icon-md'
+                )}<span>${escapeHtml(lab)}</span></button>`
+        )
+        .join('');
+    return `<nav class="sigts-mobile-tabbar" aria-label="Quick navigation">${btns}</nav>`;
+}
+
 function renderMainLayout(content) {
     const user = Auth.getCurrentUser() || { name: 'Guest', role: 'tourist' };
     const isGuide = user?.role === 'guide' || user?.userType === 'guide';
@@ -543,14 +755,18 @@ function renderMainLayout(content) {
         { id: 'animals', icon: 'paw', label: 'Animals' },
         { id: 'map', icon: 'map', label: 'Map' },
         { id: 'culture', icon: 'book', label: 'Culture' },
-        { id: 'ai_chat', icon: 'feather', label: "Let's Chat" },
+        { id: 'ai_chat', icon: 'feather', label: 'Chat' },
         { id: 'sightings', icon: 'camera', label: 'Sightings' },
+        { id: 'saved', icon: 'bookmark', label: 'Saved' },
         { id: 'profile', icon: 'user', label: 'Profile' }
     ];
+    if (user?.isGuest) {
+        navItems = navItems.filter((item) => GUEST_ALLOWED_VIEWS.has(item.id));
+    }
     if (isGuide) navItems.push({ id: 'guide_dashboard', icon: 'ticket', label: 'Guide' });
     if (isITManager) {
         navItems.push({ id: 'it_dashboard', icon: 'chart', label: 'Admin' });
-        navItems.push({ id: 'it_predictive_analytics', icon: 'target', label: 'Analytics' });
+        navItems.push({ id: 'it_predictive_analytics', icon: 'activity', label: 'Analytics' });
         navItems.push({ id: 'it_tour_assignments', icon: 'clock', label: 'Assignments' });
         navItems.push({ id: 'intranet', icon: 'building', label: 'Intranet' });
     }
@@ -561,7 +777,8 @@ function renderMainLayout(content) {
     const statusText = isOffline ? `Offline mode • ${pending} pending` : (pending ? `Online • ${pending} pending sync` : 'Online');
     const mainContainerClass =
         window.currentView === 'ai_chat' ? 'main-container main-container--tour-help' : 'main-container';
-    return `<div class="app-container"><div id="app-sidebar" class="sidebar"><div class="sidebar-header"><div class="sidebar-brand"><div class="sidebar-logo"><img src="/icons/icon-192.svg" alt="SIGTS logo"></div><div class="sidebar-title">Bwindi SIGTS</div></div></div><div class="sidebar-nav">${navItems.map(item => `<div class="nav-item-vertical ${window.currentView === item.id ? 'active' : ''}" onclick="navigateTo('${item.id}'); closeSidebar();"><div class="nav-icon-vertical">${icon(item.icon, 'icon-md')}</div><div class="nav-label-vertical">${item.label}</div></div>`).join('')}</div><div class="sidebar-logout" onclick="Auth.logout(); closeSidebar();">${icon('logout', 'icon-md')} Logout</div></div><div class="sidebar-backdrop" aria-hidden="true" onclick="closeSidebar()"></div><div class="main-content"><div class="content-header"><button type="button" class="sidebar-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="app-sidebar" onclick="event.stopPropagation(); toggleSidebar();">${icon('menu', 'icon-md')}</button><h1>${getPageTitle(window.currentView)}</h1><div class="header-right"><span id="networkStatusBadge" class="net-status ${isOffline ? 'offline' : 'online'}">${statusText}</span>${renderNotificationBell(user)}<button type="button" class="header-profile" onclick="navigateTo('profile')"><div class="header-avatar ${isITManager ? 'role-it' : (isGuide ? 'role-guide' : 'role-tourist')}">${avatarIcon}</div><div class="header-user-info"><div class="header-user-name">${escapeHtml(user.name)}</div><div class="header-user-role">${escapeHtml(roleLabel)}</div></div></button></div></div><div class="${mainContainerClass}" onclick="closeSidebar()">${renderParkAccessPanel()}<div id="sigtsViewSlot">${content}</div></div></div></div>`;}
+    const mobileTabbar = !isGuide && !isITManager ? renderMobileTouristTabbar() : '';
+    return `<div class="app-container"><div id="app-sidebar" class="sidebar"><div class="sidebar-header"><div class="sidebar-brand"><div class="sidebar-logo"><img src="/icons/icon-192.svg" alt="SIGTS logo"></div><div class="sidebar-title">Bwindi SIGTS</div></div></div><div class="sidebar-nav">${navItems.map(item => `<div class="nav-item-vertical ${window.currentView === item.id ? 'active' : ''}" onclick="navigateTo('${item.id}'); closeSidebar();"><div class="nav-icon-vertical">${icon(item.icon, 'icon-md')}</div><div class="nav-label-vertical">${item.label}</div></div>`).join('')}</div><div class="sidebar-logout" onclick="Auth.logout(); closeSidebar();">${icon('logout', 'icon-md')} Logout</div></div><div class="sidebar-backdrop" aria-hidden="true" onclick="closeSidebar()"></div><div class="main-content"><div class="content-header"><button type="button" class="sidebar-toggle" aria-label="Open navigation menu" aria-expanded="false" aria-controls="app-sidebar" onclick="event.stopPropagation(); toggleSidebar();">${icon('menu', 'icon-md')}</button><h1>${getPageTitle(window.currentView)}</h1><div class="header-right"><span id="networkStatusBadge" class="net-status ${isOffline ? 'offline' : 'online'}">${statusText}</span>${renderNotificationBell(user)}<button type="button" class="header-profile" onclick="navigateTo('profile')"><div class="header-avatar ${isITManager ? 'role-it' : (isGuide ? 'role-guide' : 'role-tourist')}">${avatarIcon}</div><div class="header-user-info"><div class="header-user-name">${escapeHtml(user.name)}</div><div class="header-user-role">${escapeHtml(roleLabel)}</div></div></button></div></div><div class="${mainContainerClass}" onclick="closeSidebar()">${renderParkAccessPanel()}<div id="sigtsViewSlot">${content}</div></div></div>${mobileTabbar}</div>`;}
 
 // =====================================================
 // FAST TAB SWITCHING: skeleton-first + caching
@@ -576,6 +793,7 @@ function getViewCacheKey(view) {
 }
 
 function getCachedViewHtml(view) {
+    if (view === 'ai_chat') return null;
     const key = getViewCacheKey(view);
     const item = __sigtsViewHtmlCache.get(key);
     if (!item) return null;
@@ -584,6 +802,7 @@ function getCachedViewHtml(view) {
 }
 
 function setCachedViewHtml(view, html) {
+    if (view === 'ai_chat') return;
     const key = getViewCacheKey(view);
     __sigtsViewHtmlCache.set(key, { html: String(html || ''), at: Date.now() });
 }
@@ -672,6 +891,7 @@ function renderViewSkeleton(view) {
     </div>`;
 
     if (view === 'dashboard') return `${card(4)}${card(3)}`;
+    if (view === 'saved') return `${card(4)}`;
     if (view === 'animals' || view === 'culture') return `${card(4)}${card(4)}`;
     if (view === 'it_dashboard' || view === 'it_predictive_analytics' || view === 'guide_dashboard' || view === 'intranet') return `${card(4)}${card(3)}`;
     return card(4);
@@ -685,7 +905,8 @@ async function computeViewContent(view) {
         case 'culture': return await renderCultureContent();
         case 'sightings': return await renderSightingsContent();
         case 'profile': return await renderProfileContent();
-        case 'info': return renderInfoContent();
+        case 'info': return await renderInfoContent();
+        case 'saved': return await renderSavedContent();
         case 'ai_chat': return renderAIChatContent();
         case 'guide_dashboard': return await renderGuideDashboard();
         case 'it_dashboard': return await renderITManagerDashboard();
@@ -800,7 +1021,7 @@ const SPECIES_IMAGE_FALLBACK_BY_NAME = {
     'mountain gorilla': 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3d/066_Silverback_mountain_gorilla_eating_at_Bwindi_Impenetrable_Forest_National_Park_Photo_by_Giles_Laurent.jpg/960px-066_Silverback_mountain_gorilla_eating_at_Bwindi_Impenetrable_Forest_National_Park_Photo_by_Giles_Laurent.jpg',
     'african forest elephant': 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/92/African_forest_elephant_%28Loxodonta_cyclotis%29_calf.jpg/960px-African_forest_elephant_%28Loxodonta_cyclotis%29_calf.jpg',
     'african elephant': 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/63/African_elephants_%28Loxodonta_africana%29_in_water.jpg/960px-African_elephants_%28Loxodonta_africana%29_in_water.jpg',
-    'great blue turaco': 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Great_Blue_Turaco.jpg/960px-Great_Blue_Turaco.jpg',
+    'great blue turaco': 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Great_Blue_Turaco.jpg/960px-Great_Blue_Turaco.jpg',
     'chimpanzee': 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/A_group_of_imp_chimps.jpg/960px-A_group_of_imp_chimps.jpg',
     'black-and-white colobus': 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Black-and-white_Colobus_Monkeys.jpg/960px-Black-and-white_Colobus_Monkeys.jpg',
     'african fish eagle': 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/AfricanFishEagle.jpeg/960px-AfricanFishEagle.jpeg',
@@ -928,7 +1149,8 @@ function renderAnimalSpeciesCardHtml(animal) {
         ? `<div class="animal-card-thumb"><img src="${escapeHtml(thumb)}" alt="${escapeHtml(animal.name || 'Species')}" loading="lazy" decoding="async" /></div>`
         : `<div class="animal-card-thumb animal-card-thumb--fallback">${icon(getAnimalIconName(animal.name), 'icon-xl')}</div>`;
     const aiPrompt = speciesAIPromptFromRecord(animal);
-    return `<article class="animal-card animal-card--interactive" tabindex="0" aria-label="${escapeHtml(animal.name)} details" onclick="openAnimalSpeciesDetail('${id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAnimalSpeciesDetail('${id}');}">
+    const searchBlob = `${String(animal.name || '')} ${String(animal.scientific_name || animal.scientific || '')}`.toLowerCase().replace(/"/g, '');
+    return `<article class="animal-card animal-card--interactive" tabindex="0" data-species-q="${escapeHtml(searchBlob)}" aria-label="${escapeHtml(animal.name)} details" onclick="openAnimalSpeciesDetail('${id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAnimalSpeciesDetail('${id}');}">
             ${thumbHtml}
             <div class="animal-info">
                 <div class="animal-name">${escapeHtml(animal.name)}</div>
@@ -984,24 +1206,76 @@ function stripOverlayFromBody() {
     document.body.classList.remove('detail-modal-open');
 }
 
-function showRichContentModal({ title, heroUrl = '', heroAlt = '', bodyHtml = '', footerHtml = '' }) {
+/**
+ * Rich modal shell. Pass `destinationLayout: true` for Travel-style hero-first detail (bookmark in title row).
+ */
+function showRichContentModal(options = {}) {
+    const title = options.title ?? 'Details';
+    const subtitle = options.subtitle ?? '';
+    const heroUrl = options.heroUrl ?? '';
+    const heroAlt = options.heroAlt ?? '';
+    const bodyHtml = options.bodyHtml ?? '';
+    const footerHtml = options.footerHtml ?? '';
+    const titleRowActionsHtml = options.titleRowActionsHtml ?? '';
+    const destinationLayout = Boolean(options.destinationLayout);
+
     const root = ensureFeedbackRoot();
     stripOverlayFromBody();
     document.body.classList.add('detail-modal-open');
     const overlay = document.createElement('div');
     overlay.className = 'ui-modal-overlay ui-modal-overlay-rich';
-    const heroBlock = heroUrl
-        ? `<div class="ui-modal-hero"><img src="${escapeHtml(heroUrl)}" alt="${escapeHtml(heroAlt || title || 'Illustration')}" loading="lazy" decoding="async" /></div>`
-        : '';
-    overlay.innerHTML = `
+    const heroBlock =
+        heroUrl
+            ? `<div class="ui-modal-hero${destinationLayout ? ' ui-modal-hero--destination' : ''}"><img src="${escapeHtml(heroUrl)}" alt="${escapeHtml(heroAlt || title || 'Illustration')}" loading="lazy" decoding="async" /></div>`
+            : '';
+    const modalInner =
+        destinationLayout && heroBlock
+            ? `
+        <div class="ui-modal ui-modal-rich ui-modal-rich--destination" role="dialog" aria-modal="true" tabindex="-1">
+            <button type="button" class="ui-modal-close" aria-label="Close">${icon('x', 'icon-sm')}</button>
+            ${heroBlock}
+            <div class="sigts-detail-meta">
+                ${subtitle ? `<p class="sigts-detail-subtitle">${escapeHtml(String(subtitle))}</p>` : ''}
+                <div class="sigts-detail-title-row">
+                    <h2 class="sigts-detail-title">${escapeHtml(title || 'Details')}</h2>
+                    <div class="sigts-detail-title-actions">${titleRowActionsHtml}</div>
+                </div>
+            </div>
+            <p class="sigts-detail-details-label">${escapeHtml(options.detailsSectionLabel || 'Details')}</p>
+            <div class="ui-modal-rich-body">${bodyHtml}</div>
+            ${footerHtml || ''}
+        </div>`
+            : `
         <div class="ui-modal ui-modal-rich" role="dialog" aria-modal="true" tabindex="-1">
             <button type="button" class="ui-modal-close" aria-label="Close">${icon('x', 'icon-sm')}</button>
             <div class="ui-modal-title">${escapeHtml(title || 'Details')}</div>
             ${heroBlock}
             <div class="ui-modal-rich-body">${bodyHtml}</div>
             ${footerHtml || ''}
-        </div>
-    `.trim();
+        </div>`;
+
+    const modalInnerWide =
+        destinationLayout && !heroBlock
+            ? `
+        <div class="ui-modal ui-modal-rich ui-modal-rich--destination sigts-detail-no-hero" role="dialog" aria-modal="true" tabindex="-1">
+            <button type="button" class="ui-modal-close" aria-label="Close">${icon('x', 'icon-sm')}</button>
+            <div class="sigts-detail-meta">
+                ${subtitle ? `<p class="sigts-detail-subtitle">${escapeHtml(String(subtitle))}</p>` : ''}
+                <div class="sigts-detail-title-row">
+                    <h2 class="sigts-detail-title">${escapeHtml(title || 'Details')}</h2>
+                    <div class="sigts-detail-title-actions">${titleRowActionsHtml}</div>
+                </div>
+            </div>
+            <p class="sigts-detail-details-label">${escapeHtml(options.detailsSectionLabel || 'Details')}</p>
+            <div class="ui-modal-rich-body">${bodyHtml}</div>
+            ${footerHtml || ''}
+        </div>`
+            : null;
+
+    overlay.innerHTML =
+        modalInnerWide && destinationLayout && !heroBlock
+            ? modalInnerWide.trim()
+            : modalInner.trim();
 
     const close = () => {
         overlay.remove();
@@ -1024,6 +1298,14 @@ function showRichContentModal({ title, heroUrl = '', heroAlt = '', bodyHtml = ''
     return overlay;
 }
 
+function aiChatAutosizeTextarea(el) {
+    if (!el || el.tagName !== 'TEXTAREA') return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(160, Math.max(44, el.scrollHeight))}px`;
+}
+
+window.aiChatAutosizeTextarea = aiChatAutosizeTextarea;
+
 function applySIGTSAIPrefill() {
     try {
         const raw = sessionStorage.getItem('sigts_ai_prefill');
@@ -1032,10 +1314,11 @@ function applySIGTSAIPrefill() {
         const input = document.getElementById('aiChatInput');
         if (!input) return;
         input.value = raw;
+        aiChatAutosizeTextarea(input);
         input.focus();
         const hint = document.getElementById('aiPrefillBanner');
         if (hint) {
-            hint.textContent = 'Draft text from the last screen is in the box. Edit it, then tap Send.';
+            hint.textContent = 'Draft text from the last screen is in the box. Edit it, then tap Send (Shift+Enter for a new line).';
         }
     } catch (_) {
         /**/
@@ -1281,7 +1564,7 @@ window.openAnimalSpeciesDetail = async function openAnimalSpeciesDetail(animalId
             ? `<h4 class="ui-modal-section-title">${icon('grid', 'icon-sm')} Similar species</h4><ul class="ui-modal-facts">${similar
                   .map(
                       (s) =>
-                          `<li><button type="button" class="small-btn ghost-btn" onclick="(function(){document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();openAnimalSpeciesDetail('${escapeHtml(String(s.id))}');})()">${escapeHtml(s.name)}</button> <span class="ui-modal-muted">${Math.round(Number(s.similarity || 0) * 100)}% match</span></li>`
+                          `<li><button type="button" class="small-btn ghost-btn" onclick="(function(){document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();openAnimalSpeciesDetail('${escAttrBareUuid(s.id)}');})()">${escapeHtml(s.name)}</button> <span class="ui-modal-muted">${Math.round(Number(s.similarity || 0) * 100)}% match</span></li>`
                   )
                   .join('')}</ul>`
             : '';
@@ -1292,36 +1575,166 @@ window.openAnimalSpeciesDetail = async function openAnimalSpeciesDetail(animalId
         ? `<ul class="ui-modal-facts">${facts.map((f) => `<li>${escapeHtml(f)}</li>`).join('')}</ul>`
         : '<p class="ui-modal-muted">Fun facts arriving soon.</p>';
 
+    const imgList = Array.isArray(animal.image_urls) ? animal.image_urls.map((u) => String(u || '').trim()).filter(Boolean) : [];
+    const galleryExtra = imgList.slice(1, 7);
+    const galleryHtml = galleryExtra.length
+        ? `<h4 class="ui-modal-section-title">${icon('camera', 'icon-sm')} More images</h4><div class="ui-modal-gallery" style="display:flex;flex-wrap:wrap;gap:8px;">${galleryExtra
+              .map((u) => `<img src="${escapeHtml(u)}" alt="" loading="lazy" decoding="async" style="max-width:120px;border-radius:8px;object-fit:cover;" />`)
+              .join('')}</div>`
+        : '';
+
+    const videoUrl = String(animal.video_url || '').trim();
+    const videoHtml =
+        /^https?:\/\//i.test(videoUrl)
+            ? `<h4 class="ui-modal-section-title">${icon('note', 'icon-sm')} Video</h4><div class="ui-modal-video"><video controls playsinline preload="metadata" style="width:100%;max-height:240px;border-radius:8px;" src="${escapeHtml(videoUrl)}"></video></div>`
+            : '';
+
+    const behParts = [];
+    if (animal.social_structure) behParts.push(`<p><strong>Social structure</strong><br>${escapeHtml(animal.social_structure)}</p>`);
+    if (animal.average_size) behParts.push(`<p><strong>Typical size</strong><br>${escapeHtml(animal.average_size)}</p>`);
+    if (animal.gestation_period) behParts.push(`<p><strong>Gestation</strong><br>${escapeHtml(animal.gestation_period)}</p>`);
+    const behHtml = behParts.length
+        ? `<h4 class="ui-modal-section-title">${icon('paw', 'icon-sm')} Behaviour & biology</h4>${behParts.join('')}`
+        : '';
+
     const body = `
-        <p class="ui-modal-muted">${escapeHtml(animal.scientific_name || '')}</p>
         <div class="ui-modal-chip-row">
           <span class="animal-status status-${escapeHtml(String(animal.conservation_status || 'least_concern').replace(/_/g, '-'))}">${escapeHtml(String(animal.conservation_status || 'least_concern').replace(/_/g, ' '))}</span>
           <span class="animal-status neutral-chip">${escapeHtml(animal.diet || 'Mixed diet')}</span>
           <span class="animal-status neutral-chip">${escapeHtml(animal.lifespan ? `Lifespan: ${animal.lifespan}` : 'Lifespan: see guide')}</span>
         </div>
+        ${videoHtml}
         <p>${escapeHtml(animal.description || 'Description coming soon via rangers.')}</p>
         <p><strong>${icon('leaf', 'icon-sm')} Habitat</strong><br>${escapeHtml(animal.habitat || 'Montane rainforest mosaic')}</p>
         ${joinMaybeList(animal.common_locations) ? `<p><strong>${icon('map', 'icon-sm')} Often near</strong><br>${escapeHtml(joinMaybeList(animal.common_locations))}</p>` : ''}
+        ${behHtml}
+        ${galleryHtml}
         ${similarHtml}
         <h4 class="ui-modal-section-title">${icon('target', 'icon-sm')} Field notes</h4>
         ${factList}`;
 
+    const aid = String(animal.animal_id || id);
+    const bookmarked = Content.isBookmarked('animal', aid);
+    const titleRowActionsHtml = `<button type="button" class="sigts-detail-bookmark-btn${bookmarked ? ' is-saved' : ''}" aria-label="Save to list" aria-pressed="${bookmarked ? 'true' : 'false'}">${icon('bookmark', 'icon-md')}</button>`;
     const footer = `
-        <div class="ui-modal-actions ui-modal-actions-rich">
-          <button type="button" class="login-btn">${icon('target', 'icon-sm')} Open tour help (draft)</button>
-          <button type="button" class="ui-btn ui-btn-secondary">Close</button>
+        <div class="sigts-detail-footer-actions">
+          <button type="button" class="login-btn sigts-animal-tourhelp">${icon('target', 'icon-sm')} Let's Chat (draft)</button>
+          <button type="button" class="ui-btn ui-btn-secondary ui-btn--wide">Close</button>
         </div>`;
 
     const overlay = showRichContentModal({
         title: animal.name,
+        subtitle: animal.scientific_name || 'Wildlife profile',
         heroUrl: hero,
         heroAlt: animal.name,
         bodyHtml: body,
-        footerHtml: footer
+        footerHtml: footer,
+        destinationLayout: true,
+        titleRowActionsHtml
     });
 
-    overlay?.querySelector('.login-btn')?.addEventListener('click', async () => {
+    const syncAnimalBookmarkUi = (btn, on) => {
+        if (!btn) return;
+        btn.classList.toggle('is-saved', on);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    };
+
+    overlay?.querySelector('.sigts-animal-tourhelp')?.addEventListener('click', async () => {
         await navigateToAIWithPrompt(speciesAIPromptFromRecord(animal));
+    });
+    overlay?.querySelector('.sigts-detail-bookmark-btn')?.addEventListener('click', () => {
+        const on = Content.toggleBookmark({ type: 'animal', id: aid, title: animal.name });
+        syncAnimalBookmarkUi(overlay.querySelector('.sigts-detail-bookmark-btn'), on);
+        showToast(on ? 'Saved — find it on the Saved tab.' : 'Removed from saved.', 'success');
+    });
+    overlay?.querySelector('.ui-btn-secondary')?.addEventListener('click', () => {
+        overlay.querySelector('.ui-modal-close')?.click();
+    });
+};
+
+window.openParkLocationDetail = async function openParkLocationDetail(locationId) {
+    const id = String(locationId || '').trim();
+    if (!id) return showToast('Missing location id', 'warning');
+    const loc = await API.getLocationById(id);
+    if (!loc?.name) {
+        showToast('Could not load that location. Check connection or download offline content.', 'warning');
+        return;
+    }
+    let facilities = loc.facilities;
+    if (typeof facilities === 'string') {
+        try {
+            facilities = JSON.parse(facilities);
+        } catch (_) {
+            facilities = [];
+        }
+    }
+    if (!Array.isArray(facilities)) facilities = [];
+    const facLines = facilities.length
+        ? `<ul class="ui-modal-facts">${facilities
+              .map((f) => `<li>${escapeHtml(typeof f === 'string' ? f : f?.name || JSON.stringify(f))}</li>`)
+              .join('')}</ul>`
+        : '<p class="ui-modal-muted">No facilities list on file.</p>';
+
+    const lat = Number(loc.latitude);
+    const lng = Number(loc.longitude);
+    const coordLine = Number.isFinite(lat) && Number.isFinite(lng) ? `${lat.toFixed(5)}, ${lng.toFixed(5)}` : '—';
+
+    const imgs = Array.isArray(loc.image_urls) ? loc.image_urls.map((u) => String(u || '').trim()).filter(Boolean) : [];
+    const imgBlock = imgs.length
+        ? `<div class="ui-modal-gallery" style="display:flex;flex-wrap:wrap;gap:8px;">${imgs
+              .slice(0, 6)
+              .map(
+                  (u) =>
+                      `<img src="${escapeHtml(u)}" alt="" loading="lazy" decoding="async" style="max-width:140px;border-radius:8px;object-fit:cover;" />`
+              )
+              .join('')}</div>`
+        : '';
+
+    const audio = String(loc.audio_guide_url || '').trim();
+    const audioHtml = /^https?:\/\//i.test(audio)
+        ? `<div style="margin:12px 0;"><p class="ui-modal-muted">Audio guide</p><audio controls preload="none" style="width:100%;" src="${escapeHtml(audio)}"></audio></div>`
+        : '';
+
+    const lid = String(loc.location_id || id);
+    const saved = Content.isBookmarked('location', lid);
+    const locSubtitle = `${String(loc.location_type || 'place').replace(/_/g, ' ')} · ${coordLine}`;
+    const titleRowActionsHtml = `<button type="button" class="sigts-detail-bookmark-btn${saved ? ' is-saved' : ''}" aria-label="Save place" aria-pressed="${saved ? 'true' : 'false'}">${icon('bookmark', 'icon-md')}</button>`;
+
+    const body = `
+        <p>${escapeHtml(loc.description || '')}</p>
+        ${imgBlock}
+        ${audioHtml}
+        <h4 class="ui-modal-section-title">${icon('building', 'icon-sm')} Facilities</h4>
+        ${facLines}
+        ${loc.best_viewing_time ? `<p><strong>Best viewing</strong><br>${escapeHtml(loc.best_viewing_time)}</p>` : ''}`;
+
+    const footer = `
+        <div class="sigts-detail-footer-actions">
+          <button type="button" class="login-btn sigts-loc-map">${icon('map', 'icon-sm')} Open map</button>
+          <button type="button" class="ui-btn ui-btn-secondary ui-btn--wide">Close</button>
+        </div>`;
+
+    const overlay = showRichContentModal({
+        title: loc.name,
+        subtitle: locSubtitle,
+        heroUrl: imgs[0] || '',
+        heroAlt: loc.name,
+        bodyHtml: body,
+        footerHtml: footer,
+        destinationLayout: true,
+        titleRowActionsHtml
+    });
+
+    overlay?.querySelector('.sigts-loc-map')?.addEventListener('click', () => {
+        overlay.querySelector('.ui-modal-close')?.click();
+        navigateTo('map');
+    });
+    overlay?.querySelector('.sigts-detail-bookmark-btn')?.addEventListener('click', () => {
+        const on = Content.toggleBookmark({ type: 'location', id: lid, title: loc.name });
+        const btn = overlay.querySelector('.sigts-detail-bookmark-btn');
+        btn?.classList.toggle('is-saved', on);
+        btn?.setAttribute('aria-pressed', on ? 'true' : 'false');
+        showToast(on ? 'Saved — open the Saved tab anytime.' : 'Removed from saved.', 'success');
     });
     overlay?.querySelector('.ui-btn-secondary')?.addEventListener('click', () => {
         overlay.querySelector('.ui-modal-close')?.click();
@@ -1347,28 +1760,46 @@ window.openCulturalStoryDetail = async function openCulturalStoryDetail(narrativ
     }
 
     const hero = firstStoryImage(story);
+    const nid = String(story.narrative_id);
+    const subtitle = [story.community, story.story_type].filter(Boolean).join(' · ') || 'Cultural narrative';
+    const bm = Content.isBookmarked('cultural', nid);
+    const titleRowActionsHtml = `<button type="button" class="sigts-detail-bookmark-btn${bm ? ' is-saved' : ''}" aria-label="Save story" aria-pressed="${bm ? 'true' : 'false'}">${icon('bookmark', 'icon-md')}</button>`;
+
     const body = `
-        ${story?.story_type ? `<p class="ui-modal-muted">${escapeHtml(story.community || 'Community')} • ${escapeHtml(story.story_type)}</p>` : ''}
         <p>${escapeHtml(story?.narrative_en || story?.story || 'Full narrative unavailable offline.')}</p>
         ${story?.cultural_significance ? `<p><strong>${icon('book', 'icon-sm')} Why it matters</strong><br>${escapeHtml(story.cultural_significance)}</p>` : ''}
         ${joinMaybeList(story?.related_locations) ? `<p><strong>${icon('map', 'icon-sm')} Linked places</strong><br>${escapeHtml(joinMaybeList(story.related_locations))}</p>` : ''}`;
 
     const footer = `
-        <div class="ui-modal-actions ui-modal-actions-rich">
-          <button type="button" class="login-btn">${icon('target', 'icon-sm')} Open tour help (draft)</button>
-          <button type="button" class="ui-btn ui-btn-secondary">Close</button>
+        <div class="sigts-detail-footer-actions">
+          <button type="button" class="login-btn sigts-story-tourhelp">${icon('feather', 'icon-sm')} Let's Chat (draft)</button>
+          <button type="button" class="ui-btn ui-btn-secondary ui-btn--wide">Close</button>
         </div>`;
 
     const overlay = showRichContentModal({
         title: story.title_en || 'Cultural narrative',
+        subtitle,
         heroUrl: hero,
         heroAlt: story.title_en || '',
         bodyHtml: body,
-        footerHtml: footer
+        footerHtml: footer,
+        destinationLayout: true,
+        titleRowActionsHtml
     });
 
-    overlay?.querySelector('.login-btn')?.addEventListener('click', async () => {
+    overlay?.querySelector('.sigts-story-tourhelp')?.addEventListener('click', async () => {
         await navigateToAIWithPrompt(culturalAIPromptFromRecord(story));
+    });
+    overlay?.querySelector('.sigts-detail-bookmark-btn')?.addEventListener('click', () => {
+        const on = Content.toggleBookmark({
+            type: 'cultural',
+            id: nid,
+            title: story.title_en || 'Cultural story'
+        });
+        const hdr = overlay.querySelector('.sigts-detail-bookmark-btn');
+        hdr?.classList.toggle('is-saved', on);
+        hdr?.setAttribute('aria-pressed', on ? 'true' : 'false');
+        showToast(on ? 'Saved — view under the Saved tab.' : 'Removed from saved.', 'success');
     });
     overlay?.querySelector('.ui-btn-secondary')?.addEventListener('click', () => {
         overlay.querySelector('.ui-modal-close')?.click();
@@ -1378,6 +1809,138 @@ window.openCulturalStoryDetail = async function openCulturalStoryDetail(narrativ
 // =====================================================
 // CONTENT RENDER FUNCTIONS
 // =====================================================
+function buildTourFocusThumbnailMap(animals) {
+    if (!Array.isArray(animals) || !animals.length) return {};
+    const pickImg = (predicate) => {
+        const hit = animals.find(predicate);
+        return hit ? firstSpeciesImage(hit) : '';
+    };
+    return {
+        primates: pickImg((a) => /\b(gorilla|chimp)/i.test(String(a?.name || ''))),
+        large_mammals: pickImg((a) => /\b(elephant|buffalo|bushbuck|duiker|leopard|hog)\b/i.test(String(a?.name || ''))),
+        albertine_birds: pickImg((a) =>
+            /\b(turaco|broadbill|francolin|warbler|eagle|hornbill)\b/i.test(String(a?.name || ''))),
+        swallowtails: pickImg((a) => /\bswallowtail|Papilio/i.test(`${String(a?.name || '')} ${String(a?.scientific_name || '')}`)),
+        globally_threatened: pickImg((a) => {
+            const s = String(a?.conservation_status || '').toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_');
+            return ['endangered', 'vulnerable', 'near_threatened'].includes(s);
+        })
+    };
+}
+
+/** §3.1.1.3 — cross-catalog search plus saved bookmarks (device-local). */
+function renderTourismBookmarksRow() {
+    const rows =
+        typeof Content?.readBookmarks === 'function'
+            ? Content.readBookmarks()
+            : Array.isArray(Content?.bookmarks)
+              ? Content.bookmarks
+              : [];
+    const items = [...rows].sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || ''))).slice(0, 10);
+    if (!items.length) {
+        return `<div class="section-card sigts-dashboard-saved"><div class="section-header"><h3>${icon('bookmark', 'icon-sm')} Saved content</h3></div>        <p class="animals-page-blurb">Tap the bookmark icon on species, places, or stories — shortcuts land here and on the <strong>Saved</strong> tab.</p></div>`;
+    }
+    const escAttr = (s) => String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const chips = items
+        .map((b) => {
+            const rawId = String(b.id || '').trim();
+            const safeId = escAttr(rawId);
+            const lab = escapeHtml(String(b.title || b.id || 'Saved item'));
+            if (b.type === 'animal')
+                return `<button type="button" class="small-btn" onclick="openAnimalSpeciesDetail('${safeId}')">${icon('paw', 'icon-sm')} ${lab}</button>`;
+            if (b.type === 'location')
+                return `<button type="button" class="small-btn" onclick="openParkLocationDetail('${safeId}')">${icon('map', 'icon-sm')} ${lab}</button>`;
+            if (b.type === 'cultural')
+                return `<button type="button" class="small-btn" onclick="openCulturalStoryDetail('${safeId}')">${icon('book', 'icon-sm')} ${lab}</button>`;
+            return `<button type="button" class="small-btn ghost-btn" disabled title="Open from original screen">${escapeHtml(String(b.type))}: ${lab}</button>`;
+        })
+        .join('');
+    return `<div class="section-card sigts-dashboard-saved"><div class="section-header"><h3>${icon('bookmark', 'icon-sm')} Saved picks</h3></div><div class="info-chip-row" style="flex-wrap:wrap">${chips}</div></div>`;
+}
+
+/** Travel-style discovery header: hero search + horizontal category chips (tourist Home). */
+function renderDiscoveryHomePanel() {
+    const chipDefs = [
+        ['animals', 'paw', 'Species'],
+        ['map', 'map', 'Map'],
+        ['culture', 'book', 'Culture'],
+        ['info', 'info', 'Park info'],
+        ['sightings', 'camera', 'Sightings'],
+        ['ai_chat', 'feather', 'Chat']
+    ];
+    const chips = chipDefs
+        .map(
+            ([vid, ic, lab]) =>
+                `<button type="button" class="sigts-disc-chip" onclick="navigateTo('${vid}')">${icon(ic, 'icon-md')}<span>${escapeHtml(lab)}</span></button>`
+        )
+        .join('');
+    return `<section class="sigts-discovery-panel" aria-labelledby="sigts-discovery-heading">
+        <div class="sigts-discovery-intro">
+            <span class="sigts-discovery-eyebrow">Bwindi visitor guide</span>
+            <h2 id="sigts-discovery-heading" class="sigts-discovery-heading">Explore the park</h2>
+            <p class="sigts-discovery-tagline">Search wildlife, gates, trails, and cultural stories. Cache content from Profile for offline treks.</p>
+        </div>
+        <div class="sigts-discovery-search-row">
+            <span class="sigts-discovery-search-prefix" aria-hidden="true">${icon('search', 'icon-md')}</span>
+            <input id="sigtsUnifiedSearchInput" type="search" enterkeyhint="search" class="sigts-discovery-search-field" autocomplete="off" maxlength="220" placeholder="Try gorilla, Buhoma, permits…" onkeydown="if(event.key==='Enter'){event.preventDefault();runSigtsUnifiedSearch();}" />
+            <button type="button" class="sigts-discovery-search-submit" onclick="runSigtsUnifiedSearch()">${icon('search', 'icon-sm')}</button>
+        </div>
+        <div class="sigts-discovery-chips-scroll" role="group" aria-label="Quick sections">${chips}</div>
+        <div id="sigtsUnifiedSearchHighlight" class="sigts-discovery-search-hint" role="status" aria-live="polite" hidden></div>
+        <div id="sigtsUnifiedSearchResults" class="sigts-discovery-results seasonal-list" hidden></div>
+    </section>`;
+}
+
+async function renderSavedContent() {
+    const rows =
+        typeof Content?.readBookmarks === 'function'
+            ? Content.readBookmarks()
+            : Array.isArray(Content?.bookmarks)
+              ? Content.bookmarks
+              : [];
+    const sorted = [...rows].sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || '')));
+    const escAttr = (s) => String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    if (!sorted.length) {
+        return `<div class="sigts-saved-screen"><section class="sigts-saved-hero section-card">
+            <div class="sigts-saved-hero-icon" aria-hidden="true">${icon('bookmark', 'icon-xl')}</div>
+            <h3 class="sigts-saved-hero-title">Nothing saved yet</h3>
+            <p class="animals-page-blurb">Open any species, map place, or culture story and tap the <strong>bookmark</strong> in the header to keep it here.</p>
+            <div class="sigts-saved-hero-actions">
+                <button type="button" class="login-btn" onclick="navigateTo('animals')">${icon('paw', 'icon-sm')} Browse species</button>
+                <button type="button" class="small-btn ghost-btn" onclick="navigateTo('map')">${icon('map', 'icon-sm')} Open map</button>
+            </div>
+        </section></div>`;
+    }
+    const list = sorted
+        .map((b) => {
+            const rawId = String(b.id || '').trim();
+            const safeId = escAttr(rawId);
+            const title = escapeHtml(String(b.title || b.id || 'Item'));
+            const meta = escapeHtml(String(b.type || ''));
+            const when = escapeHtml(formatSigtsInstant(b.savedAt));
+            let openFn = '';
+            if (b.type === 'animal') openFn = `openAnimalSpeciesDetail('${safeId}')`;
+            else if (b.type === 'location') openFn = `openParkLocationDetail('${safeId}')`;
+            else if (b.type === 'cultural') openFn = `openCulturalStoryDetail('${safeId}')`;
+            else openFn = `showToast('Open this item from its original tab.','info')`;
+            const ic = b.type === 'location' ? 'map' : b.type === 'cultural' ? 'book' : b.type === 'animal' ? 'paw' : 'bookmark';
+            const safeType = escAttr(String(b.type || ''));
+            const remove =
+                ['animal', 'location', 'cultural'].includes(String(b.type)) && rawId
+                    ? `<button type="button" class="sigts-saved-row-remove" aria-label="Remove from saved" onclick="event.stopPropagation();sigtsRemoveSavedBookmark('${safeType}','${safeId}')">${icon(
+                          'x',
+                          'icon-sm'
+                      )}</button>`
+                    : '';
+            return `<article class="sigts-saved-row"><button type="button" class="sigts-saved-row-main" onclick="${openFn}"><span class="sigts-saved-row-icon">${icon(ic, 'icon-md')}</span><span class="sigts-saved-row-text"><strong>${title}</strong><small>${meta} · saved ${when}</small></span><span class="sigts-saved-row-chevron" aria-hidden="true">${icon(
+                'chevronRight',
+                'icon-sm'
+            )}</span></button>${remove}</article>`;
+        })
+        .join('');
+    return `<div class="sigts-saved-screen"><div class="section-card"><div class="section-header"><h3>${icon('bookmark', 'icon-sm')} Your saved list</h3></div><p class="animals-page-blurb">Stored on this device. Remove items by opening them and tapping the bookmark again.</p></div><div class="sigts-saved-list">${list}</div></div>`;
+}
+
 async function renderDashboardContent() {
     const animals = await Content.getAnimals();
     const recommendations = await AI.getRecommendations(6);
@@ -1401,7 +1964,8 @@ async function renderDashboardContent() {
         animalCount: animals.length
     });
     const aiStrip = renderDashboardAiModuleStrip(recommendations, personalized, trending, profile);
-    return `${shell}${aiStrip}${renderDashboardSpeciesSpotlight(animals)}`;
+    const tourismStrip = `${renderDiscoveryHomePanel()}${renderTourismBookmarksRow()}`;
+    return `${tourismStrip}${shell}${aiStrip}${renderDashboardSpeciesSpotlight(animals)}`;
 }
 
 function renderDashboardQuickGrid(animalCount = 0) {
@@ -1457,16 +2021,20 @@ async function renderAnimalsContent() {
         return `<div class="section-card"><div class="empty-state">No animal records available yet. Run backend seed to load the Bwindi catalogue.</div></div>`;
     }
 
-    const filtered = animals;
-    const filterBanner = '';
+    const focus = getValidatedAnimalTourFocus();
+    const filtered = animals.filter((a) => animalMatchesBwindiTourFocus(a, focus));
+    const thumbs = buildTourFocusThumbnailMap(animals);
+    const tourStrip = renderBwindiTourThemeStrip(animals, focus, thumbs);
 
-    const tourStrip = '';
+    const filterBanner = '';
 
     const intro = `<div class="section-card animals-page-intro"><div class="section-header"><h3>${icon('leaf', 'icon-sm')} Bwindi biodiversity</h3></div><div class="animals-page-blurb">Browse the species catalogue for ranger-style notes across primates, forest birds, elephants, butterflies, and other Red List taxa. Use Tour help if you want AI-assisted prompts before or after your trek.</div><div class="info-chip-row"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${JSON.stringify('Bwindi newcomer checklist: main sectors, wet vs dry pacing, gorilla visit etiquette (short bullets).')})">${icon('target', 'icon-sm')} Tour help: first trek</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${JSON.stringify('Birding from main Bwindi trailheads: which Albertine specialties are realistic without playback or nest pressure?')})">${icon('bird', 'icon-sm')} Tour help: birding</button></div></div>`;
 
-    const cards = filtered.map((animal) => renderAnimalSpeciesCardHtml(animal)).join('');
+    const searchToolbar = `<div class="section-card sigts-catalog-toolbar"><div class="section-header"><h3>${icon('search', 'icon-sm')} Find a species</h3></div><div class="info-chip-row" style="flex-wrap:wrap;"><input id="animals-catalog-search" type="search" class="auth-input" style="min-width:200px;flex:1;" placeholder="Search by name…" maxlength="220" autocomplete="off" /><button type="button" class="login-btn" onclick="applyAnimalsCatalogFilter()">${icon('search', 'icon-sm')} Filter</button><button type="button" class="small-btn ghost-btn" onclick="document.getElementById('animals-catalog-search').value='';applyAnimalsCatalogFilter();">Clear</button></div>${focus !== 'all' ? `<p class="animals-page-blurb" style="margin:8px 0 0;">Showing <strong>${focus.replace(/_/g, ' ')}</strong> — tap <strong>All species</strong> in themes above for the full list.</p>` : ''}</div>`;
 
-    return `${tourStrip}${intro}${filterBanner}<div class="animals-list animals-list--responsive">${cards}</div>`;
+    const cards = (filtered.length ? filtered : animals).map((animal) => renderAnimalSpeciesCardHtml(animal)).join('');
+
+    return `${tourStrip}${intro}${searchToolbar}${filterBanner}<div id="animals-catalog-grid" class="animals-list animals-list--responsive">${cards}</div>`;
 }
 
 function renderMapContent() {
@@ -1906,12 +2474,10 @@ async function refreshLiveMapData() {
                 const coords = coerceLatLng(loc);
                 if (!coords) return null;
                 const difficulty = getTrailDifficulty(loc);
-                return createDivMarker(
-                    coords.lat,
-                    coords.lng,
-                    markerClassForLocation(loc),
-                    `<strong>${escapeHtml(loc.name || 'POI')}</strong><br>${escapeHtml(loc.type || 'location')}<br>Trail: ${escapeHtml(difficulty)}`
-                );
+                const lid = escAttrBareUuid(loc.location_id || loc.id);
+                const ltype = escapeHtml(String(loc.location_type || loc.type || 'location'));
+                const popup = `<div><strong>${escapeHtml(loc.name || 'POI')}</strong><br>${ltype}<br>Trail: ${escapeHtml(difficulty)}<br><button type="button" class="small-btn" onclick="window.openParkLocationDetail('${lid}')">Details</button></div>`;
+                return createDivMarker(coords.lat, coords.lng, markerClassForLocation(loc), popup);
             })
             .filter(Boolean);
         liveMapLayers.markers.push(...poiMarkers);
@@ -2001,7 +2567,7 @@ async function refreshLiveMapData() {
                     const coords = coerceLatLng(p);
                     if (!coords) return null;
                     const dist = Geofence.calculateDistance(current.lat, current.lng, coords.lat, coords.lng);
-                    return { name: p.name || 'POI', dist };
+                    return { name: p.name || 'POI', dist, id: p.location_id || p.id };
                 })
                 .filter(Boolean)
                 .sort((a, b) => a.dist - b.dist)
@@ -2009,7 +2575,12 @@ async function refreshLiveMapData() {
             const nearbyNode = document.getElementById('mapNearbyList');
             if (nearbyNode) {
                 nearbyNode.innerHTML = nearby.length
-                    ? nearby.map((n) => `• ${escapeHtml(n.name)} (${(n.dist / 1000).toFixed(2)} km)`).join('<br>')
+                    ? nearby
+                          .map(
+                              (n) =>
+                                  `• <a href="#" style="color:inherit;text-decoration:underline;" onclick="event.preventDefault();openParkLocationDetail('${escAttrBareUuid(n.id)}');">${escapeHtml(n.name)}</a> (${(n.dist / 1000).toFixed(2)} km)`
+                          )
+                          .join('<br>')
                     : 'No nearby POIs available.';
             }
         } else {
@@ -2177,6 +2748,25 @@ async function renderProfileContent() {
     const user = Auth.getCurrentUser() || { name: 'Tourist' };
     const isITManager = user?.role === 'it_manager' || user?.userType === 'it_manager';
     const isGuide = user?.role === 'guide' || user?.userType === 'guide';
+    const isGuest = Boolean(user?.isGuest);
+
+    let serverProfile = null;
+    if (!isGuest) {
+        try {
+            serverProfile = await API.fetchUserProfile();
+        } catch (_) {
+            serverProfile = null;
+        }
+    }
+
+    const firstNameRaw = String(serverProfile?.first_name || '').trim();
+    const lastNameRaw = String(serverProfile?.last_name || '').trim();
+    const emailRaw = String(serverProfile?.email || user.email || '').trim();
+    const phoneRaw = String(serverProfile?.phone || '').trim();
+    const photoUrlRaw = String(serverProfile?.profile_pic_url || '').trim();
+    const emailVerified = Boolean(serverProfile?.email_verified);
+    const nationalityRaw = String(serverProfile?.role_data?.nationality || '').trim();
+
     let interestSet = ['wildlife', 'nature'];
     try {
         if (typeof AI !== 'undefined' && AI.getUserProfile) {
@@ -2186,6 +2776,93 @@ async function renderProfileContent() {
     } catch (_) {
         /**/
     }
+
+    if (serverProfile?.user_type === 'tourist' && serverProfile?.role_data?.interests != null) {
+        try {
+            const rd = serverProfile.role_data.interests;
+            const arr = typeof rd === 'string' ? JSON.parse(rd) : rd;
+            if (Array.isArray(arr) && arr.length) {
+                interestSet = [...new Set([...interestSet, ...arr.map(String)])];
+            }
+        } catch (_) {
+            /**/
+        }
+    }
+
+    let bioLocal = '';
+    try {
+        bioLocal = localStorage.getItem('sigts_profile_bio_v1') || '';
+    } catch (_) {
+        bioLocal = '';
+    }
+
+    let hasFeedback = false;
+    try {
+        const fb = await API.getMyFeedback(1);
+        hasFeedback = Array.isArray(fb) && fb.length > 0;
+    } catch (_) {
+        hasFeedback = false;
+    }
+
+    const loc = window.Geofence?.currentLocation || window.AppState?.currentLocation;
+    const lat = loc && Number.isFinite(Number(loc.lat)) ? Number(loc.lat) : null;
+    const lng = loc && Number.isFinite(Number(loc.lng)) ? Number(loc.lng) : null;
+    let insidePark = null;
+    if (lat != null && lng != null && typeof window.Geofence?.isInsidePark === 'function') {
+        try {
+            insidePark = !!window.Geofence.isInsidePark(lat, lng);
+        } catch (_) {
+            insidePark = null;
+        }
+    }
+
+    const offlineReady = Number(localStorage.getItem('offline_version') || '0') > 0;
+    const phoneOk = phoneRaw.replace(/[^0-9+]/g, '').length >= 6;
+    const nameOk = firstNameRaw.length + lastNameRaw.length > 1;
+
+    const completionItems = [
+        { ok: nameOk, weight: 12, label: 'Name on profile', action: 'scroll', scrollId: 'profile-section-personal' },
+        { ok: emailRaw.length > 3, weight: 10, label: 'Email on account', action: 'scroll', scrollId: 'profile-section-personal' },
+        { ok: phoneOk, weight: 18, label: 'Phone number', action: 'scroll', scrollId: 'profile-section-personal' },
+        {
+            ok: emailVerified,
+            weight: 12,
+            label: 'Email verified',
+            action: emailVerified ? 'scroll' : 'hint-verify',
+            scrollId: 'profile-section-personal'
+        },
+        { ok: lat != null && lng != null, weight: 18, label: 'GPS / park location', action: 'scroll', scrollId: 'profile-section-location' },
+        { ok: (interestSet || []).length >= 2, weight: 12, label: 'AI tour interests', action: 'scroll', scrollId: 'profile-section-ai' },
+        {
+            ok: offlineReady,
+            weight: 10,
+            label: 'Offline content pack',
+            action: 'scroll',
+            scrollId: isGuest ? null : 'profile-section-offline'
+        }
+    ];
+    if (!isITManager && !isGuest) {
+        completionItems.push({
+            ok: hasFeedback,
+            weight: 8,
+            label: 'Submitted feedback',
+            action: 'scroll',
+            scrollId: 'profile-section-feedback'
+        });
+    }
+    let completion = 0;
+    completionItems.forEach((r) => {
+        completion += r.ok ? r.weight : 0;
+    });
+    completion = Math.min(100, Math.round(completion));
+
+    const firstName = escapeHtml(firstNameRaw);
+    const lastName = escapeHtml(lastNameRaw);
+    const email = escapeHtml(emailRaw);
+    const phone = escapeHtml(phoneRaw);
+    const photoUrl = escapeHtml(photoUrlRaw);
+    const nationality = escapeHtml(nationalityRaw);
+
     const interestChips = [
         { id: 'wildlife', label: 'Wildlife' },
         { id: 'bird', label: 'Birding' },
@@ -2197,34 +2874,220 @@ async function renderProfileContent() {
     ]
         .map(
             (c) =>
-                `<label class="auth-check" style="display:flex;align-items:center;gap:8px;"><input type="checkbox" class="sigts-ai-interest-cb" value="${escapeHtml(c.id)}" ${interestSet.includes(c.id) ? 'checked' : ''}/> ${escapeHtml(c.label)}</label>`
+                `<label class="auth-check profile-check"><input type="checkbox" class="sigts-ai-interest-cb" value="${escapeHtml(c.id)}" ${interestSet.includes(c.id) ? 'checked' : ''}/> ${escapeHtml(c.label)}</label>`
         )
         .join('');
-    return `<div class="profile-page">
-    <div class="profile-header"><div class="profile-avatar">${icon('user', 'icon-xl')}</div><div class="profile-name">${escapeHtml(user.name)}</div><div class="profile-role">${user.role || 'tourist'}</div><div class="profile-dept">${user.department || ''}</div></div>
-    <div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} AI tour interests</h3></div><div class="section-card-body"><p class="animals-page-blurb">Used for tour ranking, the personalized dashboard strip, and content suggestions. Stored on this device and synced with general profile interests.</p><div class="info-chip-row" style="flex-wrap:wrap;">${interestChips}</div><button type="button" class="login-btn" onclick="saveAiTourInterestsFromProfile()">${icon('target', 'icon-sm')} Save AI interests</button><p class="ui-modal-muted" style="margin:0;">Voice: use Mic on Tour help — speech is transcribed in-browser, then answered like typed text.</p>    </div></div>
-    ${!isITManager ? `<div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Feedback Loop</h3></div><div class="section-card-body">
+
+    const avatarInner =
+        photoUrlRaw && /^https?:\/\//i.test(photoUrlRaw)
+            ? `<img src="${escapeHtml(photoUrlRaw)}" alt="" class="profile-photo-img" loading="lazy" decoding="async" />`
+            : `${icon('user', 'icon-xl')}`;
+
+    const personalReadonly = isGuest ? 'disabled' : '';
+    const guestBanner = isGuest
+        ? `<div class="profile-guest-banner"><strong>Guest session.</strong> Park-only access — register for a full profile, sightings, and sync.</div>`
+        : '';
+
+    const profileLoadBanner =
+        !isGuest && !serverProfile
+            ? `<div class="profile-sync-banner" role="status"><strong>Could not load account details from the server.</strong> You can still use this tab; check your connection and open Profile again, or continue editing if fields appear below.</div>`
+            : '';
+
+    const navBtn = (sectionId, label) =>
+        `<button type="button" class="profile-nav-link" onclick="sigtsProfileScrollTo('${sectionId}')">${escapeHtml(label)}</button>`;
+    const feedbackBlock =
+        !isITManager && !isGuest
+            ? `<section class="profile-panel profile-panel--wide" id="profile-section-feedback">
+        <div class="profile-panel-head"><h3>${icon('message', 'icon-sm')} Feedback</h3><span class="profile-panel-hint">Improve SIGTS from the field</span></div>
+        <div class="profile-panel-body">
         <label class="auth-field"><span class="auth-field-label">Rate your recent experience</span><select id="feedbackRating" class="auth-select"><option value="5">5 - Excellent</option><option value="4">4 - Good</option><option value="3">3 - Average</option><option value="2">2 - Poor</option><option value="1">1 - Very Poor</option></select></label>
         <label class="auth-field"><span class="auth-field-label">Category</span><select id="feedbackCategory" class="auth-select"><option value="tour">Tour</option><option value="guide">Guide</option><option value="content">Content</option><option value="app">App</option><option value="general">General</option><option value="bug_report">Bug Report</option><option value="feature_suggestion">Feature Suggestion</option><option value="survey">Survey</option><option value="nps">NPS</option></select></label>
         <label class="auth-field"><span class="auth-field-label">Tour Session ID (optional)</span><input id="feedbackTourSession" class="auth-input" placeholder="Paste tour session UUID if available" /></label>
         <label class="auth-field"><span class="auth-field-label">NPS Score (0-10, optional)</span><input id="feedbackNPS" type="number" min="0" max="10" class="auth-input" placeholder="How likely are you to recommend SIGTS?" /></label>
         <label class="auth-field"><span class="auth-field-label">Screenshot URL (optional)</span><input id="feedbackScreenshot" class="auth-input" placeholder="For bug reports: screenshot link" /></label>
-        <label class="auth-field"><span class="auth-field-label">Comment</span><textarea id="feedbackComment" class="auth-input" style="min-height:80px; padding-top:10px;" placeholder="Share what worked and what can improve..."></textarea></label>
-        <div style="display:flex; gap:10px; flex-wrap:wrap;">
-            <button class="small-btn" onclick="submitUserFeedback()">Submit Feedback</button>
-            <button class="small-btn" onclick="submitSatisfactionSurvey()">Quick Survey</button>
-            <button class="small-btn" onclick="submitNPSFeedback()">Submit NPS</button>
-            ${!isGuide ? '<button class="small-btn" onclick="submitTourCompletionFeedback()">Rate Last Tour</button><button class="small-btn" onclick="submitGuidePerformanceFeedback()">Rate Guide</button>' : ''}
-            <button class="small-btn" onclick="submitBugReportPrompt()">Report Bug</button>
-            <button class="small-btn" onclick="submitFeatureSuggestionPrompt()">Suggest Feature</button>
+        <label class="auth-field"><span class="auth-field-label">Comment</span><textarea id="feedbackComment" class="auth-input profile-textarea" placeholder="Share what worked and what can improve..."></textarea></label>
+        <div class="profile-btn-row">
+            <button type="button" class="small-btn" onclick="submitUserFeedback()">Submit Feedback</button>
+            <button type="button" class="small-btn" onclick="submitSatisfactionSurvey()">Quick Survey</button>
+            <button type="button" class="small-btn" onclick="submitNPSFeedback()">Submit NPS</button>
+            ${!isGuide ? '<button type="button" class="small-btn" onclick="submitTourCompletionFeedback()">Rate Last Tour</button><button type="button" class="small-btn" onclick="submitGuidePerformanceFeedback()">Rate Guide</button>' : ''}
+            <button type="button" class="small-btn" onclick="submitBugReportPrompt()">Report Bug</button>
+            <button type="button" class="small-btn" onclick="submitFeatureSuggestionPrompt()">Suggest Feature</button>
         </div>
-        <div id="feedbackList" class="seasonal-list"><div class="seasonal-item">Loading your recent feedback...</div></div>
-    </div></div>` : ''}
-    <div class="profile-menu"><div class="menu-item" onclick="downloadOfflineContent()"><div class="menu-icon">${icon('download', 'icon-md')}</div><div class="menu-text">Download Offline Content</div></div>${isITManager ? `<div class="menu-item" onclick="handleMFASetup()"><div class="menu-icon">${icon('shield', 'icon-md')}</div><div class="menu-text">Configure MFA</div></div>` : ''}<div class="menu-item" onclick="Auth.logout()"><div class="menu-icon">${icon('logout', 'icon-md')}</div><div class="menu-text">Logout</div></div></div>
-    </div>`;
+        <div id="feedbackList" class="seasonal-list profile-feedback-list"><div class="seasonal-item">Loading your recent feedback...</div></div>
+        </div></section>`
+            : !isITManager && isGuest
+              ? `<section class="profile-panel profile-panel--wide" id="profile-section-feedback"><div class="profile-panel-head"><h3>${icon('message', 'icon-sm')} Feedback</h3></div><div class="profile-panel-body"><p class="ui-modal-muted">Create a full account to submit structured feedback and NPS.</p></div></section>`
+              : '';
+
+    const secureBlock = !isGuest
+        ? `<section class="profile-panel" id="profile-section-secure">
+        <div class="profile-panel-head"><h3>${icon('shield', 'icon-sm')} Secure</h3></div>
+        <div class="profile-panel-body profile-secure-grid">
+            <button type="button" class="profile-secure-tile" onclick="navigateTo('login'); showToast('Use Forgot password on the sign-in screen.', 'info');">
+                ${icon('key', 'icon-md')}<span>Password</span><small>Reset via email from login</small>
+            </button>
+            <button type="button" class="profile-secure-tile" onclick="handleMFASetup()">${icon('shield', 'icon-md')}<span>Access / MFA</span><small>Authenticator or SMS at sign-in</small></button>
+            <div class="profile-secure-tile profile-secure-tile--muted">${icon('clock', 'icon-md')}<span>Sessions</span><small>Idle timeout protects your account on shared devices</small></div>
+        </div></section>`
+        : '';
+
+    const deactivateBlock = !isGuest
+        ? `<section class="profile-panel profile-panel--danger-zone" id="profile-section-delete">
+        <div class="profile-panel-head"><h3>${icon('trash', 'icon-sm')} Account</h3></div>
+        <div class="profile-panel-body">
+            <p class="animals-page-blurb">Deactivating ends access immediately. An IT manager must re-enable your account before you can sign in again.</p>
+            <button type="button" class="small-btn danger profile-delete-btn" onclick="deactivateMyAccountFromProfile()">${icon('user', 'icon-sm')} Delete / deactivate account</button>
+        </div></section>`
+        : '';
+
+    return `<div class="profile-layout">
+    <aside class="profile-layout-nav" aria-label="Profile sections">
+        <div class="profile-nav-brand"><span class="profile-nav-logo">${icon('map', 'icon-sm')}</span><span>SIGTS</span></div>
+        <div class="profile-nav-group">
+            <div class="profile-nav-label">Profile</div>
+            ${navBtn('profile-section-photo', 'Photo')}
+            ${navBtn('profile-section-personal', 'Personal info')}
+            ${navBtn('profile-section-location', 'Location')}
+            ${navBtn('profile-section-bio', 'Bio')}
+            ${navBtn('profile-section-ai', 'AI interests')}
+            ${!isITManager ? navBtn('profile-section-feedback', 'Feedback') : ''}
+            ${navBtn('profile-section-notifications', 'Notifications')}
+            ${!isGuest ? navBtn('profile-section-offline', 'Offline & sync') : ''}
+            ${!isGuest ? navBtn('profile-section-secure', 'Secure') : ''}
+        </div>
+        <div class="profile-nav-footer">
+            <button type="button" class="profile-nav-link profile-nav-link--ghost" onclick="downloadOfflineContent()">${icon('download', 'icon-sm')} Offline pack</button>
+            ${!isGuest ? `<button type="button" class="profile-nav-link profile-nav-link--ghost" onclick="handleMFASetup()">${icon('shield', 'icon-sm')} MFA setup</button>` : ''}
+            <button type="button" class="profile-nav-link profile-nav-link--ghost" onclick="Auth.logout()">${icon('logout', 'icon-sm')} Log out</button>
+            ${!isGuest ? `<button type="button" class="profile-nav-link profile-nav-link--danger" onclick="sigtsProfileScrollTo('profile-section-delete')">${icon('trash', 'icon-sm')} Delete account</button>` : ''}
+        </div>
+    </aside>
+
+    <div class="profile-layout-main">
+        <header class="profile-main-header">
+            <h1 class="profile-main-title">Edit profile</h1>
+            <p class="profile-main-sub">${escapeHtml(formatRoleName(user.role || user.userType || 'tourist'))} · ${escapeHtml(user.name || user.username || 'Visitor')}</p>
+        </header>
+        ${guestBanner}
+
+        <section class="profile-panel" id="profile-section-photo">
+            <div class="profile-panel-head"><h3>Profile photo</h3><span class="profile-panel-hint">Square image looks best in headers</span></div>
+            <div class="profile-panel-body profile-photo-row">
+                <div class="profile-avatar-large" aria-hidden="true">${avatarInner}</div>
+                <div class="profile-photo-fields">
+                    <label class="auth-field"><span class="auth-field-label">Image URL</span><input id="profilePhotoUrl" class="auth-input" placeholder="https://…" value="${photoUrl}" ${personalReadonly} /></label>
+                    <p class="ui-modal-muted">At least 400×400 px recommended. Use a direct HTTPS link (JPG or PNG).</p>
+                    <div class="profile-btn-row">
+                        <button type="button" class="small-btn btn-primary" onclick="saveProfilePhotoUrl()" ${personalReadonly ? 'disabled' : ''}>Save photo</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="profile-panel" id="profile-section-personal">
+            <div class="profile-panel-head"><h3>Personal info</h3>${!isGuest ? `<button type="button" class="profile-panel-edit" onclick="sigtsProfileScrollTo('profile-section-personal')">${icon('edit', 'icon-sm')} Edit</button>` : ''}</div>
+            <div class="profile-panel-body profile-form-grid">
+                <label class="auth-field"><span class="auth-field-label">First name</span><input id="profileFirstName" class="auth-input" value="${firstName}" autocomplete="given-name" ${personalReadonly} /></label>
+                <label class="auth-field"><span class="auth-field-label">Last name</span><input id="profileLastName" class="auth-input" value="${lastName}" autocomplete="family-name" ${personalReadonly} /></label>
+                <label class="auth-field profile-field-span2"><span class="auth-field-label">Email</span><input id="profileEmail" class="auth-input" value="${email}" readonly title="Email changes are not supported in-app" /></label>
+                <label class="auth-field profile-field-span2"><span class="auth-field-label">Phone</span><input id="profilePhone" class="auth-input" type="tel" value="${phone}" autocomplete="tel" placeholder="+256…" ${personalReadonly} /></label>
+                ${!isGuide && !isITManager && !isGuest ? `<label class="auth-field profile-field-span2"><span class="auth-field-label">Nationality</span><input id="profileNationality" class="auth-input" value="${nationality}" autocomplete="country-name" /></label>` : ''}
+                <div class="profile-field-span2 profile-btn-row">
+                    <button type="button" class="small-btn btn-primary" onclick="saveProfilePersonalFromPanel()" ${personalReadonly ? 'disabled' : ''}>Save changes</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="profile-panel" id="profile-section-location">
+            <div class="profile-panel-head"><h3>${icon('pin', 'icon-sm')} Park location</h3><span class="profile-panel-hint">Used for geofencing and ranger visibility</span></div>
+            <div class="profile-panel-body">
+                <div class="profile-location-status ${insidePark === true ? 'is-inside' : insidePark === false ? 'is-outside' : 'is-unknown'}">
+                    <strong>${insidePark === true ? 'Inside park boundary' : insidePark === false ? 'Outside park boundary' : 'GPS not yet available'}</strong>
+                    <p class="ui-modal-muted">${lat != null && lng != null ? `Last fix: ${lat.toFixed(5)}, ${lng.toFixed(5)}` : 'Allow location in the browser, then open the Map tab to refresh coordinates.'}</p>
+                </div>
+                <div class="profile-btn-row">
+                    <button type="button" class="small-btn" onclick="navigateTo('map')">${icon('map', 'icon-sm')} Open map</button>
+                    <button type="button" class="small-btn ghost-btn" onclick="tryRefreshProfileLocation()">${icon('target', 'icon-sm')} Refresh GPS</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="profile-panel" id="profile-section-bio">
+            <div class="profile-panel-head"><h3>Bio</h3><span class="profile-panel-hint">Stored on this device for drafts and notes</span></div>
+            <div class="profile-panel-body">
+                <label class="auth-field"><span class="auth-field-label">About you</span><textarea id="profileBioLocal" class="auth-input profile-textarea" placeholder="Interests, languages, accessibility needs for guides…">${escapeHtml(bioLocal)}</textarea></label>
+                <div class="profile-btn-row">
+                    <button type="button" class="small-btn btn-primary" onclick="saveProfileBioLocal()">Save bio locally</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="profile-panel profile-panel--wide" id="profile-section-ai">
+            <div class="profile-panel-head"><h3>${icon('target', 'icon-sm')} AI tour interests</h3><span class="profile-panel-hint">Dashboard ranking &amp; suggestions</span></div>
+            <div class="profile-panel-body">
+                <p class="animals-page-blurb">Synced with general profile interests for tourists. Voice: use the microphone on Tour help — speech stays in-browser until you send text.</p>
+                <div class="profile-interest-grid">${interestChips}</div>
+                <button type="button" class="small-btn btn-primary" onclick="saveAiTourInterestsFromProfile()">${icon('target', 'icon-sm')} Save AI interests</button>
+            </div>
+        </section>
+
+        ${feedbackBlock}
+
+        <section class="profile-panel" id="profile-section-notifications">
+            <div class="profile-panel-head"><h3>${icon('bell', 'icon-sm')} Notifications &amp; privacy</h3></div>
+            <div class="profile-panel-body"><div id="profileConsentsMount" class="profile-consents-mount"><p class="ui-modal-muted">Loading preferences…</p></div></div>
+        </section>
+
+        ${!isGuest ? `<section class="profile-panel" id="profile-section-offline">
+            <div class="profile-panel-head"><h3>${icon('download', 'icon-sm')} Offline &amp; sync</h3></div>
+            <div class="profile-panel-body">
+                <p class="animals-page-blurb">Cache animals, map tiles, and safety copy before you lose signal inside the forest.</p>
+                <button type="button" class="small-btn" onclick="downloadOfflineContent()">${icon('download', 'icon-sm')} Download offline content</button>
+            </div></section>` : ''}
+
+        ${secureBlock}
+        ${deactivateBlock}
+    </div>
+
+    <aside class="profile-layout-aside" aria-label="Profile completion">
+        <div class="profile-completion-card">
+            <h3>Complete your profile</h3>
+            <div class="profile-completion-ring" style="--p:${completion};" aria-label="${completion}% complete">
+                <div class="profile-completion-ring-inner"><strong>${completion}%</strong><span>done</span></div>
+            </div>
+            <ul class="profile-completion-list">
+                ${completionRows
+                    .map(
+                        (r) =>
+                            `<li class="${r.ok ? 'is-done' : ''}"><span class="profile-completion-check">${r.ok ? icon('check', 'icon-sm') : '○'}</span><span>${escapeHtml(r.label)}</span><span class="profile-completion-w">${r.weight}%</span></li>`
+                    )
+                    .join('')}
+            </ul>
+            ${isGuest ? `<p class="ui-modal-muted">Guest progress is for this session only.</p>` : ''}
+        </div>
+    </aside>
+</div>`;
 }
 
-function renderInfoContent() {
+/** Safe for inline HTML attributes fed with UUIDs only. */
+function escAttrBareUuid(id) {
+    return String(id || '').replace(/[^a-zA-Z0-9-]/g, '');
+}
+
+function formatSigtsInstant(iso) {
+    if (!iso) return '—';
+    try {
+        return new Date(iso).toLocaleString(undefined, {
+            dateStyle: 'medium',
+            timeStyle: 'short'
+        });
+    } catch (_) {
+        return String(iso);
+    }
+}
+
+async function renderInfoContent() {
     const planPrompt = JSON.stringify(
         'One-week low-footprint trekking plan in southwest Uganda, Bwindi core: daily rhythm, water, altitude, tipping, rainforest kit, radio check with guides.');
     const conservationPrompt = JSON.stringify(
@@ -2232,29 +3095,123 @@ function renderInfoContent() {
     const birdPrompt = JSON.stringify(
         'Rough bird tally people quote for Bwindi; Albertine families worth learning without stressing nests or playback.');
 
-    return `<div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Park snapshot</h3></div><div class="park-info-copy">Roughly <strong>331 km²</strong> of steep montane rainforest on the Albertine Rift shoulder, known for mountain gorillas, rich birdlife, elephants, diverse primates, and dense montane vegetation. SIGTS stitches maps, ranger copy, offline packs, and this app’s Tour help tab so groups can cross-check ecology, etiquette, culture, and safety on the trail.</div><div class="info-chip-row"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${conservationPrompt});">${icon('book', 'icon-sm')} Tour help: conservation gist</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${birdPrompt});">${icon('bird', 'icon-sm')} Tour help: birds</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${planPrompt});">${icon('map', 'icon-sm')} Tour help: week pacing</button></div><button type="button" class="small-btn ghost-btn" style="margin-top:10px;" onclick="submitContentHelpfulness('info', '', 'Park snapshot')">${icon('target', 'icon-sm')} Helpful?</button></div>
+    let weather = null;
+    let catalogMeta = null;
+    let faqs = [];
+    let tips = [];
+    let guide = [];
+    try {
+        weather = await API.getParkWeatherForecast();
+        if (!weather) {
+            const w = await Content.getWeather?.();
+            if (w?.temperature !== undefined) {
+                weather = {
+                    temperatureC: w.temperature,
+                    condition: w.condition || 'Partly cloudy / mist',
+                    humidityPct: w.humidity,
+                    forecastSlices: []
+                };
+            }
+        }
+    } catch (_) {
+        weather = null;
+    }
+
+    try {
+        [catalogMeta, faqs, tips, guide] = await Promise.all([
+            API.getContentCatalogMeta().catch(() => null),
+            API.getFaqs().catch(() => []),
+            API.getSafetyTips().catch(() => []),
+            API.getParkGuide().catch(() => [])
+        ]);
+    } catch (_) {
+        /**/
+    }
+
+    const offlineV = Number(localStorage.getItem('offline_version') || '0');
+
+    const guideHtml =
+        guide && guide.length
+            ? `<div class="section-card sigts-info-guide"><div class="section-header"><h3>${icon('info', 'icon-sm')} Park fees & rules (structured)</h3></div><div style="padding:0 18px 16px;">${guide
+                  .map(
+                      (item) =>
+                          `<div style="margin-top:14px;"><strong>${escapeHtml(item.category || 'general').replace(/_/g, ' ')} · ${escapeHtml(item.title || 'Note')}</strong><p>${escapeHtml(
+                              item.content_en || ''
+                          )}</p></div>`
+                  )
+                  .join('')}</div></div>`
+            : `<div class="section-card"><div class="section-header"><h3>${icon('info', 'icon-sm')} Park fees & rules</h3></div><p class="animals-page-blurb" style="padding:16px;margin:0;">Connect once and download offline content from Profile; structured fees and rules populate after the catalogue sync runs.</p></div>`;
+
+    const weatherHtml = weather
+        ? `<div class="section-card"><div class="section-header"><h3>${icon('rain', 'icon-sm')} Weather snapshot</h3></div><div style="padding:16px;line-height:1.6;">
+            <strong>${escapeHtml(String(weather.label || 'Bwindi sector'))}</strong><br/>
+            ${escapeHtml(String(weather.condition || 'Forecast'))} • <strong>${escapeHtml(String(weather.temperatureC))} °C</strong>
+            ${Number.isFinite(weather.humidityPct) ? ` • Humidity ~${weather.humidityPct}%` : ''}
+            ${Number.isFinite(weather.rainProbabilityPct)
+            ? `<br>Rain outlook (next slices): ~${weather.rainProbabilityPct}% chance now`
+            : ''}
+           </div></div>`
+        : '';
+
+    const safetyHtml =
+        tips && tips.length
+            ? `<div class="section-card"><div class="section-header"><h3>${icon('shield', 'icon-sm')} Safety tips</h3></div><div style="padding:12px 18px;">${tips
+                  .slice()
+                  .sort((a, b) => Number(a.priority || 9) - Number(b.priority || 9))
+                  .map(
+                      (tip) =>
+                          `<div class="seasonal-item" style="margin-bottom:8px;"><strong>${escapeHtml(tip.category || '')} • ${escapeHtml(
+                              tip.title || 'Tip'
+                          )}</strong><br/>${escapeHtml(tip.content || '')}<br/><span style="opacity:.72;">Priority ${escapeHtml(String(tip.priority ?? '–'))}</span></div>`
+                  )
+                  .join('')}</div></div>`
+            : '';
+
+    const faqsHtml =
+        faqs && faqs.length
+            ? `<div class="section-card"><div class="section-header"><h3>${icon('note', 'icon-sm')} FAQs</h3></div><div style="padding:12px 18px;">${faqs
+                  .map(
+                      (faq) =>
+                          `<div class="seasonal-item" style="margin-bottom:10px;"><strong>${escapeHtml(faq.category || '').replace(/_/g, ' ')}</strong><details style="margin-top:6px;"><summary>${escapeHtml(
+                              faq.question_en || ''
+                          )}</summary><p>${escapeHtml(faq.answer_en || '')}</p><div style="margin-top:6px;"><button type="button" class="small-btn ghost-btn" onclick="sigtsSubmitFaqHelpful('${escAttrBareUuid(faq.faq_id)}')">${icon('smile', 'icon-sm')} Mark helpful (${escapeHtml(String(faq.helpful_count ?? 0))})</button><button type="button" class="small-btn ghost-btn" onclick="submitContentHelpfulness('faq','${escAttrBareUuid(faq.faq_id)}', ${JSON.stringify(faq.question_en || 'FAQ')} )">${icon('target', 'icon-sm')} Content feedback</button></div></details></div>`
+                  )
+                  .join('')}</div></div>`
+            : '';
+
+    const metaCounts = catalogMeta?.counts || {};
+    const metaTimes = catalogMeta?.updated_at || {};
+    const versionHtml = `<div class="section-card"><div class="section-header"><h3>${icon('clock', 'icon-sm')} Catalogue & offline version</h3></div><div style="padding:16px;">
+        <strong>Offline pack rev.</strong> ${escapeHtml(String(offlineV))}<br/>
+        <strong>Server catalogue rows</strong> — Animals: ${escapeHtml(String(metaCounts.animals ?? '—'))}, Locations: ${escapeHtml(String(metaCounts.locations ?? '—'))}<br/>
+        <strong>Last updated (UTC snapshot)</strong><br/>
+        Animals: ${escapeHtml(formatSigtsInstant(metaTimes.animals))}<br/>
+        Locations: ${escapeHtml(formatSigtsInstant(metaTimes.locations))}<br/>
+        FAQs: ${escapeHtml(formatSigtsInstant(metaTimes.faqs))}<br/>
+        Safety tips: ${escapeHtml(formatSigtsInstant(metaTimes.safety_tips))}<br/>
+        Park guide: ${escapeHtml(formatSigtsInstant(metaTimes.park_guide))}
+       </div></div>`;
+
+    return `${weatherHtml}<div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Park snapshot</h3></div><div class="park-info-copy">Roughly <strong>331 km²</strong> of steep montane rainforest on the Albertine Rift shoulder, known for mountain gorillas, rich birdlife, elephants, diverse primates, and dense montane vegetation. SIGTS stitches maps, ranger copy, offline packs, and this app’s Tour help tab so groups can cross-check ecology, etiquette, culture, and safety on the trail.</div><div class="info-chip-row"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${conservationPrompt});">${icon('book', 'icon-sm')} Tour help: conservation gist</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${birdPrompt});">${icon('bird', 'icon-sm')} Tour help: birds</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${planPrompt});">${icon('map', 'icon-sm')} Tour help: week pacing</button></div><button type="button" class="small-btn ghost-btn" style="margin-top:10px;" onclick="submitContentHelpfulness('info', '', 'Park snapshot')">${icon('target', 'icon-sm')} Helpful?</button></div>
+${guideHtml}
+${safetyHtml}
+${faqsHtml}
+${versionHtml}
     <div class="section-card"><div class="section-header"><h3>${icon('clock', 'icon-sm')} Opening Hours</h3></div><div style="padding:16px;">Typical UWA gate window: <strong>06:00 to 19:00</strong> (confirm with your issued permit).<div class="info-chip-row" style="margin-top:10px;"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${JSON.stringify('Packing: dawn gorilla briefing vs afternoon forest walk in Bwindi.')});">${icon('target', 'icon-sm')} Tour help: gear timing</button></div><button class="small-btn" style="margin-top:10px;" onclick="submitContentHelpfulness('info', '', 'Opening Hours')">${icon('target', 'icon-sm')} Helpful?</button></div></div>
     <div class="section-card"><div class="section-header"><h3>${icon('phone', 'icon-sm')} Emergency</h3></div><div style="padding:16px;">${icon('shield', 'icon-sm')} UWA / emergency coordination: replace placeholder with live operations desk numbers before production.<br><button type="button" class="small-btn" style="margin-top:10px;" onclick="navigateToAIWithPrompt(${JSON.stringify('Trail injury before medics: who gets called first on a Bwindi trek (order of escalation).')});">${icon('target', 'icon-sm')} Tour help: casualty chain</button><br><button class="small-btn" style="margin-top:10px;" onclick="submitContentHelpfulness('info', '', 'Emergency Contacts')">${icon('target', 'icon-sm')} Helpful?</button></div></div>`;
 }
 
 function renderAIChatContent() {
     return `<div class="section-card ai-chat-panel">
-        <div class="section-header"><h3>${icon('feather', 'icon-sm')} Let's Chat</h3></div>
-        <p id="aiPrefillBanner" class="ai-prefill-banner" aria-live="polite">Animals, Culture, or Info may drop starter text here. Always edit before sending.</p>
-        <div id="aiChatMessages" class="ai-chat-messages" role="log" aria-relevant="additions text" aria-live="polite">
-            <div class="rec-card ai-chat-message">
-                <div class="rec-info">
-                    <div class="rec-title">How this works</div>
-                    <div class="rec-reason">This module covers profiling (Profile → AI interests), ranked tour ideas, a personalized dashboard strip, trending views on this device, similar species from the catalogue, seasonal notes, NLP answers with listed sources, optional voice-to-text via Mic, GPS-aware replies when online, feedback to retune scores, and an offline query log. Not a substitute for your guide or UWA rules.</div>
-                </div>
-            </div>
-        </div>
+        <div class="section-header ai-chat-panel-header"><h3>${icon('feather', 'icon-sm')} Bwindi assistant</h3><button type="button" class="small-btn ghost-btn" onclick="clearSigtsChatThread()">Clear chat</button></div>
+        <p id="aiPrefillBanner" class="ai-prefill-banner" aria-live="polite">Animals, Culture, or Info can drop a draft here. Shift+Enter adds a line; Enter sends.</p>
+        <div id="aiChatMessages" class="ai-chat-messages" role="log" aria-relevant="additions text" aria-live="polite">${getSigtsChatInitialMessagesHtml()}</div>
     </div>
-    <div class="ai-chat-composer-float" role="region" aria-label="AI chat composer">
+    <div class="ai-chat-composer-float" role="region" aria-label="Chat composer">
         <div class="ai-chat-composer">
-            <input id="aiChatInput" class="auth-input" placeholder="Your question (edit any pre-filled draft)..." onkeydown="handleAIChatInputKeydown(event)" />
-            <button type="button" id="aiChatMicBtn" class="small-btn" title="Speak your question (browser Speech Recognition)" onclick="startTourHelpVoiceCapture()">${icon('target', 'icon-sm')} Mic</button>
-            <button class="login-btn" onclick="sendAIChatMessage()">Send</button>
+            <textarea id="aiChatInput" class="auth-input ai-chat-textarea" rows="1" placeholder="Ask about your Bwindi visit…" onkeydown="handleAIChatInputKeydown(event)" oninput="aiChatAutosizeTextarea(this)"></textarea>
+            <button type="button" id="aiChatMicBtn" class="small-btn" title="Speak your question (browser speech recognition)" onclick="startTourHelpVoiceCapture()">${icon('mic', 'icon-sm')} Mic</button>
+            <button type="button" class="login-btn" id="aiChatSendBtn" onclick="sendAIChatMessage()">Send</button>
         </div>
     </div>`;
 }
@@ -2355,7 +3312,7 @@ async function renderITManagerDashboard() {
     const liveOps = valueOr(1, { peers: [], intranetStatus: {}, syncStatus: {} });
     const rareAlerts = valueOr(2, []);
     const rareAlertsHtml = `<div class="section-card"><div class="section-header"><h3>${icon('bell', 'icon-sm')} Rare Sighting Alerts</h3></div><div class="seasonal-list">${(rareAlerts || []).length ? rareAlerts.map((a) => `<div class="seasonal-item rare-alert-item"><strong>${escapeHtml((a.risk_level || 'high').toUpperCase())}</strong> • ${escapeHtml(a.animal_name || 'Wildlife')} @ ${escapeHtml(a.location_name || 'Unknown')} (${a.number_observed || 0}) ${a.acknowledged ? '<span style="color:#2E7D32;">(Acknowledged)</span>' : `<button class=\"small-btn\" onclick=\"ackRareAlertPrompt('${a.alert_id}')\">Acknowledge</button>`}<br><span style="color:#6B705C;">${escapeHtml(a.reason || '')}</span></div>`).join('') : '<div class="seasonal-item">• No rare alerts in recent reports.</div>'}</div></div>`;
-    const predictiveCtaHtml = `<div class="section-card pa-admin-cta"><div class="section-header"><h3>${icon('chart', 'icon-sm')} Predictive Analytics & Reporting</h3></div><p class="animals-page-blurb">Forecast congestion, staffing, visitor flows, sightings, anomalies, satisfaction, demographics, exports, schedules, and model retraining—all in §3.1.1.11 tooling.</p><div class="info-chip-row" style="flex-wrap:wrap;gap:8px;"><button type="button" class="login-btn" onclick="navigateTo('it_predictive_analytics')">${icon('target', 'icon-sm')} Open Predictive Analytics workspace</button></div></div>`;
+    const predictiveCtaHtml = `<div class="section-card pa-admin-cta"><div class="section-header"><h3>${icon('chart', 'icon-sm')} Predictive Analytics & Reporting</h3></div><p class="animals-page-blurb">Forecast congestion, staffing, visitor flows, sightings, anomalies, satisfaction, demographics, exports, schedules, and model retraining—all in §3.1.1.11 tooling.</p><div class="info-chip-row" style="flex-wrap:wrap;gap:8px;"><button type="button" class="login-btn" onclick="navigateTo('it_predictive_analytics')">${icon('activity', 'icon-sm')} Open Predictive Analytics workspace</button></div></div>`;
     const animals = await Content.getAnimals();
     const avgStars = Number(metrics.averageRating || 0);
     const itKpis = [
@@ -2365,6 +3322,15 @@ async function renderITManagerDashboard() {
         { label: 'Avg Rating', value: avgStars.toFixed(1), hint: '/ 5' }
     ];
     const liveUsersHtml = renderLiveUserRows(liveOps.peers || []);
+    let accountDirHtml = '';
+    try {
+        const dir = await API.request('/admin/users?limit=100&offset=0');
+        const list = Array.isArray(dir?.users) ? dir.users : [];
+        accountDirHtml = renderItAccountDirectory(list, Auth.getCurrentUser()?.user_id);
+    } catch (e) {
+        console.warn('[IT dashboard] account directory failed:', e);
+        accountDirHtml = renderItAccountDirectory([], Auth.getCurrentUser()?.user_id);
+    }
     return `<div class="it-dashboard">${renderKpiStrip(itKpis)}${renderDashboardShell({
         primaryTitle: 'System Recommendations',
         primaryIcon: 'database',
@@ -2407,7 +3373,7 @@ async function renderITManagerDashboard() {
         ],
         seasonalActionLabel: 'View Suggestions',
         animalCount: animals.length
-    })}<div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Current Users (Realtime)</h3><span id="adminLiveUsersStamp" class="status-badge neutral">Updated just now • ${(liveOps.peers || []).length} active now / ${Number(metrics.activeUsers || 0)} total</span></div><div id="adminLiveUsersList">${liveUsersHtml}</div></div>${predictiveCtaHtml}<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('building', 'icon-sm')} Intranet Connectivity</h3></div><div class="analytics-list"><div class="analytics-row"><span>Intranet</span><div class="analytics-bar"><div style="width:${liveOps.intranetStatus?.isIntranet ? 100 : 35}%;"></div></div><strong>${liveOps.intranetStatus?.isIntranet ? 'Connected' : 'External'}</strong></div><div class="analytics-row"><span>Device IP</span><span></span><strong>${escapeHtml(liveOps.intranetStatus?.ip || 'Unknown')}</strong></div><div class="analytics-row"><span>Pending Sync</span><span></span><strong>${liveOps.syncStatus?.pending || liveOps.syncStatus?.pending_items || 0}</strong></div></div></div><div class="section-card"><div class="section-header"><h3>${icon('user', 'icon-sm')} Live Peers / Guests</h3></div><div class="seasonal-list">${(liveOps.peers || []).length ? liveOps.peers.slice(0, 8).map((p) => `<div class="seasonal-item">• ${escapeHtml(p.name || 'Peer')} (${escapeHtml(p.type || 'user')})${p.location ? ` @ ${Number(p.location.lat).toFixed(4)}, ${Number(p.location.lng).toFixed(4)}` : ''}</div>`).join('') : '<div class="seasonal-item">• No live peers detected in last 5 minutes.</div>'}</div></div></div>${rareAlertsHtml}<div class="admin-actions"><button class="admin-action-btn" onclick="handleMFASetup()">${icon('shield', 'icon-sm')} Configure MFA</button><button class="admin-action-btn" onclick="clearAllCache()">Clear Cache</button><button class="admin-action-btn" onclick="exportData()">Export Data</button><button class="admin-action-btn danger" onclick="resetApp()">Reset App</button></div></div>`;}
+    })}<div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Current Users (Realtime)</h3><span id="adminLiveUsersStamp" class="status-badge neutral">Updated just now • ${(liveOps.peers || []).length} active now / ${Number(metrics.activeUsers || 0)} total</span></div><div id="adminLiveUsersList">${liveUsersHtml}</div></div>${accountDirHtml}${predictiveCtaHtml}<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('building', 'icon-sm')} Intranet Connectivity</h3></div><div class="analytics-list"><div class="analytics-row"><span>Intranet</span><div class="analytics-bar"><div style="width:${liveOps.intranetStatus?.isIntranet ? 100 : 35}%;"></div></div><strong>${liveOps.intranetStatus?.isIntranet ? 'Connected' : 'External'}</strong></div><div class="analytics-row"><span>Device IP</span><span></span><strong>${escapeHtml(liveOps.intranetStatus?.ip || 'Unknown')}</strong></div><div class="analytics-row"><span>Pending Sync</span><span></span><strong>${liveOps.syncStatus?.pending || liveOps.syncStatus?.pending_items || 0}</strong></div></div></div><div class="section-card"><div class="section-header"><h3>${icon('user', 'icon-sm')} Live Peers / Guests</h3></div><div class="seasonal-list">${(liveOps.peers || []).length ? liveOps.peers.slice(0, 8).map((p) => `<div class="seasonal-item">• ${escapeHtml(p.name || 'Peer')} (${escapeHtml(p.type || 'user')})${p.location ? ` @ ${Number(p.location.lat).toFixed(4)}, ${Number(p.location.lng).toFixed(4)}` : ''}</div>`).join('') : '<div class="seasonal-item">• No live peers detected in last 5 minutes.</div>'}</div></div></div>${rareAlertsHtml}<div class="admin-actions"><button class="admin-action-btn" onclick="handleMFASetup()">${icon('shield', 'icon-sm')} Configure MFA</button><button class="admin-action-btn" onclick="clearAllCache()">Clear Cache</button><button class="admin-action-btn" onclick="exportData()">Export Data</button><button class="admin-action-btn danger" onclick="resetApp()">Reset App</button></div></div>`;}
 
 // =====================================================
 // PREDICTIVE ANALYTICS (§3.1.1.11) — IT Manager workspace
@@ -3026,31 +3992,96 @@ window.handleAIChatInputKeydown = function (event) {
     window.sendAIChatMessage();
 };
 
-window.sendAIChatMessage = async function() {
+window.clearSigtsChatThread = function clearSigtsChatThread() {
+    clearSigtsChatHistoryStorage();
+    const messages = document.getElementById('aiChatMessages');
+    if (!messages) return;
+    messages.innerHTML = getSigtsChatWelcomeHtml();
+    window.__sigtsLastTourHelpQuestion = '';
+    const ta = document.getElementById('aiChatInput');
+    if (ta) {
+        ta.value = '';
+        aiChatAutosizeTextarea(ta);
+    }
+};
+
+window.sigtsChatQuickAsk = function sigtsChatQuickAsk(text) {
+    const q = String(text || '').trim();
+    if (!q) return;
+    const input = document.getElementById('aiChatInput');
+    if (input) {
+        input.value = q;
+        aiChatAutosizeTextarea(input);
+    }
+    window.sendAIChatMessage();
+};
+
+window.sendAIChatMessage = async function () {
     const input = document.getElementById('aiChatInput');
     const messages = document.getElementById('aiChatMessages');
+    const sendBtn = document.getElementById('aiChatSendBtn');
     if (!input || !messages) return;
 
-    const question = input.value.trim();
+    const question = String(input.value || '').trim();
     if (!question) return;
     if (question.length > 2000) {
         showToast('Message is too long. Please keep it under 2000 characters.', 'warning');
         return;
     }
 
-    messages.innerHTML += `<div class="rec-card ai-chat-message"><div class="rec-info"><div class="rec-title">You</div><div class="rec-reason">${escapeHtml(question)}</div></div></div>`;
+    messages.querySelector('.ai-chat-starters')?.setAttribute('hidden', '');
+
+    messages.insertAdjacentHTML(
+        'beforeend',
+        `<div class="ai-chat-turn ai-chat-turn--user" role="article"><div class="ai-chat-bubble ai-chat-bubble--user"><div class="ai-chat-bubble-text">${escapeHtml(question)}</div></div></div>`
+    );
     input.value = '';
+    aiChatAutosizeTextarea(input);
+
+    messages.insertAdjacentHTML(
+        'beforeend',
+        `<div data-ai-typing="1" class="ai-chat-turn ai-chat-turn--assistant" aria-live="polite"><span class="ai-chat-turn-label">Bwindi assistant</span><div class="ai-chat-bubble ai-chat-bubble--assistant ai-chat-bubble--typing" aria-busy="true"><span></span><span></span><span></span></div></div>`
+    );
+
+    if (sendBtn) sendBtn.disabled = true;
+    input.disabled = true;
 
     window.__sigtsLastTourHelpQuestion = question;
-    const result = await AI.askQuestion(question);
-    const answer = result?.answer || 'No response available.';
-    const formattedAnswer = formatTourHelpAnswerHtml(answer);
-    const metaBlock = buildTourHelpMetaHtml(result?.meta);
-    const feedbackRow = `<div class="ai-chat-feedback-row"><span class="ui-modal-muted">Was this helpful?</span><button type="button" class="small-btn" onclick="submitTourHelpFeedback(true)">${icon('target', 'icon-sm')} Yes</button><button type="button" class="small-btn ghost-btn" onclick="submitTourHelpFeedback(false)">No</button></div>`;
-    messages.innerHTML += `<div class="rec-card ai-chat-message"><div class="rec-info"><div class="rec-title">Park reference reply</div><div class="rec-reason ai-chat-response-block">${formattedAnswer}</div>${metaBlock}${feedbackRow}</div></div>`;
-    requestAnimationFrame(() => {
-        messages.scrollTop = messages.scrollHeight;
-    });
+
+    const priorTurns = readSigtsChatTurns().filter((t) => t && typeof t.user === 'string');
+    const apiHistory = sigtsPriorTurnsToApiHistory(priorTurns);
+
+    try {
+        const result = await AI.askQuestion(question, { history: apiHistory });
+        messages.querySelector('[data-ai-typing="1"]')?.remove();
+        const answerRaw = result?.answer || 'No response available.';
+        const presented = formatBwindiChatAssistantPresentation(answerRaw);
+        const formattedAnswer = formatTourHelpAnswerHtml(presented);
+        const metaBlock = buildTourHelpMetaHtml(result?.meta);
+        const feedbackRow = `<div class="ai-chat-feedback-row"><span class="ui-modal-muted">Was this helpful?</span><button type="button" class="small-btn" onclick="submitTourHelpFeedback(true)">${icon('smile', 'icon-sm')} Yes</button><button type="button" class="small-btn ghost-btn" onclick="submitTourHelpFeedback(false)">No</button></div>`;
+        messages.insertAdjacentHTML(
+            'beforeend',
+            `<div class="ai-chat-turn ai-chat-turn--assistant" role="article"><span class="ai-chat-turn-label">Bwindi assistant</span><div class="ai-chat-bubble ai-chat-bubble--assistant"><div class="ai-chat-bubble-text ai-chat-response-block">${formattedAnswer}</div></div>${metaBlock}${feedbackRow}</div>`
+        );
+
+        const next = [...priorTurns, { user: question, answerRaw, meta: slimSigtsChatMetaForStorage(result?.meta || {}) }];
+        while (next.length > SIGTS_CHAT_HISTORY_MAX_TURNS) next.shift();
+        writeSigtsChatTurns(next);
+    } catch (err) {
+        console.error(err);
+        messages.querySelector('[data-ai-typing="1"]')?.remove();
+        const apology = escapeHtml(String(err?.message || 'Something went wrong. Try again, or switch to offline mode from Profile.'));
+        messages.insertAdjacentHTML(
+            'beforeend',
+            `<div class="ai-chat-turn ai-chat-turn--assistant" role="article"><span class="ai-chat-turn-label">Bwindi assistant</span><div class="ai-chat-bubble ai-chat-bubble--assistant ai-chat-bubble--error"><div class="ai-chat-bubble-text"><p>Could not finish that reply. ${apology}</p></div></div></div>`
+        );
+    } finally {
+        if (sendBtn) sendBtn.disabled = false;
+        input.disabled = false;
+        requestAnimationFrame(() => {
+            messages.scrollTop = messages.scrollHeight;
+        });
+    }
 };
 
 window.sigtsBoostReco = function (tourId) {
@@ -3059,12 +4090,20 @@ window.sigtsBoostReco = function (tourId) {
     showToast('Thanks — this device will weight that tour higher.', 'success');
 };
 
-window.saveAiTourInterestsFromProfile = function () {
+window.saveAiTourInterestsFromProfile = async function () {
     if (typeof AI === 'undefined' || !AI.saveTourInterestsForAi) return;
     const boxes = document.querySelectorAll('.sigts-ai-interest-cb:checked');
     const tags = Array.from(boxes).map((b) => b.value);
     AI.saveTourInterestsForAi(tags);
-    showToast('AI interests saved for recommendations on this device.', 'success');
+    const u = Auth.getCurrentUser();
+    if (!u?.isGuest && (u?.role === 'tourist' || u?.userType === 'tourist')) {
+        const res = await API.updateUserProfile({ interests: tags });
+        if (res?.error || (typeof res?.status === 'number' && res.status >= 400)) {
+            showToast(res?.error || 'Could not sync interests to your account', 'warning');
+            return;
+        }
+    }
+    showToast('AI interests saved.', 'success');
 };
 
 window.submitTourHelpFeedback = function (helpful) {
@@ -3118,7 +4157,8 @@ window.startTourHelpVoiceCapture = function () {
         if (t) {
             input.value = `${(input.value || '').trim()}${input.value ? ' ' : ''}${t}`.trim();
         }
-        showToast(t ? "Speech added to the Let's Chat box." : 'No usable speech captured.', t ? 'success' : 'warning');
+        showToast(t ? 'Speech added to your message box.' : 'No usable speech captured.', t ? 'success' : 'warning');
+        aiChatAutosizeTextarea(input);
     };
     rec.onerror = (err) => {
         window.__sigtsTourHelpRecListening = false;
@@ -3726,6 +4766,133 @@ window.submitNPSFeedback = async function () {
     await loadRecentFeedback();
 };
 
+window.applyAnimalsCatalogFilter = function applyAnimalsCatalogFilter() {
+    const input = document.getElementById('animals-catalog-search');
+    const term = String(input?.value || '').trim().toLowerCase();
+    const grid = document.getElementById('animals-catalog-grid');
+    if (!grid) return;
+    grid.querySelectorAll('.animal-card').forEach((card) => {
+        const blob = String(card.getAttribute('data-species-q') || '').toLowerCase();
+        card.style.display = !term || blob.includes(term) ? '' : 'none';
+    });
+};
+
+window.sigtsSubmitFaqHelpful = async function sigtsSubmitFaqHelpful(faqId) {
+    const id = escAttrBareUuid(faqId);
+    if (!id) return;
+    if (!Auth?.getToken?.()) {
+        showToast('Sign in to record helpful votes on the server.', 'info');
+        return;
+    }
+    const r = await API.markFaqHelpful(id);
+    if (r?.success && r.helpful_count != null) showToast(`Thanks — ${r.helpful_count} helpful`, 'success');
+    else showToast('Could not update helpful count.', 'warning');
+};
+
+window.sigtsRemoveSavedBookmark = async function sigtsRemoveSavedBookmark(type, id) {
+    const t = String(type || '').trim();
+    const i = String(id || '').trim();
+    if (!t || !i || typeof Content?.toggleBookmark !== 'function') return;
+    const row = Content.readBookmarks().find((b) => b.type === t && String(b.id) === i);
+    if (!row) return;
+    Content.toggleBookmark({ type: t, id: i, title: row.title || i });
+    showToast('Removed from saved.', 'success');
+    try {
+        invalidateSigtsViewCache('saved');
+        invalidateSigtsViewCache('dashboard');
+    } catch (_) {
+        /**/
+    }
+    if (window.currentView === 'saved') {
+        await renderView('saved', { updateHash: false, suppressAccessToast: true });
+    }
+};
+
+window.runSigtsUnifiedSearch = async function runSigtsUnifiedSearch() {
+    const input = document.getElementById('sigtsUnifiedSearchInput');
+    const hi = document.getElementById('sigtsUnifiedSearchHighlight');
+    const box = document.getElementById('sigtsUnifiedSearchResults');
+    const q = String(input?.value || '').trim().toLowerCase();
+    if (!box || !hi) return;
+    if (q.length < 2) {
+        showToast('Enter at least 2 characters.', 'warning');
+        hi.setAttribute('hidden', '');
+        box.setAttribute('hidden', '');
+        return;
+    }
+    hi.removeAttribute('hidden');
+    box.removeAttribute('hidden');
+    hi.textContent = `Results for "${q}"`;
+    box.innerHTML = '<div class="seasonal-item">Searching…</div>';
+    try {
+        const [animals, locs, stories, faqRows] = await Promise.all([
+            Content.getAnimals(),
+            Content.getLocations(),
+            Content.getCulturalStories(),
+            API.getFaqs().catch(() => [])
+        ]);
+        const rows = [];
+        (animals || []).forEach((a) => {
+            const blob = `${a.name || ''} ${a.scientific_name || ''}`.toLowerCase();
+            if (blob.includes(q)) {
+                rows.push({
+                    kind: 'Animal',
+                    title: a.name,
+                    onclick: `openAnimalSpeciesDetail('${escAttrBareUuid(a.animal_id)}')`,
+                    detail: a.scientific_name || ''
+                });
+            }
+        });
+        (locs || []).forEach((loc) => {
+            const blob = `${loc.name || ''} ${loc.description || ''}`.toLowerCase();
+            if (blob.includes(q)) {
+                rows.push({
+                    kind: 'Location',
+                    title: loc.name || 'Place',
+                    onclick: `openParkLocationDetail('${escAttrBareUuid(loc.location_id || loc.id)}')`,
+                    detail: String(loc.location_type || loc.type || '')
+                });
+            }
+        });
+        (stories || []).forEach((s) => {
+            const blob = `${s.title_en || ''} ${s.narrative_en || s.story || ''}`.toLowerCase();
+            if (blob.includes(q)) {
+                rows.push({
+                    kind: 'Culture',
+                    title: s.title_en || 'Story',
+                    onclick: `openCulturalStoryDetail('${escAttrBareUuid(s.narrative_id)}')`,
+                    detail: 'Cultural narrative'
+                });
+            }
+        });
+        (faqRows || []).forEach((f) => {
+            const blob = `${f.question_en || ''} ${f.answer_en || ''}`.toLowerCase();
+            if (blob.includes(q)) {
+                rows.push({
+                    kind: 'FAQ',
+                    title: f.question_en || 'Question',
+                    onclick: `navigateTo('info')`,
+                    detail: f.category || ''
+                });
+            }
+        });
+        const lim = rows.slice(0, 28);
+        box.innerHTML = lim.length
+            ? lim
+                  .map(
+                      (r) =>
+                          `<div class="seasonal-item"><strong>${escapeHtml(r.kind)}</strong> · ${escapeHtml(r.title)}<br/><span class="ui-modal-muted">${escapeHtml(
+                              r.detail || ''
+                          )}</span><br/><button type="button" class="small-btn" onclick="${r.onclick}">Open</button></div>`
+                  )
+                  .join('')
+            : '<div class="seasonal-item">No matches in the cached catalogue. Try another keyword or refresh offline content from Profile.</div>';
+    } catch (e) {
+        console.error(e);
+        box.innerHTML = '<div class="seasonal-item">Search failed — check connection.</div>';
+    }
+};
+
 window.submitContentHelpfulness = async function (contentType, contentId, contentName) {
     const helpful = confirm(`Was "${contentName}" helpful to you?`);
     const score = helpful ? 5 : 2;
@@ -3896,10 +5063,177 @@ function showConfirmDialog(message) {
     });
 }
 
+window.sigtsProfileScrollTo = function (id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
+window.saveProfilePersonalFromPanel = async function () {
+    if (Auth.getCurrentUser()?.isGuest) return;
+    const firstName = document.getElementById('profileFirstName')?.value?.trim() ?? '';
+    const lastName = document.getElementById('profileLastName')?.value?.trim() ?? '';
+    const phone = document.getElementById('profilePhone')?.value?.trim() ?? '';
+    const payload = { firstName, lastName, phone };
+    const nat = document.getElementById('profileNationality');
+    if (nat) payload.nationality = nat.value?.trim() ?? '';
+    const res = await API.updateUserProfile(payload);
+    if (res?.error || (typeof res?.status === 'number' && res.status >= 400) || res?.errors?.length) {
+        showToast(res.error || res.errors?.[0]?.msg || 'Could not update profile', 'danger');
+        return;
+    }
+    showToast('Profile saved.', 'success');
+    const u = Auth.getCurrentUser();
+    if (u) {
+        u.name = `${firstName} ${lastName}`.trim() || u.name;
+        u.phone = phone;
+        if (localStorage.getItem('token')) localStorage.setItem('user', JSON.stringify(u));
+        else sessionStorage.setItem('user', JSON.stringify(u));
+    }
+};
+
+window.saveProfilePhotoUrl = async function () {
+    if (Auth.getCurrentUser()?.isGuest) return;
+    const url = document.getElementById('profilePhotoUrl')?.value?.trim() ?? '';
+    const res = await API.updateUserProfile({ profile_pic_url: url || null });
+    if (res?.error || (typeof res?.status === 'number' && res.status >= 400)) {
+        showToast(res.error || 'Could not save photo URL', 'danger');
+        return;
+    }
+    showToast('Profile photo updated.', 'success');
+    await renderView('profile', { updateHash: false, suppressAccessToast: true });
+};
+
+window.saveProfileBioLocal = function () {
+    const v = document.getElementById('profileBioLocal')?.value ?? '';
+    try {
+        localStorage.setItem('sigts_profile_bio_v1', v);
+        showToast('Bio saved on this device.', 'success');
+    } catch (_) {
+        showToast('Could not save bio locally.', 'danger');
+    }
+};
+
+window.tryRefreshProfileLocation = function () {
+    if (!navigator.geolocation) {
+        showToast('This browser does not expose GPS.', 'warning');
+        return;
+    }
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            if (window.Geofence && typeof window.Geofence.handleLocationUpdate === 'function') {
+                window.Geofence.handleLocationUpdate(position);
+            } else {
+                window.AppState = window.AppState || {};
+                window.AppState.currentLocation = {
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude,
+                    accuracy: position.coords.accuracy,
+                    timestamp: position.timestamp || Date.now()
+                };
+            }
+            showToast('Location updated.', 'success');
+            renderView('profile', { updateHash: false, suppressAccessToast: true }).catch(() => {});
+        },
+        () => showToast('Location permission denied or unavailable.', 'warning'),
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+    );
+};
+
+const PROFILE_CONSENT_DEFS = [
+    { type: 'location_tracking', label: 'Location tracking', hint: 'Needed for geofence updates and map features.' },
+    { type: 'analytics', label: 'Usage analytics', hint: 'Helps improve SIGTS flows.' },
+    { type: 'push_notifications', label: 'Push notifications', hint: 'Tour reminders when the device supports them.' },
+    { type: 'cultural_content_imagery', label: 'Cultural imagery', hint: 'Photos and audio on heritage stories.' }
+];
+
+async function loadProfileConsentsPanel() {
+    const root = document.getElementById('profileConsentsMount');
+    if (!root) return;
+    if (Auth.getCurrentUser()?.isGuest) {
+        root.innerHTML =
+            '<p class="ui-modal-muted">Create a full account to manage privacy consents for notifications and location.</p>';
+        return;
+    }
+    let consents = [];
+    try {
+        consents = await API.getMyConsents();
+    } catch (_) {
+        consents = [];
+    }
+    const latest = {};
+    (consents || []).forEach((row) => {
+        if (!row.consent_type) return;
+        latest[row.consent_type] = row;
+    });
+    root.innerHTML = `<div class="profile-consent-list">${PROFILE_CONSENT_DEFS.map((def) => {
+        const row = latest[def.type];
+        const granted = Boolean(row?.granted) && !row?.revoked_at;
+        const t = escapeHtml(def.type);
+        return `<div class="profile-consent-row">
+            <div><strong>${escapeHtml(def.label)}</strong><p class="ui-modal-muted" style="margin:4px 0 0;">${escapeHtml(def.hint)}</p></div>
+            <label class="profile-consent-toggle"><input type="checkbox" data-consent-type="${t}" ${granted ? 'checked' : ''} onchange="sigtsToggleProfileConsent(this)" /><span class="profile-consent-state">${granted ? 'On' : 'Off'}</span></label>
+        </div>`;
+    }).join('')}</div>`;
+}
+
+window.sigtsToggleProfileConsent = async function (el) {
+    const type = el?.dataset?.consentType;
+    if (!type) return;
+    const granted = Boolean(el.checked);
+    const res = await API.setMyConsent(type, granted);
+    if (!res || res.success !== true) {
+        showToast(res?.error || 'Could not update preference', 'danger');
+        el.checked = !granted;
+        return;
+    }
+    const span = el.closest('.profile-consent-toggle')?.querySelector('.profile-consent-state');
+    if (span) span.textContent = granted ? 'On' : 'Off';
+    showToast('Preference saved.', 'success');
+};
+
+async function deactivateMyAccountFromProfile() {
+    const u = Auth.getCurrentUser();
+    if (u?.isGuest) {
+        showToast('Guest access ends when you log out; there is no registered account to deactivate.', 'info');
+        return;
+    }
+    if (!(await showConfirmDialog('Deactivate your account? You will be signed out and cannot sign in again until IT restores access.'))) return;
+    const res = await API.deactivateMyAccount();
+    if (res?.success) {
+        showToast('Account deactivated.', 'success');
+        await Auth.logout();
+    } else {
+        showToast(res?.error || res?.message || 'Could not deactivate. Try again when online with a valid session.', 'danger');
+    }
+}
+
+async function adminDeactivateAccountPrompt(userId, isSelf) {
+    if (!userId) return;
+    if (!isCurrentUserITManager()) {
+        showToast('Only IT managers can deactivate other accounts from this screen.', 'warning');
+        return;
+    }
+    const msg = isSelf
+        ? 'Deactivate your own IT account? You will be signed out immediately.'
+        : 'Deactivate this user? They cannot sign in until an IT manager reactivates the account.';
+    if (!(await showConfirmDialog(msg))) return;
+    const res = await API.adminDeactivateUser(userId);
+    if (res?.success) {
+        showToast(res?.alreadyInactive ? 'Account was already inactive.' : 'Account deactivated.', res?.alreadyInactive ? 'info' : 'success');
+        if (isSelf) await Auth.logout();
+        else await renderView('it_dashboard', { updateHash: false, suppressAccessToast: true });
+    } else {
+        showToast(res?.error || res?.message || 'Deactivation failed.', 'danger');
+    }
+}
+
 window.showToast = showToast;
 window.togglePasswordVisibility = togglePasswordVisibility;
 window.showPromptDialog = showPromptDialog;
 window.showConfirmDialog = showConfirmDialog;
+window.deactivateMyAccountFromProfile = deactivateMyAccountFromProfile;
+window.adminDeactivateAccountPrompt = adminDeactivateAccountPrompt;
 
 async function handleRegistration() {
     setAuthFeedback('');
@@ -3907,6 +5241,7 @@ async function handleRegistration() {
         fullName: document.getElementById('regFullName')?.value,
         email: document.getElementById('regEmail')?.value,
         username: document.getElementById('regUsername')?.value,
+        phone: document.getElementById('regPhone')?.value,
         password: document.getElementById('regPassword')?.value,
         confirmPassword: document.getElementById('regConfirmPassword')?.value,
         userType: document.getElementById('regUserType')?.value || 'tourist'
@@ -4025,6 +5360,10 @@ async function handleForgotPassword() {
 }
 
 async function handleMFASetup() {
+    if (Auth.getCurrentUser()?.isGuest) {
+        showToast('Guest accounts cannot enable MFA. Create a full account first.', 'warning');
+        return;
+    }
     const setup = await Auth.initializeMFA();
     if (!setup.success) {
         showToast('MFA setup failed: ' + (setup.error || 'Unknown error'), 'danger');
@@ -4310,6 +5649,7 @@ function renderAuthMergedScreen(activePanel = 'login') {
                         <label class="auth-field"><span class="auth-field-label">Username</span><span class="auth-input-shell">${icon('user', 'auth-input-icon')}<input type="text" id="regUsername" class="auth-input auth-input-with-icon" placeholder="Choose a username"></span></label>
                     </div>
                     <label class="auth-field"><span class="auth-field-label">Email</span><span class="auth-input-shell">${icon('mail', 'auth-input-icon')}<input type="email" id="regEmail" class="auth-input auth-input-with-icon" placeholder="name@example.com"></span></label>
+                    <label class="auth-field"><span class="auth-field-label">Phone</span><span class="auth-input-shell">${icon('phone', 'auth-input-icon')}<input type="tel" id="regPhone" class="auth-input auth-input-with-icon" placeholder="Include country code" autocomplete="tel"></span></label>
                     ${renderAuthPasswordField('regPassword', 'Password', 'Create a password', 'new-password')}
                     ${renderAuthPasswordField('regConfirmPassword', 'Confirm Password', 'Repeat your password', 'new-password')}
                     <label class="auth-field"><span class="auth-field-label">Role</span><select id="regUserType" class="auth-select"><option value="tourist">Tourist</option><option value="guide">Tour Guide</option><option value="it_manager">IT Manager</option></select></label>
@@ -4380,7 +5720,7 @@ async function renderView(view, options = {}) {
 
     if (Auth.isAuthenticated() && !PUBLIC_VIEWS.has(safeView)) {
         const role = getEffectiveRole(Auth.getCurrentUser());
-        if (!canUserAccessView(role, safeView)) {
+        if (!canUserAccessView(role, safeView, Auth.getCurrentUser())) {
             if (!suppressAccessToast) {
                 showToast('You do not have access to that area.', 'warning');
             }
@@ -4405,6 +5745,11 @@ async function renderView(view, options = {}) {
     document.body.classList.toggle('auth-page', PUBLIC_VIEWS.has(safeView));
     document.body.classList.toggle('ai-chat-view', safeView === 'ai_chat');
     document.body.classList.toggle('pa-analytics-view', safeView === 'it_predictive_analytics');
+
+    const u = Auth.getCurrentUser() || {};
+    const isGuide = u?.role === 'guide' || u?.userType === 'guide';
+    const isITManager = u?.role === 'it_manager' || u?.userType === 'it_manager';
+    document.body.classList.toggle('sigts-has-mobile-tabs', Auth.isAuthenticated() && !PUBLIC_VIEWS.has(safeView) && !isGuide && !isITManager);
     bindAIViewportHooksOnce();
     syncAIComposerViewportOffset();
 
@@ -4470,14 +5815,19 @@ async function renderView(view, options = {}) {
         requestAnimationFrame(() => {
             initializeLiveMap().catch(() => {});
         });
-    } else if (safeView === 'profile' && !isCurrentUserITManager()) {
+    } else if (safeView === 'profile') {
         requestAnimationFrame(() => {
-            loadRecentFeedback().catch(() => {});
+            if (!isCurrentUserITManager()) {
+                loadRecentFeedback().catch(() => {});
+            }
+            loadProfileConsentsPanel().catch(() => {});
         });
     }
     if (safeView === 'ai_chat') {
         requestAnimationFrame(() => {
             applySIGTSAIPrefill();
+            const ta = document.getElementById('aiChatInput');
+            if (ta) aiChatAutosizeTextarea(ta);
             syncAIComposerViewportOffset();
         });
     }
