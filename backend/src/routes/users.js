@@ -1,5 +1,7 @@
 // backend/src/routes/users.js
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const { pool } = require('../config/database');
@@ -7,6 +9,7 @@ const { authenticateJWT, authorize, rejectGuestAccounts } = require('../middlewa
 const { canViewMedicalNotes } = require('../services/medicalNotesAccess');
 const { audit } = require('../utils/audit');
 const refreshTokenService = require('../services/refreshTokenService');
+const { uploadSingle } = require('../middleware/upload');
 let usersEmailVerifiedReady = null;
 
 async function ensureUsersEmailVerifiedColumn() {
@@ -179,9 +182,56 @@ router.put('/profile', authenticateJWT, rejectGuestAccounts, [
 });
 
 // =====================================================
-// DELETE /api/users/deactivate
-// Deactivate user account
+// POST /api/users/profile/photo
+// Upload profile picture (stored under /uploads/profiles)
 // =====================================================
+router.post(
+    '/profile/photo',
+    authenticateJWT,
+    rejectGuestAccounts,
+    (req, res, next) => {
+        uploadSingle('profile_pic')(req, res, (err) => {
+            if (err) {
+                return res.status(400).json({ error: err.message || 'Invalid file upload' });
+            }
+            next();
+        });
+    },
+    async (req, res) => {
+        const userId = req.user.user_id;
+        try {
+            if (!req.file?.filename) {
+                return res.status(400).json({ error: 'No image file provided' });
+            }
+            const oldRow = await pool.query('SELECT profile_pic_url FROM users WHERE user_id = $1', [userId]);
+            const oldUrl = oldRow.rows[0]?.profile_pic_url;
+            const relative = `/uploads/profiles/${req.file.filename}`;
+
+            try {
+                if (oldUrl && typeof oldUrl === 'string' && oldUrl.startsWith('/uploads/profiles/')) {
+                    const relPath = oldUrl.replace(/^\//, '');
+                    const abs = path.join(__dirname, '../../', relPath);
+                    if (fs.existsSync(abs)) fs.unlinkSync(abs);
+                }
+            } catch (_) {
+                /* non-fatal */
+            }
+
+            await pool.query('UPDATE users SET profile_pic_url = $1 WHERE user_id = $2', [relative, userId]);
+            const updatedResult = await pool.query(
+                `SELECT user_id, username, email, phone, first_name, last_name, user_type,
+                        profile_pic_url
+                 FROM users WHERE user_id = $1`,
+                [userId]
+            );
+            res.json(updatedResult.rows[0]);
+        } catch (error) {
+            console.error('Profile photo upload error:', error);
+            res.status(500).json({ error: 'Failed to save profile photo' });
+        }
+    }
+);
+
 // =====================================================
 // GET /api/users/me/consents
 // Returns the user's most recent record per consent_type.

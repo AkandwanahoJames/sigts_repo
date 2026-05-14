@@ -2759,10 +2759,14 @@ async function renderProfileContent() {
         }
     }
 
-    const firstNameRaw = String(serverProfile?.first_name || '').trim();
-    const lastNameRaw = String(serverProfile?.last_name || '').trim();
+    const nameParts = String(user.name || '').trim().split(/\s+/).filter(Boolean);
+    const fallbackFirst = nameParts[0] || '';
+    const fallbackLast = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+
+    const firstNameRaw = String(serverProfile?.first_name || fallbackFirst).trim();
+    const lastNameRaw = String(serverProfile?.last_name || fallbackLast).trim();
     const emailRaw = String(serverProfile?.email || user.email || '').trim();
-    const phoneRaw = String(serverProfile?.phone || '').trim();
+    const phoneRaw = String(serverProfile?.phone || user.phone || '').trim();
     const photoUrlRaw = String(serverProfile?.profile_pic_url || '').trim();
     const emailVerified = Boolean(serverProfile?.email_verified);
     const nationalityRaw = String(serverProfile?.role_data?.nationality || '').trim();
@@ -2878,12 +2882,13 @@ async function renderProfileContent() {
         )
         .join('');
 
-    const avatarInner =
-        photoUrlRaw && /^https?:\/\//i.test(photoUrlRaw)
-            ? `<img src="${escapeHtml(photoUrlRaw)}" alt="" class="profile-photo-img" loading="lazy" decoding="async" />`
-            : `${icon('user', 'icon-xl')}`;
+    const photoDisplaySrc =
+        typeof API.resolvePublicMediaUrl === 'function' ? API.resolvePublicMediaUrl(photoUrlRaw) : photoUrlRaw;
+    const avatarInner = photoDisplaySrc
+        ? `<img src="${escapeHtml(photoDisplaySrc)}" alt="" class="profile-photo-img" loading="lazy" decoding="async" />`
+        : `${icon('user', 'icon-xl')}`;
 
-    const personalReadonly = isGuest ? 'disabled' : '';
+    const guestOnlyDisabled = isGuest ? 'disabled' : '';
     const guestBanner = isGuest
         ? `<div class="profile-guest-banner"><strong>Guest session.</strong> Park-only access — register for a full profile, sightings, and sync.</div>`
         : '';
@@ -2924,11 +2929,11 @@ async function renderProfileContent() {
         ? `<section class="profile-panel" id="profile-section-secure">
         <div class="profile-panel-head"><h3>${icon('shield', 'icon-sm')} Secure</h3></div>
         <div class="profile-panel-body profile-secure-grid">
-            <button type="button" class="profile-secure-tile" onclick="navigateTo('login'); showToast('Use Forgot password on the sign-in screen.', 'info');">
-                ${icon('key', 'icon-md')}<span>Password</span><small>Reset via email from login</small>
+            <button type="button" class="profile-secure-tile" onclick="handleProfilePasswordHelp()">
+                ${icon('key', 'icon-md')}<span>Password</span><small>How reset works — opens a short guide</small>
             </button>
             <button type="button" class="profile-secure-tile" onclick="handleMFASetup()">${icon('shield', 'icon-md')}<span>Access / MFA</span><small>Authenticator or SMS at sign-in</small></button>
-            <div class="profile-secure-tile profile-secure-tile--muted">${icon('clock', 'icon-md')}<span>Sessions</span><small>Idle timeout protects your account on shared devices</small></div>
+            <button type="button" class="profile-secure-tile" onclick="showProfileSessionsInfo()">${icon('clock', 'icon-md')}<span>Sessions</span><small>Idle timeout &amp; shared devices — tap for details</small></button>
         </div></section>`
         : '';
 
@@ -2970,31 +2975,39 @@ async function renderProfileContent() {
             <p class="profile-main-sub">${escapeHtml(formatRoleName(user.role || user.userType || 'tourist'))} · ${escapeHtml(user.name || user.username || 'Visitor')}</p>
         </header>
         ${guestBanner}
+        ${profileLoadBanner}
 
         <section class="profile-panel" id="profile-section-photo">
             <div class="profile-panel-head"><h3>Profile photo</h3><span class="profile-panel-hint">Square image looks best in headers</span></div>
             <div class="profile-panel-body profile-photo-row">
                 <div class="profile-avatar-large" aria-hidden="true">${avatarInner}</div>
                 <div class="profile-photo-fields">
-                    <label class="auth-field"><span class="auth-field-label">Image URL</span><input id="profilePhotoUrl" class="auth-input" placeholder="https://…" value="${photoUrl}" ${personalReadonly} /></label>
-                    <p class="ui-modal-muted">At least 400×400 px recommended. Use a direct HTTPS link (JPG or PNG).</p>
+                    <label class="auth-field"><span class="auth-field-label">Image URL</span><input id="profilePhotoUrl" class="auth-input" placeholder="https://…" value="${photoUrl}" ${guestOnlyDisabled} /></label>
+                    <p class="ui-modal-muted">At least 400×400 px recommended. For external hosting, use a direct HTTPS link (JPG or PNG).</p>
+                    <p class="ui-modal-muted profile-photo-upload-hint">Or choose a file on this device (JPEG, PNG, GIF, or WebP — up to 8 MB).</p>
+                    <div class="profile-photo-upload-row">
+                        <input type="file" id="profilePhotoFile" accept="image/jpeg,image/png,image/gif,image/webp" class="profile-photo-file-input" onchange="sigtsProfilePhotoFileHint(this)" ${guestOnlyDisabled ? 'disabled' : ''} />
+                        <button type="button" class="small-btn ghost-btn" onclick="document.getElementById('profilePhotoFile')?.click()" ${guestOnlyDisabled ? 'disabled' : ''}>Choose file…</button>
+                        <span id="profilePhotoFileName" class="profile-photo-file-name ui-modal-muted" aria-live="polite"></span>
+                    </div>
                     <div class="profile-btn-row">
-                        <button type="button" class="small-btn btn-primary" onclick="saveProfilePhotoUrl()" ${personalReadonly ? 'disabled' : ''}>Save photo</button>
+                        <button type="button" id="profileBtnUploadPhoto" class="small-btn" onclick="uploadProfilePhotoFromPicker()" ${guestOnlyDisabled ? 'disabled' : ''}>Upload image</button>
+                        <button type="button" id="profileBtnSavePhoto" class="small-btn btn-primary" onclick="saveProfilePhotoUrl()" ${guestOnlyDisabled ? 'disabled' : ''}>Save URL</button>
                     </div>
                 </div>
             </div>
         </section>
 
         <section class="profile-panel" id="profile-section-personal">
-            <div class="profile-panel-head"><h3>Personal info</h3>${!isGuest ? `<button type="button" class="profile-panel-edit" onclick="sigtsProfileScrollTo('profile-section-personal')">${icon('edit', 'icon-sm')} Edit</button>` : ''}</div>
+            <div class="profile-panel-head"><h3>Personal info</h3><span class="profile-panel-hint">Edit your details, then save</span></div>
             <div class="profile-panel-body profile-form-grid">
-                <label class="auth-field"><span class="auth-field-label">First name</span><input id="profileFirstName" class="auth-input" value="${firstName}" autocomplete="given-name" ${personalReadonly} /></label>
-                <label class="auth-field"><span class="auth-field-label">Last name</span><input id="profileLastName" class="auth-input" value="${lastName}" autocomplete="family-name" ${personalReadonly} /></label>
+                <label class="auth-field"><span class="auth-field-label">First name</span><input id="profileFirstName" class="auth-input" value="${firstName}" autocomplete="given-name" ${guestOnlyDisabled} /></label>
+                <label class="auth-field"><span class="auth-field-label">Last name</span><input id="profileLastName" class="auth-input" value="${lastName}" autocomplete="family-name" ${guestOnlyDisabled} /></label>
                 <label class="auth-field profile-field-span2"><span class="auth-field-label">Email</span><input id="profileEmail" class="auth-input" value="${email}" readonly title="Email changes are not supported in-app" /></label>
-                <label class="auth-field profile-field-span2"><span class="auth-field-label">Phone</span><input id="profilePhone" class="auth-input" type="tel" value="${phone}" autocomplete="tel" placeholder="+256…" ${personalReadonly} /></label>
-                ${!isGuide && !isITManager && !isGuest ? `<label class="auth-field profile-field-span2"><span class="auth-field-label">Nationality</span><input id="profileNationality" class="auth-input" value="${nationality}" autocomplete="country-name" /></label>` : ''}
+                <label class="auth-field profile-field-span2"><span class="auth-field-label">Phone</span><input id="profilePhone" class="auth-input" type="tel" value="${phone}" autocomplete="tel" placeholder="+256…" ${guestOnlyDisabled} /></label>
+                ${!isGuide && !isITManager && !isGuest ? `<label class="auth-field profile-field-span2"><span class="auth-field-label">Nationality</span><input id="profileNationality" class="auth-input" value="${nationality}" autocomplete="country-name" ${guestOnlyDisabled} /></label>` : ''}
                 <div class="profile-field-span2 profile-btn-row">
-                    <button type="button" class="small-btn btn-primary" onclick="saveProfilePersonalFromPanel()" ${personalReadonly ? 'disabled' : ''}>Save changes</button>
+                    <button type="button" id="profileBtnSavePersonal" class="small-btn btn-primary" onclick="saveProfilePersonalFromPanel()" ${guestOnlyDisabled ? 'disabled' : ''}>Save changes</button>
                 </div>
             </div>
         </section>
@@ -3018,7 +3031,7 @@ async function renderProfileContent() {
             <div class="profile-panel-body">
                 <label class="auth-field"><span class="auth-field-label">About you</span><textarea id="profileBioLocal" class="auth-input profile-textarea" placeholder="Interests, languages, accessibility needs for guides…">${escapeHtml(bioLocal)}</textarea></label>
                 <div class="profile-btn-row">
-                    <button type="button" class="small-btn btn-primary" onclick="saveProfileBioLocal()">Save bio locally</button>
+                    <button type="button" id="profileBtnSaveBio" class="small-btn btn-primary" onclick="saveProfileBioLocal()">Save bio locally</button>
                 </div>
             </div>
         </section>
@@ -3028,7 +3041,7 @@ async function renderProfileContent() {
             <div class="profile-panel-body">
                 <p class="animals-page-blurb">Synced with general profile interests for tourists. Voice: use the microphone on Tour help — speech stays in-browser until you send text.</p>
                 <div class="profile-interest-grid">${interestChips}</div>
-                <button type="button" class="small-btn btn-primary" onclick="saveAiTourInterestsFromProfile()">${icon('target', 'icon-sm')} Save AI interests</button>
+                <button type="button" id="profileBtnSaveAi" class="small-btn btn-primary" onclick="saveAiTourInterestsFromProfile()">${icon('target', 'icon-sm')} Save AI interests</button>
             </div>
         </section>
 
@@ -3057,11 +3070,19 @@ async function renderProfileContent() {
                 <div class="profile-completion-ring-inner"><strong>${completion}%</strong><span>done</span></div>
             </div>
             <ul class="profile-completion-list">
-                ${completionRows
-                    .map(
-                        (r) =>
-                            `<li class="${r.ok ? 'is-done' : ''}"><span class="profile-completion-check">${r.ok ? icon('check', 'icon-sm') : '○'}</span><span>${escapeHtml(r.label)}</span><span class="profile-completion-w">${r.weight}%</span></li>`
-                    )
+                ${completionItems
+                    .map((r) => {
+                        const scrollArg = r.scrollId ? `'${r.scrollId}'` : 'null';
+                        const act = r.action === 'hint-verify' ? 'hint-verify' : 'scroll';
+                        const aria = escapeHtml((r.ok ? 'Completed: ' : 'Go to: ') + r.label);
+                        return `<li class="${r.ok ? 'is-done' : ''}">
+                            <button type="button" class="profile-completion-btn" onclick="sigtsProfileCompletionNavigate('${act}', ${scrollArg})" aria-label="${aria}">
+                                <span class="profile-completion-check">${r.ok ? icon('check', 'icon-sm') : '○'}</span>
+                                <span class="profile-completion-label">${escapeHtml(r.label)}</span>
+                                <span class="profile-completion-w">${r.weight}%</span>
+                            </button>
+                        </li>`;
+                    })
                     .join('')}
             </ul>
             ${isGuest ? `<p class="ui-modal-muted">Guest progress is for this session only.</p>` : ''}
@@ -3202,16 +3223,66 @@ ${versionHtml}
 }
 
 function renderAIChatContent() {
-    return `<div class="section-card ai-chat-panel">
-        <div class="section-header ai-chat-panel-header"><h3>${icon('feather', 'icon-sm')} Bwindi assistant</h3><button type="button" class="small-btn ghost-btn" onclick="clearSigtsChatThread()">Clear chat</button></div>
-        <p id="aiPrefillBanner" class="ai-prefill-banner" aria-live="polite">Animals, Culture, or Info can drop a draft here. Shift+Enter adds a line; Enter sends.</p>
-        <div id="aiChatMessages" class="ai-chat-messages" role="log" aria-relevant="additions text" aria-live="polite">${getSigtsChatInitialMessagesHtml()}</div>
-    </div>
-    <div class="ai-chat-composer-float" role="region" aria-label="Chat composer">
-        <div class="ai-chat-composer">
-            <textarea id="aiChatInput" class="auth-input ai-chat-textarea" rows="1" placeholder="Ask about your Bwindi visit…" onkeydown="handleAIChatInputKeydown(event)" oninput="aiChatAutosizeTextarea(this)"></textarea>
-            <button type="button" id="aiChatMicBtn" class="small-btn" title="Speak your question (browser speech recognition)" onclick="startTourHelpVoiceCapture()">${icon('mic', 'icon-sm')} Mic</button>
-            <button type="button" class="login-btn" id="aiChatSendBtn" onclick="sendAIChatMessage()">Send</button>
+    const u = Auth.getCurrentUser() || {};
+    const rawName = String(u.name || 'Visitor').trim();
+    const firstName = escapeHtml(rawName.split(/\s+/).filter(Boolean)[0] || 'there');
+    const turns = readSigtsChatTurns().filter((t) => t && typeof t.user === 'string');
+    const historyRows = [...turns]
+        .reverse()
+        .slice(0, 8)
+        .map((t) => {
+            const full = String(t.user || '');
+            const disp = truncateSnippet(full, 76);
+            return `<button type="button" class="ai-simy-history-item" onclick='sigtsReuseChatPrompt(${JSON.stringify(full)})' title="Load into the box, then tap Send">
+                <span class="ai-simy-history-icon">${icon('clock', 'icon-sm')}</span>
+                <span class="ai-simy-history-text">${escapeHtml(disp)}</span>
+            </button>`;
+        })
+        .join('');
+    const historyBlock = historyRows
+        ? `<div class="ai-simy-history"><div class="ai-simy-history-head"><span class="ai-simy-history-title">History</span><button type="button" class="ai-simy-linkish" onclick="clearSigtsChatThread()">Clear all</button></div><div class="ai-simy-history-list">${historyRows}</div></div>`
+        : `<div class="ai-simy-history"><div class="ai-simy-history-head"><span class="ai-simy-history-title">History</span></div><p class="ai-simy-muted">Your recent questions will appear here so you can load them into the composer.</p></div>`;
+
+    return `<div class="ai-simy-shell">
+        <div class="ai-simy-topbar">
+            <button type="button" class="ai-simy-iconbtn" onclick="navigateTo('dashboard')" aria-label="Open home">${icon('menu', 'icon-md')}</button>
+            <div class="ai-simy-brand"><span class="ai-simy-brand-mark">${icon('feather', 'icon-sm')}</span><span>Bwindi assistant</span></div>
+            <button type="button" class="ai-simy-iconbtn" onclick="navigateTo('profile')" aria-label="Open profile">${icon('user', 'icon-md')}</button>
+        </div>
+        <section class="ai-simy-hero" aria-label="Tour help welcome">
+            <div class="ai-simy-hero-orb" aria-hidden="true">${icon('sparkle', 'icon-xl')}</div>
+            <p class="ai-simy-hero-kicker">Park-aware tour help</p>
+            <h2 class="ai-simy-hero-title">Hi, ${firstName}</h2>
+            <p class="ai-simy-hero-sub">Ask about treks, wildlife, culture, and safety — answers stay grounded in SIGTS content for Bwindi.</p>
+            <button type="button" class="ai-simy-cta-main" onclick="sigtsFocusAiComposer()">${icon('feather', 'icon-sm')} Start a conversation</button>
+        </section>
+        <div class="ai-simy-actions-grid">
+            <button type="button" class="ai-simy-action-card" onclick="sigtsFocusAiComposer()">
+                <span class="ai-simy-action-icon">${icon('feather', 'icon-md')}</span>
+                <span class="ai-simy-action-text"><span class="ai-simy-action-label">Chat</span><span class="ai-simy-action-hint">Type your question</span></span>
+                <span class="ai-simy-action-arrow" aria-hidden="true">›</span>
+            </button>
+            <button type="button" class="ai-simy-action-card" onclick="startTourHelpVoiceCapture()">
+                <span class="ai-simy-action-icon">${icon('mic', 'icon-md')}</span>
+                <span class="ai-simy-action-text"><span class="ai-simy-action-label">Talk</span><span class="ai-simy-action-hint">Use your voice</span></span>
+                <span class="ai-simy-action-arrow" aria-hidden="true">›</span>
+            </button>
+        </div>
+        ${historyBlock}
+        <div class="section-card ai-chat-panel">
+            <div class="ai-simy-transcript-head">
+                <h3 class="ai-simy-transcript-title">${icon('message', 'icon-sm')} Conversation</h3>
+                <button type="button" class="ai-simy-chipbtn" onclick="clearSigtsChatThread()">Clear chat</button>
+            </div>
+            <p id="aiPrefillBanner" class="ai-prefill-banner ai-simy-prefill-banner" aria-live="polite">Animals, Culture, or Info can drop a draft here. Shift+Enter adds a line; Enter sends.</p>
+            <div id="aiChatMessages" class="ai-chat-messages" role="log" aria-relevant="additions text" aria-live="polite">${getSigtsChatInitialMessagesHtml()}</div>
+        </div>
+        <div class="ai-chat-composer-float ai-simy-composer-float" role="region" aria-label="Chat composer">
+            <div class="ai-chat-composer ai-simy-composer">
+                <textarea id="aiChatInput" class="auth-input ai-chat-textarea" rows="1" placeholder="Ask about your Bwindi visit…" onkeydown="handleAIChatInputKeydown(event)" oninput="aiChatAutosizeTextarea(this)"></textarea>
+                <button type="button" id="aiChatMicBtn" class="small-btn ai-simy-tool-btn" title="Speak your question (browser speech recognition)" onclick="startTourHelpVoiceCapture()">${icon('mic', 'icon-sm')}</button>
+                <button type="button" class="login-btn ai-simy-send-btn" id="aiChatSendBtn" onclick="sendAIChatMessage()">Send</button>
+            </div>
         </div>
     </div>`;
 }
@@ -4003,6 +4074,10 @@ window.clearSigtsChatThread = function clearSigtsChatThread() {
         ta.value = '';
         aiChatAutosizeTextarea(ta);
     }
+    const hist = document.querySelector('.ai-simy-shell .ai-simy-history');
+    if (hist) {
+        hist.outerHTML = `<div class="ai-simy-history"><div class="ai-simy-history-head"><span class="ai-simy-history-title">History</span></div><p class="ai-simy-muted">Your recent questions will appear here so you can load them into the composer.</p></div>`;
+    }
 };
 
 window.sigtsChatQuickAsk = function sigtsChatQuickAsk(text) {
@@ -4014,6 +4089,26 @@ window.sigtsChatQuickAsk = function sigtsChatQuickAsk(text) {
         aiChatAutosizeTextarea(input);
     }
     window.sendAIChatMessage();
+};
+
+window.sigtsReuseChatPrompt = function sigtsReuseChatPrompt(text) {
+    const q = String(text || '').trim();
+    if (!q) return;
+    const input = document.getElementById('aiChatInput');
+    if (input) {
+        input.value = q;
+        aiChatAutosizeTextarea(input);
+    }
+    sigtsFocusAiComposer();
+};
+
+window.sigtsFocusAiComposer = function sigtsFocusAiComposer() {
+    const input = document.getElementById('aiChatInput');
+    const wrap = document.querySelector('.ai-simy-composer-float') || document.querySelector('.ai-chat-composer-float');
+    wrap?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    window.requestAnimationFrame(() => {
+        input?.focus({ preventScroll: true });
+    });
 };
 
 window.sendAIChatMessage = async function () {
@@ -4092,18 +4187,25 @@ window.sigtsBoostReco = function (tourId) {
 
 window.saveAiTourInterestsFromProfile = async function () {
     if (typeof AI === 'undefined' || !AI.saveTourInterestsForAi) return;
-    const boxes = document.querySelectorAll('.sigts-ai-interest-cb:checked');
-    const tags = Array.from(boxes).map((b) => b.value);
-    AI.saveTourInterestsForAi(tags);
-    const u = Auth.getCurrentUser();
-    if (!u?.isGuest && (u?.role === 'tourist' || u?.userType === 'tourist')) {
-        const res = await API.updateUserProfile({ interests: tags });
-        if (res?.error || (typeof res?.status === 'number' && res.status >= 400)) {
-            showToast(res?.error || 'Could not sync interests to your account', 'warning');
-            return;
+    profileSetBtnBusy('profileBtnSaveAi', true);
+    try {
+        const boxes = document.querySelectorAll('.sigts-ai-interest-cb:checked');
+        const tags = Array.from(boxes).map((b) => b.value);
+        AI.saveTourInterestsForAi(tags);
+        const u = Auth.getCurrentUser();
+        if (!u?.isGuest && (u?.role === 'tourist' || u?.userType === 'tourist')) {
+            const res = await API.updateUserProfile({ interests: tags });
+            if (res?.error || (typeof res?.status === 'number' && res.status >= 400)) {
+                showToast(res?.error || 'Could not sync interests to your account', 'warning');
+                return;
+            }
         }
+        showToast('AI interests saved.', 'success');
+    } catch (_) {
+        showToast('Could not save AI interests.', 'danger');
+    } finally {
+        profileSetBtnBusy('profileBtnSaveAi', false);
     }
-    showToast('AI interests saved.', 'success');
 };
 
 window.submitTourHelpFeedback = function (helpful) {
@@ -5063,54 +5165,178 @@ function showConfirmDialog(message) {
     });
 }
 
+function profileSetBtnBusy(id, busy) {
+    const b = id && document.getElementById(id);
+    if (!b || b.tagName !== 'BUTTON') return;
+    b.disabled = Boolean(busy);
+    if (busy) b.setAttribute('aria-busy', 'true');
+    else b.removeAttribute('aria-busy');
+}
+
 window.sigtsProfileScrollTo = function (id) {
     const el = document.getElementById(id);
     if (!el) return;
     el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const sel =
+        'input:not([disabled]):not([type="hidden"]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+    window.setTimeout(() => {
+        const focusable = el.querySelector(sel);
+        (focusable || (typeof el.focus === 'function' ? el : null))?.focus?.({ preventScroll: true });
+    }, 320);
+};
+
+window.sigtsProfileCompletionNavigate = function (action, scrollId) {
+    if (action === 'hint-verify') {
+        window.sigtsProfileScrollTo('profile-section-personal');
+        showToast(
+            'Verify your email using the link we sent when you registered. Check spam folders, or ask IT or support to resend if needed.',
+            'info'
+        );
+        return;
+    }
+    if (!scrollId) {
+        showToast('Register for a full account to use the offline pack and sync from this section.', 'info');
+        return;
+    }
+    window.sigtsProfileScrollTo(scrollId);
+};
+
+window.sigtsToggleProfilePersonalEdit = function () {
+    document.getElementById('profileFirstName')?.focus({ preventScroll: true });
+};
+
+window.sigtsFocusProfilePersonalFields = function () {
+    window.sigtsProfileScrollTo('profile-section-personal');
+    window.setTimeout(() => {
+        document.getElementById('profileFirstName')?.focus({ preventScroll: true });
+    }, 360);
+};
+
+window.handleProfilePasswordHelp = function () {
+    showRichContentModal({
+        title: 'Password and account recovery',
+        bodyHtml: `<p>SIGTS does not let you change your password from the Profile screen. Use <strong>Forgot password</strong> on the sign-in page with the email on your account. If the address matches an active user, you will receive reset instructions.</p>
+        <p class="ui-modal-muted" style="margin-top:10px">On shared lodge devices, sign out when you are done and consider turning on MFA under Access / MFA.</p>`,
+        footerHtml: `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
+            <button type="button" class="small-btn ghost-btn" onclick="document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();">${icon('x', 'icon-sm')} Close</button>
+            <button type="button" class="small-btn btn-primary" onclick="document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click(); navigateTo('login');">Open sign-in</button>
+        </div>`
+    });
+};
+
+window.showProfileSessionsInfo = function () {
+    showRichContentModal({
+        title: 'Sessions and idle sign-out',
+        bodyHtml: `<p>SIGTS may sign you out automatically after a period without interaction. That limits risk if you step away from a shared device inside the park.</p>
+        <p class="ui-modal-muted" style="margin-top:10px">If you are signed out unexpectedly, sign in again with your username and password, and complete MFA when prompted. Long downloads can continue in some browsers while the tab stays open.</p>`,
+        footerHtml: `<button type="button" class="small-btn ghost-btn" onclick="document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();">${icon('x', 'icon-sm')} Close</button>`
+    });
+};
+
+window.sigtsProfilePhotoFileHint = function (el) {
+    const nameEl = document.getElementById('profilePhotoFileName');
+    const f = el?.files?.[0];
+    if (nameEl) nameEl.textContent = f ? f.name : '';
+};
+
+window.uploadProfilePhotoFromPicker = async function () {
+    if (Auth.getCurrentUser()?.isGuest) return;
+    const input = document.getElementById('profilePhotoFile');
+    const f = input?.files?.[0];
+    if (!f) {
+        showToast('Choose an image file first.', 'warning');
+        return;
+    }
+    if (f.size > 8 * 1024 * 1024) {
+        showToast('Image must be 8 MB or smaller.', 'warning');
+        return;
+    }
+    profileSetBtnBusy('profileBtnUploadPhoto', true);
+    try {
+        const res = await API.uploadUserProfilePhoto(f);
+        if (res?.error || (typeof res?.status === 'number' && res.status >= 400)) {
+            showToast(res.error || 'Upload failed', 'danger');
+            return;
+        }
+        showToast('Photo uploaded.', 'success');
+        if (input) input.value = '';
+        const nameEl = document.getElementById('profilePhotoFileName');
+        if (nameEl) nameEl.textContent = '';
+        const urlInput = document.getElementById('profilePhotoUrl');
+        if (urlInput && res?.profile_pic_url != null && typeof API.resolvePublicMediaUrl === 'function') {
+            urlInput.value = API.resolvePublicMediaUrl(res.profile_pic_url);
+        } else if (urlInput && res?.profile_pic_url != null) {
+            urlInput.value = String(res.profile_pic_url);
+        }
+        await renderView('profile', { updateHash: false, suppressAccessToast: true });
+    } catch (_) {
+        showToast('Upload failed.', 'danger');
+    } finally {
+        profileSetBtnBusy('profileBtnUploadPhoto', false);
+    }
 };
 
 window.saveProfilePersonalFromPanel = async function () {
     if (Auth.getCurrentUser()?.isGuest) return;
-    const firstName = document.getElementById('profileFirstName')?.value?.trim() ?? '';
-    const lastName = document.getElementById('profileLastName')?.value?.trim() ?? '';
-    const phone = document.getElementById('profilePhone')?.value?.trim() ?? '';
-    const payload = { firstName, lastName, phone };
-    const nat = document.getElementById('profileNationality');
-    if (nat) payload.nationality = nat.value?.trim() ?? '';
-    const res = await API.updateUserProfile(payload);
-    if (res?.error || (typeof res?.status === 'number' && res.status >= 400) || res?.errors?.length) {
-        showToast(res.error || res.errors?.[0]?.msg || 'Could not update profile', 'danger');
-        return;
-    }
-    showToast('Profile saved.', 'success');
-    const u = Auth.getCurrentUser();
-    if (u) {
-        u.name = `${firstName} ${lastName}`.trim() || u.name;
-        u.phone = phone;
-        if (localStorage.getItem('token')) localStorage.setItem('user', JSON.stringify(u));
-        else sessionStorage.setItem('user', JSON.stringify(u));
+    profileSetBtnBusy('profileBtnSavePersonal', true);
+    try {
+        const firstName = document.getElementById('profileFirstName')?.value?.trim() ?? '';
+        const lastName = document.getElementById('profileLastName')?.value?.trim() ?? '';
+        const phone = document.getElementById('profilePhone')?.value?.trim() ?? '';
+        const payload = { firstName, lastName, phone };
+        const nat = document.getElementById('profileNationality');
+        if (nat) payload.nationality = nat.value?.trim() ?? '';
+        const res = await API.updateUserProfile(payload);
+        if (res?.error || (typeof res?.status === 'number' && res.status >= 400) || res?.errors?.length) {
+            showToast(res.error || res.errors?.[0]?.msg || 'Could not update profile', 'danger');
+            return;
+        }
+        showToast('Profile saved.', 'success');
+        const u = Auth.getCurrentUser();
+        if (u) {
+            u.name = `${firstName} ${lastName}`.trim() || u.name;
+            u.phone = phone;
+            if (localStorage.getItem('token')) localStorage.setItem('user', JSON.stringify(u));
+            else sessionStorage.setItem('user', JSON.stringify(u));
+        }
+    } catch (_) {
+        showToast('Could not update profile.', 'danger');
+    } finally {
+        profileSetBtnBusy('profileBtnSavePersonal', false);
     }
 };
 
 window.saveProfilePhotoUrl = async function () {
     if (Auth.getCurrentUser()?.isGuest) return;
-    const url = document.getElementById('profilePhotoUrl')?.value?.trim() ?? '';
-    const res = await API.updateUserProfile({ profile_pic_url: url || null });
-    if (res?.error || (typeof res?.status === 'number' && res.status >= 400)) {
-        showToast(res.error || 'Could not save photo URL', 'danger');
-        return;
+    profileSetBtnBusy('profileBtnSavePhoto', true);
+    try {
+        const url = document.getElementById('profilePhotoUrl')?.value?.trim() ?? '';
+        const res = await API.updateUserProfile({ profile_pic_url: url || null });
+        if (res?.error || (typeof res?.status === 'number' && res.status >= 400)) {
+            showToast(res.error || 'Could not save photo URL', 'danger');
+            return;
+        }
+        showToast('Image link saved.', 'success');
+        await renderView('profile', { updateHash: false, suppressAccessToast: true });
+    } catch (_) {
+        showToast('Could not save photo URL.', 'danger');
+    } finally {
+        profileSetBtnBusy('profileBtnSavePhoto', false);
     }
-    showToast('Profile photo updated.', 'success');
-    await renderView('profile', { updateHash: false, suppressAccessToast: true });
 };
 
 window.saveProfileBioLocal = function () {
-    const v = document.getElementById('profileBioLocal')?.value ?? '';
+    profileSetBtnBusy('profileBtnSaveBio', true);
     try {
-        localStorage.setItem('sigts_profile_bio_v1', v);
-        showToast('Bio saved on this device.', 'success');
-    } catch (_) {
-        showToast('Could not save bio locally.', 'danger');
+        const v = document.getElementById('profileBioLocal')?.value ?? '';
+        try {
+            localStorage.setItem('sigts_profile_bio_v1', v);
+            showToast('Bio saved on this device.', 'success');
+        } catch (_) {
+            showToast('Could not save bio locally.', 'danger');
+        }
+    } finally {
+        profileSetBtnBusy('profileBtnSaveBio', false);
     }
 };
 
@@ -5181,15 +5407,20 @@ window.sigtsToggleProfileConsent = async function (el) {
     const type = el?.dataset?.consentType;
     if (!type) return;
     const granted = Boolean(el.checked);
-    const res = await API.setMyConsent(type, granted);
-    if (!res || res.success !== true) {
-        showToast(res?.error || 'Could not update preference', 'danger');
-        el.checked = !granted;
-        return;
+    el.disabled = true;
+    try {
+        const res = await API.setMyConsent(type, granted);
+        if (!res || res.success !== true) {
+            showToast(res?.error || 'Could not update preference', 'danger');
+            el.checked = !granted;
+            return;
+        }
+        const span = el.closest('.profile-consent-toggle')?.querySelector('.profile-consent-state');
+        if (span) span.textContent = granted ? 'On' : 'Off';
+        showToast('Preference saved.', 'success');
+    } finally {
+        el.disabled = false;
     }
-    const span = el.closest('.profile-consent-toggle')?.querySelector('.profile-consent-state');
-    if (span) span.textContent = granted ? 'On' : 'Off';
-    showToast('Preference saved.', 'success');
 };
 
 async function deactivateMyAccountFromProfile() {

@@ -896,6 +896,29 @@ class APIService {
         return result;
     }
 
+    /** Base origin for `/uploads/...` paths (API base without trailing `/api`). */
+    getPublicAssetBaseUrl() {
+        const base = String(API_BASE_URL || '').replace(/\/api\/?$/i, '');
+        return base || (typeof window !== 'undefined' ? window.location.origin : '');
+    }
+
+    /** Resolve stored profile/media paths to an absolute URL for `<img src>`. */
+    resolvePublicMediaUrl(maybeRelativePath) {
+        const s = String(maybeRelativePath || '').trim();
+        if (!s) return '';
+        if (/^data:/i.test(s)) return s;
+        if (/^https?:\/\//i.test(s)) return s;
+        if (s.startsWith('/')) return `${this.getPublicAssetBaseUrl()}${s}`;
+        return s;
+    }
+
+    async uploadUserProfilePhoto(file) {
+        if (!file) return { error: 'No file' };
+        const fd = new FormData();
+        fd.append('profile_pic', file);
+        return this.request('/users/profile/photo', { method: 'POST', body: fd });
+    }
+
     async getMyConsents() {
         const result = await this.request('/users/me/consents');
         if (Array.isArray(result?.consents)) return result.consents;
