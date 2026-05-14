@@ -594,12 +594,18 @@ class GeofenceManager {
                     timestamp: new Date(timestamp || Date.now()).toISOString()
                 })
             }).then(async (result) => {
+                const applyOperationalAlerts = (r) => {
+                    const list = Array.isArray(r?.operational_alerts) ? r.operational_alerts : [];
+                    for (const a of list) {
+                        if (!a?.message || typeof window.showToast !== 'function') continue;
+                        const sev = String(a.severity || '').toLowerCase();
+                        window.showToast(a.message, sev === 'high' ? 'danger' : 'warning');
+                    }
+                };
                 if (result?.code === 'CONSENT_REQUIRED' && result?.consent_type) {
-                    // Auto-grant location tracking consent once during active session
-                    // so geofence writes and proximity features can work immediately.
                     const grant = await API.setMyConsent(result.consent_type, true);
                     if (grant?.success) {
-                        await API.request('/geofence/location-update', {
+                        const retry = await API.request('/geofence/location-update', {
                             method: 'POST',
                             body: JSON.stringify({
                                 lat: latitude,
@@ -608,8 +614,11 @@ class GeofenceManager {
                                 timestamp: new Date(timestamp || Date.now()).toISOString()
                             })
                         });
+                        applyOperationalAlerts(retry);
                     }
+                    return;
                 }
+                applyOperationalAlerts(result);
             });
         }
         this.checkProximityAlerts(latitude, longitude);
@@ -1960,7 +1969,7 @@ class OfflineSyncManager {
             screenshot_url: payload.screenshot_url || null
         };
         const result = await API.submitFeedback(normalized);
-        return Boolean(result?.feedback_id || result?.id);
+        return Boolean(result?.success && result.feedback);
     }
     getPendingCount() { return this.pendingItems.length; }
 }

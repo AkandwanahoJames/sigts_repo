@@ -41,17 +41,32 @@ router.post('/upload', authenticateJWT, [
                              item.data.notes, item.data.timestamp]
                         );
                         results.push({ success: true, id: result.rows[0].sighting_id, action: 'create', table: item.table });
+                    } else {
+                        results.push({
+                            success: false,
+                            action: 'create',
+                            table: item.table,
+                            error: `Offline sync for table "${item.table}" is not implemented on the server. Only "sightings" create is supported. Your change was not applied — keep it in the local queue or retry after an app update.`
+                        });
                     }
                     break;
 
                 case 'update':
-                    // Handle updates
-                    results.push({ success: true, action: 'update', table: item.table });
+                    results.push({
+                        success: false,
+                        action: 'update',
+                        table: item.table,
+                        error: `Offline "${item.action}" on "${item.table}" is not supported by this server build. No rows were modified.`
+                    });
                     break;
 
                 case 'delete':
-                    // Handle deletes
-                    results.push({ success: true, action: 'delete', table: item.table });
+                    results.push({
+                        success: false,
+                        action: 'delete',
+                        table: item.table,
+                        error: `Offline "${item.action}" on "${item.table}" is not supported by this server build. No rows were modified.`
+                    });
                     break;
             }
         } catch (error) {

@@ -6,6 +6,67 @@ const { authenticateJWT } = require('../middleware/auth');
 const { readCoordinates, isInsidePark } = require('../middleware/parkGeofence');
 const { requireConsent } = require('../middleware/consent');
 
+async function evaluateMandatorySafeZones(userId, lat, lng, insidePark) {
+    const alerts = [];
+    if (!insidePark || !userId) {
+        return { alerts, violationRecorded: false };
+    }
+    try {
+        const mandatory = await pool.query(
+            `SELECT EXISTS (SELECT 1 FROM park_safe_zones WHERE is_mandatory = true) AS has_mandatory`
+        );
+        if (!mandatory.rows[0]?.has_mandatory) {
+            return { alerts, violationRecorded: false };
+        }
+
+        const insideAny = await pool.query(
+            `SELECT EXISTS (
+                SELECT 1 FROM park_safe_zones sz
+                WHERE sz.is_mandatory = true
+                  AND ST_Contains(sz.boundary, ST_SetSRID(ST_MakePoint($1::float8, $2::float8), 4326))
+            ) AS inside_any`,
+            [lng, lat]
+        );
+        if (insideAny.rows[0]?.inside_any) {
+            return { alerts, violationRecorded: false };
+        }
+
+        const msg =
+            'Park operations: your position is outside the active visitor-safety corridors for this period. ' +
+            'Return toward an approved route, gate, or camp, or contact your guide / UWA ranger on radio.';
+
+        alerts.push({
+            code: 'MANDATORY_SAFE_ZONE',
+            severity: 'high',
+            message: msg
+        });
+
+        const recent = await pool.query(
+            `SELECT 1 FROM safe_zone_violations
+             WHERE user_id = $1
+               AND acknowledged = false
+               AND created_at > NOW() - INTERVAL '15 minutes'
+             LIMIT 1`,
+            [userId]
+        );
+        if (recent.rows.length) {
+            return { alerts, violationRecorded: false };
+        }
+
+        await pool.query(
+            `INSERT INTO safe_zone_violations (user_id, latitude, longitude, violation_kind, detail)
+             VALUES ($1, $2, $3, 'outside_mandatory_union', $4)`,
+            [userId, lat, lng, msg]
+        );
+        return { alerts, violationRecorded: true };
+    } catch (e) {
+        if (e.code === '42P01') {
+            return { alerts, violationRecorded: false };
+        }
+        throw e;
+    }
+}
+
 // =====================================================
 // POST /api/geofence/validate
 // Validate if user is inside park boundaries
@@ -86,10 +147,22 @@ router.post('/location-update', authenticateJWT, requireConsent('location_tracki
             );
         }
 
+        let operationalAlerts = [];
+        let violationRecorded = false;
+        try {
+            const sz = await evaluateMandatorySafeZones(userId, coordinates.lat, coordinates.lng, insidePark);
+            operationalAlerts = sz.alerts || [];
+            violationRecorded = Boolean(sz.violationRecorded);
+        } catch (szErr) {
+            console.warn('Safe zone evaluation skipped:', szErr.message);
+        }
+
         return res.json({
             success: true,
             insidePark,
-            event: previousInside !== undefined && previousInside !== insidePark ? (insidePark ? 'entry' : 'exit') : null
+            event: previousInside !== undefined && previousInside !== insidePark ? (insidePark ? 'entry' : 'exit') : null,
+            operational_alerts: operationalAlerts,
+            safe_zone_violation_logged: violationRecorded
         });
     } catch (error) {
         console.error('Location update error:', error);

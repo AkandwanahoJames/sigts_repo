@@ -34,7 +34,9 @@ router.get('/stats', async (req, res) => {
             activeTours: parseInt(activeTours.rows[0].count),
             pendingApprovals: parseInt(pendingApprovals.rows[0].count),
             avgRating: parseFloat(avgRating.rows[0].avg) || 0,
-            cacheHitRate: 89 // Placeholder - would come from Redis stats
+            cacheHitRate: null,
+            cacheHitNote:
+                'Cache hit rate is not tracked in this deployment (no Redis-backed edge cache metrics).'
         });
 
     } catch (error) {
@@ -655,7 +657,7 @@ router.get('/system-health', async (req, res) => {
         const geofencePulse = await pool.query(
             `SELECT COUNT(*) AS updates_last_15m
              FROM location_history
-             WHERE timestamp > NOW() - INTERVAL '15 minutes'`
+             WHERE captured_at > NOW() - INTERVAL '15 minutes'`
         );
         const feedbackPulse = await pool.query(
             `SELECT COUNT(*) AS feedback_last_24h
@@ -703,7 +705,9 @@ router.get('/schema-status', async (req, res) => {
         'faqs',
         'feedback',
         'sync_queue',
-        'audit_logs'
+        'audit_logs',
+        'park_safe_zones',
+        'safe_zone_violations'
     ];
 
     try {
@@ -731,6 +735,338 @@ router.get('/schema-status', async (req, res) => {
     } catch (error) {
         console.error('Get schema status error:', error);
         res.status(500).json({ error: 'Failed to load schema status' });
+    }
+});
+
+// =====================================================
+// POI / locations (IT manager)
+// =====================================================
+const LOCATION_TYPES = ['waterhole', 'viewpoint', 'camp', 'gate', 'trail', 'ranger_post'];
+
+router.get('/locations', [query('limit').optional().isInt({ min: 1, max: 500 })], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    const limit = Number.parseInt(req.query.limit, 10) || 200;
+    try {
+        const result = await pool.query(
+            `SELECT location_id, name, description, location_type,
+                    ST_Y(coordinates) AS latitude, ST_X(coordinates) AS longitude,
+                    trigger_radius, best_viewing_time, updated_at
+             FROM locations
+             ORDER BY name ASC
+             LIMIT $1`,
+            [limit]
+        );
+        return res.json({ locations: result.rows });
+    } catch (error) {
+        console.error('admin list locations', error);
+        return res.status(500).json({ error: 'Failed to list locations' });
+    }
+});
+
+router.post(
+    '/locations',
+    [
+        body('name').isString().trim().isLength({ min: 2, max: 200 }),
+        body('location_type').isIn(LOCATION_TYPES),
+        body('latitude').isFloat({ min: -90, max: 90 }),
+        body('longitude').isFloat({ min: -180, max: 180 }),
+        body('description').optional().isString().isLength({ max: 4000 }),
+        body('trigger_radius').optional().isInt({ min: 5, max: 5000 }),
+        body('best_viewing_time').optional().isString().isLength({ max: 200 })
+    ],
+    async (req, res) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+        const { name, location_type, latitude, longitude, description, trigger_radius, best_viewing_time } = req.body;
+        try {
+            const park = await pool.query('SELECT park_id FROM parks ORDER BY name ASC LIMIT 1');
+            if (!park.rows.length) {
+                return res.status(400).json({ error: 'No park configured — seed parks before adding POIs.' });
+            }
+            const ins = await pool.query(
+                `INSERT INTO locations (
+                    name, description, location_type, coordinates, trigger_radius, best_viewing_time, park_id
+                ) VALUES ($1, $2, $3, ST_SetSRID(ST_MakePoint($4, $5), 4326), $6, $7, $8)
+                RETURNING location_id, name, location_type`,
+                [
+                    name.trim(),
+                    description != null ? String(description) : null,
+                    location_type,
+                    Number(longitude),
+                    Number(latitude),
+                    Number.isFinite(Number(trigger_radius)) ? Number(trigger_radius) : 50,
+                    best_viewing_time != null ? String(best_viewing_time) : null,
+                    park.rows[0].park_id
+                ]
+            );
+            await audit(req, {
+                action: 'location.create',
+                table_name: 'locations',
+                record_id: ins.rows[0].location_id,
+                new_value: ins.rows[0]
+            });
+            return res.status(201).json({ success: true, location: ins.rows[0] });
+        } catch (error) {
+            console.error('admin create location', error);
+            return res.status(500).json({ error: 'Failed to create location' });
+        }
+    }
+);
+
+router.put(
+    '/locations/:id',
+    [
+        body('name').optional().isString().trim().isLength({ min: 2, max: 200 }),
+        body('location_type').optional().isIn(LOCATION_TYPES),
+        body('latitude').optional().isFloat({ min: -90, max: 90 }),
+        body('longitude').optional().isFloat({ min: -180, max: 180 }),
+        body('description').optional().isString().isLength({ max: 4000 }),
+        body('trigger_radius').optional().isInt({ min: 5, max: 5000 }),
+        body('best_viewing_time').optional().isString().isLength({ max: 200 })
+    ],
+    async (req, res) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+        const { id } = req.params;
+        try {
+            const cur = await pool.query(
+                `SELECT location_id, name, description, location_type, trigger_radius, best_viewing_time,
+                        ST_Y(coordinates) AS latitude, ST_X(coordinates) AS longitude
+                 FROM locations WHERE location_id = $1`,
+                [id]
+            );
+            if (!cur.rows.length) return res.status(404).json({ error: 'Location not found' });
+            const row = cur.rows[0];
+            const name = req.body.name != null ? String(req.body.name).trim() : row.name;
+            const location_type = req.body.location_type || row.location_type;
+            const lat = Number.isFinite(Number(req.body.latitude))
+                ? Number(req.body.latitude)
+                : Number(row.latitude);
+            const lng = Number.isFinite(Number(req.body.longitude))
+                ? Number(req.body.longitude)
+                : Number(row.longitude);
+            const description = req.body.description !== undefined ? req.body.description : row.description;
+            const trigger_radius = Number.isFinite(Number(req.body.trigger_radius))
+                ? Number(req.body.trigger_radius)
+                : row.trigger_radius;
+            const best_viewing_time =
+                req.body.best_viewing_time !== undefined ? req.body.best_viewing_time : row.best_viewing_time;
+
+            const upd = await pool.query(
+                `UPDATE locations SET
+                    name = $1,
+                    description = $2,
+                    location_type = $3,
+                    coordinates = ST_SetSRID(ST_MakePoint($4, $5), 4326),
+                    trigger_radius = $6,
+                    best_viewing_time = $7,
+                    updated_at = CURRENT_TIMESTAMP
+                 WHERE location_id = $8
+                 RETURNING location_id, name, location_type, description,
+                           ST_Y(coordinates) AS latitude, ST_X(coordinates) AS longitude,
+                           trigger_radius, best_viewing_time`,
+                [name, description, location_type, lng, lat, trigger_radius, best_viewing_time, id]
+            );
+            await audit(req, {
+                action: 'location.update',
+                table_name: 'locations',
+                record_id: id,
+                old_value: row,
+                new_value: upd.rows[0]
+            });
+            return res.json({ success: true, location: upd.rows[0] });
+        } catch (error) {
+            console.error('admin update location', error);
+            return res.status(500).json({ error: 'Failed to update location' });
+        }
+    }
+);
+
+router.delete('/locations/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const del = await pool.query('DELETE FROM locations WHERE location_id = $1 RETURNING location_id', [id]);
+        if (!del.rows.length) return res.status(404).json({ error: 'Location not found' });
+        await audit(req, { action: 'location.delete', table_name: 'locations', record_id: id });
+        return res.json({ success: true, deleted: id });
+    } catch (error) {
+        console.error('admin delete location', error);
+        return res.status(409).json({
+            error: 'Cannot delete this POI while other records still reference it.',
+            detail: String(error.message || error)
+        });
+    }
+});
+
+// =====================================================
+// Park geofence boundary (GeoJSON Polygon)
+// =====================================================
+router.put(
+    '/parks/boundary',
+    [body('geojson').isObject(), body('geojson.type').equals('Polygon')],
+    async (req, res) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+        const gj = req.body.geojson;
+        try {
+            const gjStr = JSON.stringify(gj);
+            await pool.query(
+                `UPDATE parks
+                 SET geofence_boundary = ST_GeomFromGeoJSON($1::text)::geometry
+                 WHERE park_id = (SELECT park_id FROM parks ORDER BY name ASC LIMIT 1)`,
+                [gjStr]
+            );
+            await audit(req, {
+                action: 'park.boundary_update',
+                table_name: 'parks',
+                record_id: 'primary',
+                new_value: { type: gj.type, ring_count: Array.isArray(gj.coordinates) ? gj.coordinates.length : 0 }
+            });
+            return res.json({
+                success: true,
+                message: 'Park boundary updated. Clients should refresh maps on next session.'
+            });
+        } catch (error) {
+            console.error('admin park boundary', error);
+            return res.status(400).json({
+                error: 'Invalid polygon for PostGIS — ensure GeoJSON is a single closed ring in WGS84.',
+                detail: String(error.message || error)
+            });
+        }
+    }
+);
+
+// =====================================================
+// Safe zones (mandatory visitor corridors)
+// =====================================================
+router.get('/safe-zones', async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT safe_zone_id, park_id, name, is_mandatory,
+                    ST_AsGeoJSON(boundary)::json AS geojson,
+                    created_at, updated_at
+             FROM park_safe_zones
+             ORDER BY name ASC`
+        );
+        return res.json({ safe_zones: result.rows });
+    } catch (error) {
+        if (error.code === '42P01') return res.json({ safe_zones: [], note: 'Migration 014 not applied.' });
+        console.error('admin safe-zones list', error);
+        return res.status(500).json({ error: 'Failed to list safe zones' });
+    }
+});
+
+router.post(
+    '/safe-zones',
+    [
+        body('name').isString().trim().isLength({ min: 2, max: 200 }),
+        body('is_mandatory').isBoolean(),
+        body('geojson').isObject(),
+        body('geojson.type').equals('Polygon')
+    ],
+    async (req, res) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+        try {
+            const park = await pool.query('SELECT park_id FROM parks ORDER BY name ASC LIMIT 1');
+            if (!park.rows.length) {
+                return res.status(400).json({ error: 'No park configured.' });
+            }
+            const gjStr = JSON.stringify(req.body.geojson);
+            const ins = await pool.query(
+                `INSERT INTO park_safe_zones (park_id, name, is_mandatory, boundary)
+                 VALUES ($1, $2, $3, ST_GeomFromGeoJSON($4::text)::geometry)
+                 RETURNING safe_zone_id, name, is_mandatory`,
+                [park.rows[0].park_id, req.body.name.trim(), Boolean(req.body.is_mandatory), gjStr]
+            );
+            await audit(req, {
+                action: 'safe_zone.create',
+                table_name: 'park_safe_zones',
+                record_id: ins.rows[0].safe_zone_id,
+                new_value: ins.rows[0]
+            });
+            return res.status(201).json({ success: true, safe_zone: ins.rows[0] });
+        } catch (error) {
+            if (error.code === '42P01') {
+                return res.status(503).json({
+                    error: 'Database migration 014 (park_safe_zones) is not applied on this server.'
+                });
+            }
+            console.error('admin safe-zone create', error);
+            return res.status(400).json({
+                error: 'Could not store safe zone polygon.',
+                detail: String(error.message || error)
+            });
+        }
+    }
+);
+
+router.delete('/safe-zones/:id', async (req, res) => {
+    try {
+        const del = await pool.query('DELETE FROM park_safe_zones WHERE safe_zone_id = $1 RETURNING safe_zone_id', [
+            req.params.id
+        ]);
+        if (!del.rows.length) return res.status(404).json({ error: 'Safe zone not found' });
+        await audit(req, { action: 'safe_zone.delete', table_name: 'park_safe_zones', record_id: req.params.id });
+        return res.json({ success: true, deleted: req.params.id });
+    } catch (error) {
+        if (error.code === '42P01') return res.status(503).json({ error: 'Migration 014 not applied.' });
+        console.error('admin safe-zone delete', error);
+        return res.status(500).json({ error: 'Failed to delete safe zone' });
+    }
+});
+
+router.get(
+    '/safe-zone-violations',
+    [query('limit').optional().isInt({ min: 1, max: 200 }), query('unacked').optional().isBoolean()],
+    async (req, res) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+        const limit = Number.parseInt(req.query.limit, 10) || 40;
+        const unacked = String(req.query.unacked || 'true').toLowerCase() === 'true';
+        try {
+            const result = await pool.query(
+                `SELECT v.violation_id, v.user_id, u.username, v.latitude, v.longitude,
+                        v.violation_kind, v.detail, v.created_at, v.acknowledged, v.acknowledged_at
+                 FROM safe_zone_violations v
+                 JOIN users u ON u.user_id = v.user_id
+                 WHERE ($1::boolean = false OR v.acknowledged = false)
+                 ORDER BY v.created_at DESC
+                 LIMIT $2`,
+                [unacked, limit]
+            );
+            return res.json({ violations: result.rows });
+        } catch (error) {
+            if (error.code === '42P01') return res.json({ violations: [], note: 'Migration 014 not applied.' });
+            console.error('admin safe-zone violations', error);
+            return res.status(500).json({ error: 'Failed to load violations' });
+        }
+    }
+);
+
+router.put('/safe-zone-violations/:id/ack', async (req, res) => {
+    try {
+        const result = await pool.query(
+            `UPDATE safe_zone_violations
+             SET acknowledged = true,
+                 acknowledged_at = CURRENT_TIMESTAMP,
+                 acknowledged_by = $2
+             WHERE violation_id = $1 AND acknowledged = false
+             RETURNING violation_id`,
+            [req.params.id, req.user.user_id]
+        );
+        if (!result.rows.length) return res.status(404).json({ error: 'Violation not found or already acknowledged' });
+        await audit(req, {
+            action: 'safe_zone_violation.ack',
+            table_name: 'safe_zone_violations',
+            record_id: req.params.id
+        });
+        return res.json({ success: true });
+    } catch (error) {
+        if (error.code === '42P01') return res.status(503).json({ error: 'Migration 014 not applied.' });
+        console.error('ack safe zone violation', error);
+        return res.status(500).json({ error: 'Failed to acknowledge violation' });
     }
 });
 

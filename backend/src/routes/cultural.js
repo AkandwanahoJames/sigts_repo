@@ -72,6 +72,42 @@ router.get('/', authenticateJWT, [
 });
 
 // =====================================================
+// GET /api/cultural/featured/today — deterministic daily rotation (§3.1.1.7)
+// =====================================================
+router.get('/featured/today', authenticateJWT, async (req, res) => {
+    try {
+        const isITManager = req.user?.user_type === 'it_manager';
+        const publishedClause = isITManager ? '' : 'AND published_at IS NOT NULL';
+        const result = await pool.query(
+            `SELECT narrative_id, title_en, title_local, narrative_en, cultural_significance,
+                    community, story_type, storyteller_name, storyteller_photo_url, audio_url,
+                    image_urls, verified_by_community, duration, published_at
+             FROM cultural_narratives
+             WHERE verified_by_community = true
+             ${publishedClause}
+             ORDER BY md5(narrative_id::text || CURRENT_DATE::text), narrative_id
+             LIMIT 1`
+        );
+        if (!result.rows.length) {
+            return res.status(404).json({
+                error: 'No published cultural narratives available for Story of the Day.',
+                hint: 'IT managers can verify and publish narratives in the admin workflow.'
+            });
+        }
+        const row = result.rows[0];
+        return res.json({
+            story: row,
+            featured_for_date: new Date().toISOString().slice(0, 10),
+            selection_note:
+                'Story is chosen deterministically from published, community-verified narratives for the current UTC date.'
+        });
+    } catch (error) {
+        console.error('cultural featured', error);
+        return res.status(500).json({ error: 'Failed to load Story of the Day' });
+    }
+});
+
+// =====================================================
 // GET /api/cultural/:id
 // Get cultural story by ID
 // =====================================================

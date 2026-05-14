@@ -2675,21 +2675,38 @@ async function renderCultureContent() {
         return `<div class="section-card"><div class="empty-state">Cultural stories will appear here once guides publish narratives. Seed data adds Batwa/Bakiga-friendly demos automatically.</div></div>`;
     }
 
-    const [featured, ...rest] = stories;
-    const secondary = rest.slice(0, 5);
+    let featured = stories[0];
+    let storyOfDayNote = '';
+    let featuredIsDaily = false;
+    try {
+        const sod = await API.getCulturalStoryOfDay();
+        if (sod?.story) {
+            featured = sod.story;
+            featuredIsDaily = true;
+            storyOfDayNote = sod.selection_note
+                ? `<p class="ui-modal-muted" style="margin:0 0 8px;">${escapeHtml(sod.selection_note)}</p>`
+                : '';
+        }
+    } catch (_) {
+        /**/
+    }
+
+    const featIdx = stories.findIndex((s) => String(s.narrative_id) === String(featured?.narrative_id));
+    const rest = stories.filter((_, i) => i !== (featIdx >= 0 ? featIdx : 0));
+    const secondary = (featIdx >= 0 ? rest : stories.slice(1)).slice(0, 5);
     const featImg = firstStoryImage(featured);
     const featuredBgStyle = featImg
         ? `background-image:url('${escapeHtml(featImg)}');`
         : 'background:linear-gradient(135deg,#795548,#5D4037);';
     const featId = escapeHtml(featured.narrative_id || '');
 
-    const intro = `<div class="section-card culture-page-intro"><div class="section-header"><h3>${icon('users', 'icon-sm')} Living heritage</h3></div><div class="animals-page-blurb">Stories foreground Batwa forest knowledge and Bakiga highland rhythms around Bwindi. Cards carry consent-checked narratives and tie into trekking etiquette. Read here first. Tour help is only if you want a scratch draft to edit.</div><div class="info-chip-row"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${JSON.stringify('Visiting Buhoma-area communities tied to trekking: manners around Batwa interpreters and homestead hosts (practical list).')});">${icon('target', 'icon-sm')} Tour help: community etiquette</button></div></div>`;
+    const intro = `<div class="section-card culture-page-intro"><div class="section-header"><h3>${icon('users', 'icon-sm')} Living heritage</h3></div>${storyOfDayNote}<div class="animals-page-blurb">Stories foreground Batwa forest knowledge and Bakiga highland rhythms around Bwindi. Cards carry consent-checked narratives and tie into trekking etiquette. Read here first. Tour help is only if you want a scratch draft to edit.</div><div class="info-chip-row"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${JSON.stringify('Visiting Buhoma-area communities tied to trekking: manners around Batwa interpreters and homestead hosts (practical list).')});">${icon('target', 'icon-sm')} Tour help: community etiquette</button></div></div>`;
 
     const featuredMarkup = `
         <div class="story-card featured story-card--interactive" tabindex="0" onclick="openCulturalStoryDetail('${featId}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openCulturalStoryDetail('${featId}');}">
             <div class="story-image" style="${featuredBgStyle}" role="img" aria-label=""></div>
             <div class="story-content">
-                <span class="story-community">${escapeHtml(featured.community || 'Community story')}</span>
+                <span class="story-community">${featuredIsDaily ? 'Story of the day • ' : ''}${escapeHtml(featured.community || 'Community story')}</span>
                 <div class="story-title">${escapeHtml(featured.title_en || 'Untitled story')}</div>
                 <div class="animal-teaser">${escapeHtml(truncateSnippet(featured.narrative_en || (featured.duration ? `About ${featured.duration}-minute listen.` : '') || 'Tap for full stewardship notes.', 140))}</div>
                 <div class="animal-card-actions">
@@ -2725,6 +2742,21 @@ async function renderCultureContent() {
 }
 
 async function renderSightingsContent() {
+    let animals = [];
+    try {
+        animals = await Content.getAnimals();
+    } catch (_) {
+        animals = [];
+    }
+    const animalOptions = (Array.isArray(animals) ? animals : [])
+        .slice(0, 120)
+        .map((a) => {
+            const id = escAttrBareUuid(a.animal_id || a.id);
+            const name = escapeHtml(a.name || 'Species');
+            return `<option value="${id}">${name}</option>`;
+        })
+        .join('');
+
     const sightings = await API.getRecentSightings(10);
     const commentsBySighting = {};
     await Promise.all((sightings || []).map(async (sighting) => {
@@ -2732,7 +2764,10 @@ async function renderSightingsContent() {
         if (!sid) return;
         commentsBySighting[sid] = await API.getSightingComments(sid, 3);
     }));
-    return `<div class="section-card"><div class="section-header"><h3>${icon('camera', 'icon-sm')} Recent Sightings</h3><button class="add-btn" onclick="addSighting()">${icon('plus', 'icon-sm')} Report</button></div><div class="sighting-list">${sightings.length ? sightings.map(sighting => `        <div class="sighting-item">
+
+    const bestTimesCard = `<div class="section-card" id="sigtsBestTimesCard"><div class="section-header"><h3>${icon('clock', 'icon-sm')} Best viewing times</h3></div><p class="animals-page-blurb">Statistical patterns from <strong>verified</strong> sightings only — wildlife is unpredictable; follow rangers and guides.</p><div class="info-chip-row" style="flex-wrap:wrap;align-items:flex-end;"><label class="auth-field" style="flex:1;min-width:200px;"><span class="auth-field-label">Species</span><select id="sigtsBestTimesAnimal" class="auth-select">${animalOptions || '<option value="">No animals in catalogue</option>'}</select></label><button type="button" class="small-btn" onclick="sigtsLoadBestTimes()">${icon('activity', 'icon-sm')} Load pattern</button></div><div id="sigtsBestTimesOut" class="seasonal-list" style="margin-top:10px;"><div class="seasonal-item ui-modal-muted">Choose a species and tap <strong>Load pattern</strong>.</div></div></div>`;
+
+    const recentCard = `<div class="section-card"><div class="section-header"><h3>${icon('camera', 'icon-sm')} Recent Sightings</h3><button class="add-btn" onclick="addSighting()">${icon('plus', 'icon-sm')} Report</button></div><div class="sighting-list">${sightings.length ? sightings.map(sighting => `        <div class="sighting-item">
             <div class="sighting-icon">${icon(getAnimalIconName(sighting.animal_name), 'icon-lg')}</div>
             <div class="sighting-main">
                 <div class="sighting-name">${escapeHtml(sighting.animal_name || 'Wildlife sighting')}</div>
@@ -2742,6 +2777,8 @@ async function renderSightingsContent() {
             </div>
             <span class="sighting-badge">${icon('paw', 'icon-sm')} ${sighting.number_observed || 1}</span>
         </div>`).join('') : '<div class="empty-state">No verified sightings available yet.</div>'}</div></div>`;
+
+    return `${bestTimesCard}${recentCard}`;
 }
 
 async function renderProfileContent() {
@@ -3383,6 +3420,13 @@ async function renderITManagerDashboard() {
     const liveOps = valueOr(1, { peers: [], intranetStatus: {}, syncStatus: {} });
     const rareAlerts = valueOr(2, []);
     const rareAlertsHtml = `<div class="section-card"><div class="section-header"><h3>${icon('bell', 'icon-sm')} Rare Sighting Alerts</h3></div><div class="seasonal-list">${(rareAlerts || []).length ? rareAlerts.map((a) => `<div class="seasonal-item rare-alert-item"><strong>${escapeHtml((a.risk_level || 'high').toUpperCase())}</strong> • ${escapeHtml(a.animal_name || 'Wildlife')} @ ${escapeHtml(a.location_name || 'Unknown')} (${a.number_observed || 0}) ${a.acknowledged ? '<span style="color:#2E7D32;">(Acknowledged)</span>' : `<button class=\"small-btn\" onclick=\"ackRareAlertPrompt('${a.alert_id}')\">Acknowledge</button>`}<br><span style="color:#6B705C;">${escapeHtml(a.reason || '')}</span></div>`).join('') : '<div class="seasonal-item">• No rare alerts in recent reports.</div>'}</div></div>`;
+    let safeZoneRows = [];
+    try {
+        safeZoneRows = await API.listAdminSafeZoneViolations({ limit: 12, unacked: true });
+    } catch (_) {
+        safeZoneRows = [];
+    }
+    const safeZoneHtml = `<div class="section-card"><div class="section-header"><h3>${icon('shield', 'icon-sm')} Safe-zone corridor alerts</h3></div><p class="animals-page-blurb">Shown when IT defines <strong>mandatory</strong> visitor corridors (migration 014). Guests inside the park but outside all mandatory polygons trigger a logged violation for ranger follow-up.</p><div class="seasonal-list">${(safeZoneRows || []).length ? safeZoneRows.map((v) => `<div class="seasonal-item"><strong>${escapeHtml(v.username || 'User')}</strong> @ ${escapeHtml(String(v.latitude?.toFixed?.(5) ?? v.latitude))}, ${escapeHtml(String(v.longitude?.toFixed?.(5) ?? v.longitude))}<br/><span class="ui-modal-muted">${escapeHtml(v.detail || v.violation_kind || '')}</span><br/><small>${escapeHtml(String(v.created_at || ''))}</small> ${v.acknowledged ? '<span style="color:#2E7D32;">Reviewed</span>' : `<button type="button" class="small-btn" onclick="ackSafeZoneViolationPrompt('${escAttrBareUuid(v.violation_id)}')">Acknowledge</button>`}</div>`).join('') : '<div class="seasonal-item">No open safe-zone violations. If the list is always empty, migration 014 may not be applied or no mandatory corridors are configured.</div>'}</div><div class="info-chip-row" style="flex-wrap:wrap;margin-top:8px;"><button type="button" class="small-btn" onclick="sigtsItAdminOpsHelp()">${icon('info', 'icon-sm')} IT setup notes</button></div></div>`;
     const predictiveCtaHtml = `<div class="section-card pa-admin-cta"><div class="section-header"><h3>${icon('chart', 'icon-sm')} Predictive Analytics & Reporting</h3></div><p class="animals-page-blurb">Forecast congestion, staffing, visitor flows, sightings, anomalies, satisfaction, demographics, exports, schedules, and model retraining—all in §3.1.1.11 tooling.</p><div class="info-chip-row" style="flex-wrap:wrap;gap:8px;"><button type="button" class="login-btn" onclick="navigateTo('it_predictive_analytics')">${icon('activity', 'icon-sm')} Open Predictive Analytics workspace</button></div></div>`;
     const animals = await Content.getAnimals();
     const avgStars = Number(metrics.averageRating || 0);
@@ -3444,7 +3488,7 @@ async function renderITManagerDashboard() {
         ],
         seasonalActionLabel: 'View Suggestions',
         animalCount: animals.length
-    })}<div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Current Users (Realtime)</h3><span id="adminLiveUsersStamp" class="status-badge neutral">Updated just now • ${(liveOps.peers || []).length} active now / ${Number(metrics.activeUsers || 0)} total</span></div><div id="adminLiveUsersList">${liveUsersHtml}</div></div>${accountDirHtml}${predictiveCtaHtml}<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('building', 'icon-sm')} Intranet Connectivity</h3></div><div class="analytics-list"><div class="analytics-row"><span>Intranet</span><div class="analytics-bar"><div style="width:${liveOps.intranetStatus?.isIntranet ? 100 : 35}%;"></div></div><strong>${liveOps.intranetStatus?.isIntranet ? 'Connected' : 'External'}</strong></div><div class="analytics-row"><span>Device IP</span><span></span><strong>${escapeHtml(liveOps.intranetStatus?.ip || 'Unknown')}</strong></div><div class="analytics-row"><span>Pending Sync</span><span></span><strong>${liveOps.syncStatus?.pending || liveOps.syncStatus?.pending_items || 0}</strong></div></div></div><div class="section-card"><div class="section-header"><h3>${icon('user', 'icon-sm')} Live Peers / Guests</h3></div><div class="seasonal-list">${(liveOps.peers || []).length ? liveOps.peers.slice(0, 8).map((p) => `<div class="seasonal-item">• ${escapeHtml(p.name || 'Peer')} (${escapeHtml(p.type || 'user')})${p.location ? ` @ ${Number(p.location.lat).toFixed(4)}, ${Number(p.location.lng).toFixed(4)}` : ''}</div>`).join('') : '<div class="seasonal-item">• No live peers detected in last 5 minutes.</div>'}</div></div></div>${rareAlertsHtml}<div class="admin-actions"><button class="admin-action-btn" onclick="handleMFASetup()">${icon('shield', 'icon-sm')} Configure MFA</button><button class="admin-action-btn" onclick="clearAllCache()">Clear Cache</button><button class="admin-action-btn" onclick="exportData()">Export Data</button><button class="admin-action-btn danger" onclick="resetApp()">Reset App</button></div></div>`;}
+    })}<div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Current Users (Realtime)</h3><span id="adminLiveUsersStamp" class="status-badge neutral">Updated just now • ${(liveOps.peers || []).length} active now / ${Number(metrics.activeUsers || 0)} total</span></div><div id="adminLiveUsersList">${liveUsersHtml}</div></div>${accountDirHtml}${predictiveCtaHtml}<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('building', 'icon-sm')} Intranet Connectivity</h3></div><div class="analytics-list"><div class="analytics-row"><span>Intranet</span><div class="analytics-bar"><div style="width:${liveOps.intranetStatus?.isIntranet ? 100 : 35}%;"></div></div><strong>${liveOps.intranetStatus?.isIntranet ? 'Connected' : 'External'}</strong></div><div class="analytics-row"><span>Device IP</span><span></span><strong>${escapeHtml(liveOps.intranetStatus?.ip || 'Unknown')}</strong></div><div class="analytics-row"><span>Pending Sync</span><span></span><strong>${liveOps.syncStatus?.pending || liveOps.syncStatus?.pending_items || 0}</strong></div></div></div><div class="section-card"><div class="section-header"><h3>${icon('user', 'icon-sm')} Live Peers / Guests</h3></div><div class="seasonal-list">${(liveOps.peers || []).length ? liveOps.peers.slice(0, 8).map((p) => `<div class="seasonal-item">• ${escapeHtml(p.name || 'Peer')} (${escapeHtml(p.type || 'user')})${p.location ? ` @ ${Number(p.location.lat).toFixed(4)}, ${Number(p.location.lng).toFixed(4)}` : ''}</div>`).join('') : '<div class="seasonal-item">• No live peers detected in last 5 minutes.</div>'}</div></div></div>${rareAlertsHtml}${safeZoneHtml}<div class="admin-actions"><button class="admin-action-btn" onclick="handleMFASetup()">${icon('shield', 'icon-sm')} Configure MFA</button><button class="admin-action-btn" onclick="clearAllCache()">Clear Cache</button><button class="admin-action-btn" onclick="exportData()">Export Data</button><button class="admin-action-btn danger" onclick="resetApp()">Reset App</button></div></div>`;}
 
 // =====================================================
 // PREDICTIVE ANALYTICS (§3.1.1.11) — IT Manager workspace
@@ -4747,8 +4791,9 @@ window.submitUserFeedback = async function () {
     if (screenshotUrl) payload.screenshot_url = screenshotUrl;
     const result = await API.submitFeedback(payload);
 
-    if (!result) {
-        // offline fallback to keep feedback loop interactive
+    if (result?.success) {
+        showToast('Thanks — your feedback was submitted to park IT for review.', 'success');
+    } else if (!navigator.onLine) {
         const feedback = JSON.parse(localStorage.getItem('feedback') || '[]');
         feedback.unshift({
             feedback_id: `local_${Date.now()}`,
@@ -4758,9 +4803,9 @@ window.submitUserFeedback = async function () {
             created_at: new Date().toISOString()
         });
         localStorage.setItem('feedback', JSON.stringify(feedback));
-        alert('Feedback saved locally and will sync when online.');
+        showToast('You appear offline — feedback was saved on this device only until connectivity returns.', 'warning');
     } else {
-        alert('Thanks! Your feedback was submitted.');
+        showToast(result?.error || 'Feedback could not be submitted. Check fields and try again.', 'danger');
     }
     const commentNode = document.getElementById('feedbackComment');
     if (commentNode) commentNode.value = '';
@@ -4780,13 +4825,15 @@ window.submitTourCompletionFeedback = async function () {
         return;
     }
     const comment = await showPromptDialog('Tour review comment', 'Great route and pacing.');
-    const saved = await API.submitFeedback({
+    const res = await API.submitFeedback({
         rating,
         category: 'tour',
         comment: comment || 'Tour feedback submitted.',
         tour_session_id: last.tour_session_id
     });
-    showToast(saved ? 'Tour rating recorded.' : 'Tour rating queued/offline.', saved ? 'success' : 'info');
+    if (res?.success) showToast('Tour rating recorded.', 'success');
+    else if (!navigator.onLine) showToast('Offline — tour rating stored locally only.', 'warning');
+    else showToast(res?.error || 'Tour rating was not saved.', 'danger');
     await loadRecentFeedback();
 };
 
@@ -4804,8 +4851,10 @@ window.submitGuidePerformanceFeedback = async function () {
         comment: comment || 'Guide feedback submitted.'
     };
     if (guideId) payload.tourguide_id = guideId;
-    const saved = await API.submitFeedback(payload);
-    showToast(saved ? 'Guide rating recorded.' : 'Guide feedback queued/offline.', saved ? 'success' : 'info');
+    const res = await API.submitFeedback(payload);
+    if (res?.success) showToast('Guide rating recorded.', 'success');
+    else if (!navigator.onLine) showToast('Offline — guide feedback stored locally only.', 'warning');
+    else showToast(res?.error || 'Guide feedback was not saved.', 'danger');
     await loadRecentFeedback();
 };
 
@@ -4813,25 +4862,29 @@ window.submitBugReportPrompt = async function () {
     const issue = await showPromptDialog('Describe the issue you found');
     if (!issue) return;
     const screenshot = await showPromptDialog('Screenshot URL (optional)');
-    const saved = await API.submitFeedback({
+    const res = await API.submitFeedback({
         rating: 2,
         category: 'bug_report',
         comment: issue,
         screenshot_url: screenshot || null
     });
-    showToast(saved ? 'Bug report logged.' : 'Bug report saved offline.', saved ? 'success' : 'info');
+    if (res?.success) showToast('Bug report logged for IT review.', 'success');
+    else if (!navigator.onLine) showToast('Offline — bug report kept on device only.', 'warning');
+    else showToast(res?.error || 'Bug report was not accepted by the server.', 'danger');
     await loadRecentFeedback();
 };
 
 window.submitFeatureSuggestionPrompt = async function () {
     const suggestion = await showPromptDialog('Suggest an improvement');
     if (!suggestion) return;
-    const saved = await API.submitFeedback({
+    const res = await API.submitFeedback({
         rating: 4,
         category: 'feature_suggestion',
         comment: suggestion
     });
-    showToast(saved ? 'Feature suggestion logged.' : 'Feature suggestion saved offline.', saved ? 'success' : 'info');
+    if (res?.success) showToast('Feature suggestion logged.', 'success');
+    else if (!navigator.onLine) showToast('Offline — suggestion stored locally only.', 'warning');
+    else showToast(res?.error || 'Suggestion was not saved.', 'danger');
     await loadRecentFeedback();
 };
 
@@ -4842,12 +4895,14 @@ window.submitSatisfactionSurvey = async function () {
         return;
     }
     const useAgain = await showPromptDialog('Would you use SIGTS again? (yes/no)', 'yes');
-    const saved = await API.submitFeedback({
+    const res = await API.submitFeedback({
         rating: overall,
         category: 'survey',
         comment: `Survey response: reuse=${String(useAgain || 'yes').toLowerCase()}`
     });
-    showToast(saved ? 'Survey response recorded.' : 'Survey response saved offline.', saved ? 'success' : 'info');
+    if (res?.success) showToast('Survey response recorded.', 'success');
+    else if (!navigator.onLine) showToast('Offline — survey stored locally only.', 'warning');
+    else showToast(res?.error || 'Survey was not saved.', 'danger');
     await loadRecentFeedback();
 };
 
@@ -4858,13 +4913,15 @@ window.submitNPSFeedback = async function () {
         return;
     }
     const why = await showPromptDialog('What is the main reason for your score?');
-    const saved = await API.submitFeedback({
+    const res = await API.submitFeedback({
         rating: nps >= 9 ? 5 : (nps >= 7 ? 4 : 2),
         category: 'nps',
         nps_score: nps,
         comment: why || 'NPS response'
     });
-    showToast(saved ? 'NPS response recorded.' : 'NPS response saved offline.', saved ? 'success' : 'info');
+    if (res?.success) showToast('NPS response recorded.', 'success');
+    else if (!navigator.onLine) showToast('Offline — NPS stored locally only.', 'warning');
+    else showToast(res?.error || 'NPS was not saved.', 'danger');
     await loadRecentFeedback();
 };
 
@@ -5006,9 +5063,10 @@ window.submitContentHelpfulness = async function (contentType, contentId, conten
         source_content_type: contentType,
         helpfulness_rating: score
     };
-    const saved = await API.submitFeedback(payload);
-    if (saved) alert('Thanks! Content feedback recorded.');
-    else alert('Feedback stored offline and will sync later.');
+    const res = await API.submitFeedback(payload);
+    if (res?.success) showToast('Thanks — content helpfulness recorded for the editorial team.', 'success');
+    else if (!navigator.onLine) showToast('Offline — helpfulness note kept on device only.', 'warning');
+    else showToast(res?.error || 'Could not record helpfulness on the server.', 'danger');
 };
 
 window.ackRareAlertPrompt = async function (alertId) {
@@ -5026,6 +5084,67 @@ window.ackRareAlertPrompt = async function (alertId) {
     if (window.currentView === 'it_dashboard') {
         await renderView('it_dashboard');
     }
+};
+
+window.sigtsLoadBestTimes = async function () {
+    const sel = document.getElementById('sigtsBestTimesAnimal');
+    const out = document.getElementById('sigtsBestTimesOut');
+    if (!out) return;
+    const animalId = String(sel?.value || '').trim();
+    if (!animalId) {
+        showToast('Pick an animal first.', 'warning');
+        return;
+    }
+    out.innerHTML = '<div class="seasonal-item">Loading verified sighting history…</div>';
+    const data = await API.getSightingBestTimes(animalId, { days: 365 });
+    if (!data || data.status >= 400) {
+        out.innerHTML = `<div class="seasonal-item">${escapeHtml(data?.error || 'Could not load best-time analysis.')}</div>`;
+        showToast(data?.error || 'Best-time request failed.', 'danger');
+        return;
+    }
+    const disc = data.disclaimer ? `<p class="ui-modal-muted">${escapeHtml(data.disclaimer)}</p>` : '';
+    const n = Number(data.sample_size || 0);
+    if (!n) {
+        out.innerHTML = `${disc}<div class="seasonal-item">No verified sightings in the last ${escapeHtml(String(data.window_days || 365))} days for <strong>${escapeHtml(data.animal_name || 'this species')}</strong>.</div>`;
+        return;
+    }
+    const hours = (data.by_hour || [])
+        .slice(0, 6)
+        .map((h) => `<div class="seasonal-item"><strong>Hour ${escapeHtml(String(h.hour))}</strong> — ${escapeHtml(String(h.count))} reports (${escapeHtml(String(Math.round((h.probability || 0) * 100)))}% of sample)</div>`)
+        .join('');
+    const dows = (data.by_dow || [])
+        .slice(0, 4)
+        .map((d) => `<div class="seasonal-item"><strong>${escapeHtml(d.name || `DOW ${d.iso_dow}`)}</strong> — ${escapeHtml(String(d.count))} reports</div>`)
+        .join('');
+    const sug = (data.suggested_windows || [])
+        .map((s) => `<div class="seasonal-item"><strong>${escapeHtml(s.label || 'Window')}</strong><br/><span class="ui-modal-muted">${escapeHtml(s.rationale || '')}</span></div>`)
+        .join('');
+    out.innerHTML = `${disc}<div class="seasonal-item"><strong>Sample:</strong> ${n} verified reports • <strong>Species:</strong> ${escapeHtml(data.animal_name || '')}</div>${sug}<div class="section-header" style="margin-top:10px;"><h4>Top hours (local)</h4></div>${hours || '<div class="seasonal-item">No hourly spread.</div>'}<div class="section-header" style="margin-top:10px;"><h4>Day-of-week</h4></div>${dows || '<div class="seasonal-item">No DOW spread.</div>'}`;
+    showToast(`Loaded ${n} verified sighting(s) for patterns.`, 'success');
+};
+
+window.ackSafeZoneViolationPrompt = async function (violationId) {
+    if (!requireITManagerAccess('safe zone acknowledgements')) return;
+    const id = String(violationId || '').trim();
+    if (!id) return;
+    const r = await API.acknowledgeSafeZoneViolation(id);
+    if (r?.success) {
+        showToast('Safe-zone violation marked as reviewed.', 'success');
+    } else {
+        showToast(r?.error || 'Could not acknowledge violation.', 'danger');
+    }
+    if (window.currentView === 'it_dashboard') {
+        await renderView('it_dashboard');
+    }
+};
+
+window.sigtsItAdminOpsHelp = function () {
+    const body = `<div class="seasonal-list"><div class="seasonal-item"><strong>POIs and park boundary</strong><br/>REST (JWT IT manager): <code>GET/POST /api/admin/locations</code>, <code>PUT /api/admin/locations/:id</code>, <code>DELETE /api/admin/locations/:id</code>, <code>PUT /api/admin/parks/boundary</code> with body <code>{ "geojson": { "type":"Polygon","coordinates":[...] } }</code>.</div><div class="seasonal-item"><strong>Safe corridors</strong><br/>Run database migration <strong>014_safe_zones_and_violations.sql</strong>. Then <code>POST /api/admin/safe-zones</code> with <code>{ "name", "is_mandatory", "geojson" }</code>. When mandatory zones exist, in-park positions outside every mandatory polygon log a violation (throttled) and the guest app shows a high-visibility toast during GPS updates.</div><div class="seasonal-item"><strong>Platform honesty</strong><br/>Native ranger push, carrier SMS, SQLite on device, and full voice turn-by-turn are not part of this web client — scope a mobile app or integrations if those are mandatory.</div></div>`;
+    showRichContentModal({
+        title: 'IT desk — capabilities of this deployment',
+        bodyHtml: body,
+        footerHtml: `<button type="button" class="small-btn ghost-btn" onclick="document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();">${icon('x', 'icon-sm')} Close</button>`
+    });
 };
 
 async function loadRecentFeedback() {

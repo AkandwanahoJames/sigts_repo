@@ -1,7 +1,7 @@
 // backend/src/routes/sightings.js
 const express = require('express');
 const router = express.Router();
-const { body, validationResult } = require('express-validator');
+const { body, query, validationResult } = require('express-validator');
 const multer = require('multer');
 const path = require('path');
 const { pool } = require('../config/database');
@@ -322,6 +322,145 @@ router.get('/heatmap', authenticateJWT, async (req, res) => {
         return res.status(500).json({ error: 'Failed to build sightings heat layer' });
     }
 });
+
+// =====================================================
+// GET /api/sightings/best-times — hour-of-day / DOW from verified history (§3.1.1.8)
+// =====================================================
+router.get(
+    '/best-times',
+    authenticateJWT,
+    [
+        query('animal_id').isUUID(),
+        query('days').optional().isInt({ min: 7, max: 3650 }),
+        query('location_id').optional().isUUID()
+    ],
+    async (req, res) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+        const animalId = String(req.query.animal_id);
+        const days = Number.parseInt(req.query.days, 10) || 365;
+        const locationId = req.query.location_id ? String(req.query.location_id) : null;
+
+        try {
+            const animalRow = await pool.query(
+                'SELECT animal_id, name FROM animals WHERE animal_id = $1 LIMIT 1',
+                [animalId]
+            );
+            if (!animalRow.rows.length) {
+                return res.status(404).json({ error: 'Animal not found', animal_id: animalId });
+            }
+
+            const params = [animalId, days];
+            let locClause = '';
+            if (locationId && /^[0-9a-f-]{36}$/i.test(locationId)) {
+                locClause = ' AND s.location_id = $3 ';
+                params.push(locationId);
+            }
+
+            const total = await pool.query(
+                `SELECT COUNT(*)::int AS n
+                 FROM sightings s
+                 WHERE s.animal_id = $1
+                   AND s.verification_status = 'verified'
+                   AND s.timestamp > NOW() - ($2::text || ' days')::interval
+                   ${locClause}`,
+                params
+            );
+            const n = Number(total.rows[0]?.n || 0);
+            if (n === 0) {
+                return res.json({
+                    animal_id: animalId,
+                    animal_name: animalRow.rows[0].name,
+                    sample_size: 0,
+                    disclaimer:
+                        'There are not enough verified sightings in the selected window to estimate viewing times. ' +
+                        'As guides and tourists log verified sightings, this forecast will improve.',
+                    by_hour: [],
+                    by_dow: [],
+                    suggested_windows: []
+                });
+            }
+
+            const byHour = await pool.query(
+                `SELECT EXTRACT(HOUR FROM s.timestamp)::int AS hour,
+                        COUNT(*)::int AS cnt
+                 FROM sightings s
+                 WHERE s.animal_id = $1
+                   AND s.verification_status = 'verified'
+                   AND s.timestamp > NOW() - ($2::text || ' days')::interval
+                   ${locClause}
+                 GROUP BY 1
+                 ORDER BY cnt DESC, hour ASC`,
+                params
+            );
+
+            const byDow = await pool.query(
+                `SELECT EXTRACT(ISODOW FROM s.timestamp)::int AS dow,
+                        TO_CHAR(s.timestamp, 'Day') AS dow_name,
+                        COUNT(*)::int AS cnt
+                 FROM sightings s
+                 WHERE s.animal_id = $1
+                   AND s.verification_status = 'verified'
+                   AND s.timestamp > NOW() - ($2::text || ' days')::interval
+                   ${locClause}
+                 GROUP BY 1, 2
+                 ORDER BY cnt DESC`,
+                params
+            );
+
+            const topHours = byHour.rows.map((r) => ({
+                hour: r.hour,
+                count: r.cnt,
+                probability: Math.round((r.cnt / n) * 1000) / 1000
+            }));
+
+            const topDow = byDow.rows.map((r) => ({
+                iso_dow: r.dow,
+                name: String(r.dow_name || '').trim(),
+                count: r.cnt,
+                probability: Math.round((r.cnt / n) * 1000) / 1000
+            }));
+
+            const bestHour = byHour.rows[0]?.hour;
+            const bestDow = byDow.rows[0]?.dow;
+            const suggested = [];
+            if (bestHour != null) {
+                const h = Number(bestHour);
+                const label = `${String(h).padStart(2, '0')}:00–${String((h + 2) % 24).padStart(2, '0')}:00`;
+                suggested.push({
+                    label,
+                    rationale: `Most verified reports in the last ${days} days occurred around this local hour window.`,
+                    confidence: Math.min(0.95, topHours[0]?.probability || 0)
+                });
+            }
+            if (bestDow != null && topDow[0]) {
+                suggested.push({
+                    label: topDow[0].name || `Weekday ${bestDow}`,
+                    rationale: 'Strongest day-of-week pattern in verified records for this species.',
+                    confidence: Math.min(0.9, topDow[0].probability || 0)
+                });
+            }
+
+            return res.json({
+                animal_id: animalId,
+                animal_name: animalRow.rows[0].name,
+                window_days: days,
+                location_id: locationId,
+                sample_size: n,
+                disclaimer:
+                    'Forecasts are descriptive statistics from past verified sightings only — not a guarantee of ' +
+                    'future wildlife behaviour. Always follow ranger and guide instructions.',
+                by_hour: topHours,
+                by_dow: topDow,
+                suggested_windows: suggested
+            });
+        } catch (error) {
+            console.error('sightings best-times', error);
+            return res.status(500).json({ error: 'Failed to compute best-time patterns' });
+        }
+    }
+);
 
 // =====================================================
 // GET /api/sightings/alerts/rare

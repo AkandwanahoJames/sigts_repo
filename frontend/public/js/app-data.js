@@ -281,6 +281,50 @@ class APIService {
         }
     }
 
+    async getSightingBestTimes(animalId, options = {}) {
+        if (!animalId) return null;
+        const qs = new URLSearchParams();
+        qs.set('animal_id', String(animalId));
+        if (options.days) qs.set('days', String(options.days));
+        if (options.location_id) qs.set('location_id', String(options.location_id));
+        const result = await this.request(`/sightings/best-times?${qs.toString()}`);
+        if (result && typeof result === 'object') return result;
+        return null;
+    }
+
+    async getCulturalStoryOfDay() {
+        const result = await this.request('/cultural/featured/today');
+        if (result?.story) return result;
+        return null;
+    }
+
+    async listAdminLocations(limit = 200) {
+        const r = await this.request(`/admin/locations?limit=${encodeURIComponent(limit)}`);
+        if (Array.isArray(r?.locations)) return r.locations;
+        return [];
+    }
+
+    async listAdminSafeZones() {
+        const r = await this.request('/admin/safe-zones');
+        if (Array.isArray(r?.safe_zones)) return r;
+        return { safe_zones: [], note: r?.note || '' };
+    }
+
+    async listAdminSafeZoneViolations({ limit = 40, unacked = true } = {}) {
+        const qs = new URLSearchParams();
+        qs.set('limit', String(limit));
+        qs.set('unacked', unacked ? 'true' : 'false');
+        const r = await this.request(`/admin/safe-zone-violations?${qs.toString()}`);
+        if (Array.isArray(r?.violations)) return r.violations;
+        return [];
+    }
+
+    async acknowledgeSafeZoneViolation(violationId) {
+        const id = encodeURIComponent(String(violationId || '').trim());
+        if (!id) return { success: false, error: 'Violation id required' };
+        return this.request(`/admin/safe-zone-violations/${id}/ack`, { method: 'PUT', body: JSON.stringify({}) });
+    }
+
     // Sightings endpoints
     async getRecentSightings(limit = 20) {
         const result = await this.request(`/sightings/recent?limit=${limit}`);
@@ -816,7 +860,22 @@ class APIService {
             method: 'POST',
             body: JSON.stringify({ items: pendingItems })
         });
-        return result && result.success;
+        if (!result?.success) {
+            return {
+                success: false,
+                error: result?.error || 'Sync upload was rejected by the server.',
+                results: result?.results || []
+            };
+        }
+        const rows = Array.isArray(result.results) ? result.results : [];
+        const failures = rows.filter((r) => r && r.success === false);
+        return {
+            success: failures.length === 0,
+            processed: result.processed,
+            failures,
+            results: rows,
+            partial: failures.length > 0
+        };
     }
 
     // Health check
@@ -835,8 +894,16 @@ class APIService {
             method: 'POST',
             body: JSON.stringify(payload)
         });
-        if (result?.success) return result.feedback;
-        return null;
+        if (result?.success && result.feedback) {
+            return { success: true, feedback: result.feedback };
+        }
+        const msg =
+            (Array.isArray(result?.errors) && result.errors.length
+                ? result.errors.map((e) => e.msg || e.message || JSON.stringify(e)).join(' ')
+                : null) ||
+            result?.error ||
+            (result?.status ? `Request failed (${result.status})` : 'Could not submit feedback');
+        return { success: false, error: msg, errors: result?.errors, status: result?.status };
     }
 
     async getMyFeedback(limit = 20) {
