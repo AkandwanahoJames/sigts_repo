@@ -170,16 +170,23 @@ router.post('/users', [
         return res.status(400).json({ errors: errors.array() });
     }
 
+    const {
+        normalizeUsername,
+        normalizeEmail,
+        findRegistrationConflicts,
+        registrationConflictResponse,
+        mapUniqueViolation
+    } = require('../utils/userIdentity');
+
     const { username, email, password, first_name, last_name, phone, user_type } = req.body;
+    const usernameNorm = normalizeUsername(username);
+    const emailNorm = normalizeEmail(email);
 
     try {
-        const existing = await pool.query(
-            'SELECT user_id FROM users WHERE username = $1 OR email = $2',
-            [username, email]
-        );
-
-        if (existing.rows.length > 0) {
-            return res.status(400).json({ error: 'Username or email already exists' });
+        const conflicts = await findRegistrationConflicts(pool, username, email);
+        const conflictResp = registrationConflictResponse(conflicts);
+        if (conflictResp) {
+            return res.status(conflictResp.status).json(conflictResp.body);
         }
 
         const hashedPassword = await hashPassword(password);
@@ -188,7 +195,7 @@ router.post('/users', [
             `INSERT INTO users (user_id, username, password_hash, email, first_name, last_name, phone, user_type)
              VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)
              RETURNING user_id, username, email, user_type`,
-            [username, hashedPassword, email, first_name, last_name, phone, user_type]
+            [usernameNorm, hashedPassword, emailNorm, first_name, last_name, phone, user_type]
         );
 
         const newUser = result.rows[0];
@@ -227,6 +234,10 @@ router.post('/users', [
         });
 
     } catch (error) {
+        const unique = mapUniqueViolation(error);
+        if (unique) {
+            return res.status(unique.status).json(unique.body);
+        }
         console.error('Create user error:', error);
         res.status(500).json({ error: 'Failed to create user' });
     }

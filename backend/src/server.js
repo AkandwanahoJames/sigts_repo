@@ -97,7 +97,17 @@ app.use(cors({
         }
     },
     credentials: true,
-    optionsSuccessStatus: 200
+    optionsSuccessStatus: 200,
+    allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'x-user-lat',
+        'x-user-lng',
+        'x-sigts-sim-boundary',
+        'x-sigts-sim-network',
+        'x-idempotency-key',
+        'x-request-id'
+    ]
 }));
 
 // Compression
@@ -401,6 +411,30 @@ try {
 app.set('pool', pool);
 
 // =====================================================
+// FRONTEND (SPA) — same origin as /api for reliable registration/login
+// =====================================================
+const FRONTEND_PUBLIC_DIR = path.join(__dirname, '../../frontend/public');
+if (fs.existsSync(FRONTEND_PUBLIC_DIR)) {
+    app.use(express.static(FRONTEND_PUBLIC_DIR, { index: 'index.html', maxAge: process.env.NODE_ENV === 'production' ? '1d' : 0 }));
+    app.get('*', (req, res, next) => {
+        if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+        if (
+            req.path.startsWith('/api')
+            || req.path.startsWith('/uploads')
+            || req.path.startsWith('/static')
+            || req.path === '/health'
+            || req.path.startsWith('/socket.io')
+        ) {
+            return next();
+        }
+        res.sendFile(path.join(FRONTEND_PUBLIC_DIR, 'index.html'), (err) => {
+            if (err) next(err);
+        });
+    });
+    logger.info(`✅ Frontend static files: ${FRONTEND_PUBLIC_DIR}`);
+}
+
+// =====================================================
 // ERROR HANDLING MIDDLEWARE
 // =====================================================
 
@@ -434,6 +468,7 @@ async function startServer() {
             logger.info(`🚀 SIGTS Backend Running Successfully!`);
             logger.info(`========================================`);
             logger.info(`📍 Server: http://${HOST}:${PORT}`);
+            logger.info(`📍 App UI: http://localhost:${PORT}/  (when frontend/public is present)`);
             logger.info(`📍 Health: http://${HOST}:${PORT}/api/health`);
             if (process.env.NODE_ENV !== 'production') {
                 logger.info(`📍 Test:   http://${HOST}:${PORT}/api/test`);

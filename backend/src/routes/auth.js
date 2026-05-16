@@ -9,8 +9,18 @@ const { REQUIREMENTS } = require('../config/requirements');
 const { authenticateJWT } = require('../middleware/auth');
 const { logger } = require('../utils/logger');
 const { audit } = require('../utils/audit');
-const { sendVerificationEmail, sendPasswordResetEmail, sendActivityNotificationEmail } = require('../services/emailService');
+const { sendPasswordResetEmail, sendActivityNotificationEmail } = require('../services/emailService');
+const { notifyUserRegistered } = require('../services/notificationService');
 const refreshTokenService = require('../services/refreshTokenService');
+const {
+    normalizeUsername,
+    normalizeEmail,
+    isValidEmailShape,
+    findRegistrationConflicts,
+    findUserForLogin,
+    registrationConflictResponse,
+    mapUniqueViolation
+} = require('../utils/userIdentity');
 const crypto = require('crypto');
 
 function clientContext(req) {
@@ -164,7 +174,7 @@ function verifyTotp(secret, providedCode, windowSteps = 1) {
 // =====================================================
 router.post('/register', [
     body('username').isLength({ min: 3 }).trim(),
-    body('email').isEmail().normalizeEmail(),
+    body('email').trim().isEmail().withMessage('Valid email required'),
     body('password').isLength({ min: 4 }),
     body('phone').trim().isLength({ min: 6, max: 32 }).withMessage('Phone number is required'),
     body('userType').optional().isIn(['tourist', 'guide', 'it_manager'])
@@ -174,68 +184,88 @@ router.post('/register', [
         return res.status(400).json({ errors: errors.array() });
     }
 
-    const { username, email, password, firstName, lastName, phone, userType } = req.body;
-    const emailNorm = String(email || '').toLowerCase();
-    if (emailNorm.endsWith('@guest.sigts.local')) {
-        return res.status(400).json({ error: 'This email domain is reserved for temporary guest sessions' });
+    const usernameRaw = req.body.username;
+    const emailRaw = req.body.email;
+    const password = req.body.password;
+    const { firstName, lastName, phone, userType } = req.body;
+
+    const username = normalizeUsername(usernameRaw);
+    const email = normalizeEmail(emailRaw);
+
+    if (!isValidEmailShape(email)) {
+        return res.status(400).json({ error: 'Valid email required', field: 'email' });
+    }
+    if (email.endsWith('@guest.sigts.local')) {
+        return res.status(400).json({ error: 'This email domain is reserved for temporary guest sessions', field: 'email' });
     }
 
+    const client = await pool.connect();
     try {
-        // Check if user exists
-        const existing = await pool.query(
-            'SELECT user_id FROM users WHERE username = $1 OR email = $2',
-            [username, email]
-        );
-        
-        if (existing.rows.length > 0) {
-            return res.status(400).json({ error: 'Username or email already exists' });
+        const conflicts = await findRegistrationConflicts(client, usernameRaw, emailRaw);
+        const conflictResp = registrationConflictResponse(conflicts);
+        if (conflictResp) {
+            return res.status(conflictResp.status).json(conflictResp.body);
         }
 
-        // Hash password
         const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
+        const phoneNorm = String(phone || '').trim();
+        const role = userType || 'tourist';
 
-        // Insert user
-        const result = await pool.query(
+        await client.query('BEGIN');
+
+        const result = await client.query(
             `INSERT INTO users (user_id, username, password_hash, email, first_name, last_name, phone, user_type, is_active)
              VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, true)
              RETURNING user_id, username, email, user_type`,
-            [username, hashedPassword, email, firstName || '', lastName || '', String(phone || '').trim(), userType || 'tourist']
+            [username, hashedPassword, email, firstName || '', lastName || '', phoneNorm, role]
         );
 
         const user = result.rows[0];
 
         if (user.user_type === 'tourist') {
-            await pool.query(
-                `INSERT INTO tourists (user_id, interests)
-                 VALUES ($1, $2)`,
+            await client.query(
+                `INSERT INTO tourists (user_id, interests) VALUES ($1, $2)`,
                 [user.user_id, '[]']
             );
         } else if (user.user_type === 'guide') {
-            await pool.query(
+            await client.query(
                 `INSERT INTO tour_guides (user_id, license_number, specialization, languages)
                  VALUES ($1, $2, $3, $4)`,
                 [user.user_id, `GUIDE-${Date.now()}`, '[]', '[]']
             );
         } else if (user.user_type === 'it_manager') {
-            await pool.query(
+            await client.query(
                 `INSERT INTO it_managers (user_id, employee_id, access_level)
                  VALUES ($1, $2, $3)`,
                 [user.user_id, `ITM-${Date.now()}`, 'admin']
             );
         }
 
-        sendVerificationEmail(user.email, user.user_id).catch((err) => logger.error('Verification email failed:', err.message));
+        await client.query('COMMIT');
 
-        sendActivityNotificationEmail(
-            user.email,
-            user.username,
-            'Your SIGTS account was created',
-            'Your account has been registered successfully. If this was not you, contact support immediately.'
-        ).catch((err) => logger.error('Registration activity email failed:', err.message));
+        let notifications = { email: false, sms: false, verificationEmail: false };
+        try {
+            notifications = await notifyUserRegistered({
+                email: user.email,
+                username: user.username,
+                phone: phoneNorm,
+                userId: user.user_id
+            });
+        } catch (notifyErr) {
+            logger.error('Registration notifications failed (account created):', notifyErr.message);
+        }
 
-        res.status(201).json({
+        const noticeParts = [];
+        if (notifications.email || notifications.verificationEmail) noticeParts.push('email');
+        if (notifications.sms) noticeParts.push('SMS');
+        const noticeHint = noticeParts.length
+            ? ` Confirmation sent via ${noticeParts.join(' and ')}.`
+            : ' You can sign in now.';
+
+        return res.status(201).json({
             success: true,
-            message: 'Registration successful. Verification email sent.',
+            message: `Registration successful.${noticeHint}`,
+            notifications,
             user: {
                 id: user.user_id,
                 username: user.username,
@@ -245,8 +275,40 @@ router.post('/register', [
         });
 
     } catch (error) {
-        console.error('Registration error:', error);
-        res.status(500).json({ error: 'Registration failed' });
+        await client.query('ROLLBACK').catch(() => {});
+        const unique = mapUniqueViolation(error);
+        if (unique) {
+            return res.status(unique.status).json(unique.body);
+        }
+        logger.error('Registration error:', error);
+        const detail = process.env.NODE_ENV !== 'production' ? error.message : undefined;
+        res.status(500).json({
+            error: 'Registration failed',
+            ...(detail ? { detail } : {})
+        });
+    } finally {
+        client.release();
+    }
+});
+
+// GET /api/auth/check-availability?username=&email=
+router.get('/check-availability', async (req, res) => {
+    try {
+        const conflicts = await findRegistrationConflicts(
+            pool,
+            req.query.username || '',
+            req.query.email || ''
+        );
+        const conflictResp = registrationConflictResponse(conflicts);
+        return res.json({
+            available: !conflictResp,
+            usernameAvailable: !conflicts.username,
+            emailAvailable: !conflicts.email,
+            ...(conflictResp ? { conflict: conflictResp.body } : {})
+        });
+    } catch (error) {
+        logger.error('check-availability error:', error);
+        return res.status(500).json({ error: 'Availability check failed' });
     }
 });
 
@@ -321,19 +383,13 @@ router.post('/login', [
             return res.status(400).json({ error: 'Username or email is required' });
         }
 
-        const result = await pool.query(
-            `SELECT user_id, username, password_hash, user_type, first_name, last_name, is_active, email
-             FROM users
-             WHERE LOWER(username) = LOWER($1) OR LOWER(email) = LOWER($1)
-             LIMIT 1`,
-            [identifier]
-        );
+        const loginMatch = await findUserForLogin(pool, identifier);
 
-        if (result.rows.length === 0) {
-            return res.status(401).json({ error: 'Invalid credentials' });
+        if (!loginMatch) {
+            return res.status(401).json({ error: 'Invalid credentials', code: 'USER_NOT_FOUND' });
         }
 
-        const user = result.rows[0];
+        const user = loginMatch.user;
 
         if (!user.is_active) {
             return res.status(401).json({ error: 'Account deactivated' });

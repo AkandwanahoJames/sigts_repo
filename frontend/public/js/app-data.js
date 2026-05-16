@@ -7,36 +7,132 @@
 
 const RUNTIME_CONFIG = window.__SIGTS_CONFIG__ || {};
 
-/** Ensure catalogue calls hit `/api/...` (common mis-set: API_URL=http://host:8000 without /api). */
+/** Ensure all API calls use `.../api` (never `http://host:port/auth/...`). */
 function normalizeSigtsApiBaseUrl(raw) {
-    const base = String(raw || '').trim().replace(/\/+$/, '');
-    if (!base) return '';
-    const lower = base.toLowerCase();
-    if (lower.endsWith('/api')) return base;
+    const trimmed = String(raw || '').trim();
+    if (!trimmed) return '';
+
     try {
-        const u = new URL(base);
-        const p = u.pathname || '/';
-        if (p === '/' || p === '') return `${base}/api`;
+        const u = new URL(trimmed);
+        let path = (u.pathname || '/').replace(/\/+$/, '');
+        if (path === '/' || path === '') {
+            path = '/api';
+        } else if (!/\/api$/i.test(path)) {
+            path = `${path}/api`;
+        }
+        return `${u.origin}${path}`.replace(/\/+$/, '');
     } catch (_) {
-        /**/
+        const base = trimmed.replace(/\/+$/, '');
+        return /\/api$/i.test(base) ? base : `${base}/api`;
     }
-    return base;
 }
 
-const API_BASE_URL = (() => {
+function resolveSigtsApiBaseUrl() {
+    const pagePort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+    const pageOrigin = window.location.origin;
+
+    // Backend serves the UI on the same port as /api (single-origin dev/demo)
+    if (pagePort === '8000' || pagePort === '8001') {
+        const sameOriginApi = normalizeSigtsApiBaseUrl(pageOrigin);
+        if (sameOriginApi) return sameOriginApi;
+    }
+
+    // Dev UI (live-server :3000 with --proxy=/api) or nginx: API on same host
+    if (pagePort === '3000' || pagePort === '80' || pagePort === '443' || pagePort === '') {
+        const proxied = normalizeSigtsApiBaseUrl(pageOrigin);
+        if (proxied) return proxied;
+    }
+
     const configuredBase = RUNTIME_CONFIG.API_URL || window.__SIGTS_API_BASE__;
     if (typeof configuredBase === 'string' && configuredBase.trim()) {
+        try {
+            const parsed = new URL(configuredBase, pageOrigin);
+            const cfgPort = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
+            const sameHost = parsed.hostname === window.location.hostname;
+            // Dev UI on :3000 but config still points at localhost API — keep explicit API port
+            if (sameHost && pagePort === '3000' && (cfgPort === '8000' || cfgPort === '8001')) {
+                return normalizeSigtsApiBaseUrl(configuredBase);
+            }
+            if (sameHost && (pagePort === '80' || pagePort === '443' || pagePort === '')) {
+                return normalizeSigtsApiBaseUrl(pageOrigin);
+            }
+        } catch (_) {
+            /**/
+        }
         return normalizeSigtsApiBaseUrl(configuredBase);
     }
 
     const host = window.location.hostname;
     const isLocalHost = host === 'localhost' || host === '127.0.0.1';
+    const apiPort = Number(RUNTIME_CONFIG.API_PORT) || 8000;
     if (isLocalHost) {
-        return 'http://localhost:8000/api';
+        return `http://localhost:${apiPort}/api`;
     }
 
-    return normalizeSigtsApiBaseUrl(window.location.origin) || `${window.location.origin}/api`;
-})();
+    return normalizeSigtsApiBaseUrl(pageOrigin) || `${pageOrigin}/api`;
+}
+
+let API_BASE_URL = normalizeSigtsApiBaseUrl(resolveSigtsApiBaseUrl());
+
+function getSigtsApiBaseUrl() {
+    const base = API_BASE_URL || window.__SIGTS_API_BASE__ || resolveSigtsApiBaseUrl();
+    return normalizeSigtsApiBaseUrl(base);
+}
+
+function isPublicAuthEndpoint(endpoint) {
+    return /^\/auth\/(login|register|guest|forgot-password|verify-email|reset-password|refresh|check-availability)(\/|$|\?)/.test(
+        String(endpoint || '')
+    );
+}
+
+/** Probe localhost API ports when config points at an unreachable server. */
+async function ensureSigtsApiReachable() {
+    const host = window.location.hostname || 'localhost';
+    const candidates = [];
+    const add = (url) => {
+        const n = normalizeSigtsApiBaseUrl(url);
+        if (n && !candidates.includes(n)) candidates.push(n);
+    };
+
+    add(API_BASE_URL);
+    add(window.__SIGTS_API_BASE__);
+    if (host === 'localhost' || host === '127.0.0.1') {
+        const preferred = Number(RUNTIME_CONFIG.API_PORT) || 8000;
+        add(`http://${host}:${preferred}/api`);
+        [8001, 8000, 8080].forEach((p) => add(`http://${host}:${p}/api`));
+    } else {
+        add(window.location.origin);
+    }
+
+    for (const base of candidates) {
+        const apiBase = normalizeSigtsApiBaseUrl(base);
+        if (!apiBase) continue;
+        try {
+            const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            const timer = ctrl ? window.setTimeout(() => ctrl.abort(), 2500) : null;
+            // Must probe /api/health — root /health exists but API routes live under /api
+            const res = await fetch(`${apiBase}/health`, {
+                method: 'GET',
+                cache: 'no-store',
+                ...(ctrl ? { signal: ctrl.signal } : {})
+            });
+            if (timer) window.clearTimeout(timer);
+            if (res.ok) {
+                if (apiBase !== API_BASE_URL) {
+                    console.info('[SIGTS] API reachable at', apiBase);
+                }
+                API_BASE_URL = apiBase;
+                API_URL = apiBase;
+                window.__SIGTS_API_BASE__ = apiBase;
+                return apiBase;
+            }
+        } catch (_) {
+            /** try next candidate */
+        }
+    }
+    return getSigtsApiBaseUrl();
+}
+
 class APIService {
     constructor() {
         this.refreshPromise = null;
@@ -91,7 +187,7 @@ class APIService {
         if (this.refreshPromise) return this.refreshPromise;
         this.refreshPromise = (async () => {
             try {
-                const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+                const response = await fetch(`${getSigtsApiBaseUrl()}/auth/refresh`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ refreshToken })
@@ -125,6 +221,7 @@ class APIService {
             window.Auth.touchSessionActivity();
         }
         const token = this.getToken();
+        const publicAuth = isPublicAuthEndpoint(endpoint);
         const headers = {
             ...options.headers
         };
@@ -132,23 +229,25 @@ class APIService {
         if (!(options.body instanceof FormData) && !headers['Content-Type']) {
             headers['Content-Type'] = 'application/json';
         }
-        if (token) {
+        if (token && !publicAuth) {
             headers.Authorization = `Bearer ${token}`;
         }
-        const coords = this.getLiveCoordinates();
-        if (coords && !headers['x-user-lat'] && !headers['x-user-lng']) {
-            headers['x-user-lat'] = String(coords.lat);
-            headers['x-user-lng'] = String(coords.lng);
-        }
-        try {
-            const sim = JSON.parse(localStorage.getItem('parkAccessSimulation') || '{}');
-            const boundary = ['auto', 'inside', 'outside'].includes(sim.boundary) ? sim.boundary : 'auto';
-            const network = ['auto', 'online', 'offline'].includes(sim.network) ? sim.network : 'auto';
-            headers['x-sigts-sim-boundary'] = boundary;
-            headers['x-sigts-sim-network'] = network;
-        } catch (_) {
-            headers['x-sigts-sim-boundary'] = 'auto';
-            headers['x-sigts-sim-network'] = 'auto';
+        if (!publicAuth) {
+            const coords = this.getLiveCoordinates();
+            if (coords && !headers['x-user-lat'] && !headers['x-user-lng']) {
+                headers['x-user-lat'] = String(coords.lat);
+                headers['x-user-lng'] = String(coords.lng);
+            }
+            try {
+                const sim = JSON.parse(localStorage.getItem('parkAccessSimulation') || '{}');
+                const boundary = ['auto', 'inside', 'outside'].includes(sim.boundary) ? sim.boundary : 'auto';
+                const network = ['auto', 'online', 'offline'].includes(sim.network) ? sim.network : 'auto';
+                headers['x-sigts-sim-boundary'] = boundary;
+                headers['x-sigts-sim-network'] = network;
+            } catch (_) {
+                headers['x-sigts-sim-boundary'] = 'auto';
+                headers['x-sigts-sim-network'] = 'auto';
+            }
         }
 
         const opts = { ...options };
@@ -167,7 +266,7 @@ class APIService {
         }
 
         try {
-            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+            const response = await fetch(`${getSigtsApiBaseUrl()}${endpoint}`, {
                 ...opts,
                 headers,
                 ...(controller ? { signal: controller.signal } : {})
@@ -206,10 +305,18 @@ class APIService {
         } catch (error) {
             if (error?.name === 'AbortError') {
                 console.warn(`API timeout (${endpoint}) after ${timeoutMs}ms`);
-            } else {
-                console.error(`API Error (${endpoint}):`, error);
+                return {
+                    error: `Request timed out after ${Math.round(timeoutMs / 1000)}s`,
+                    network: true,
+                    status: 0
+                };
             }
-            return null;
+            console.error(`API Error (${endpoint}):`, error);
+            return {
+                error: error?.message || 'Network error',
+                network: true,
+                status: 0
+            };
         } finally {
             if (timer !== undefined) window.clearTimeout(timer);
         }
@@ -262,7 +369,7 @@ class APIService {
         }
 
         try {
-            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+            const response = await fetch(`${getSigtsApiBaseUrl()}${endpoint}`, {
                 ...opts,
                 headers,
                 ...(controller ? { signal: controller.signal } : {})
@@ -881,7 +988,7 @@ class APIService {
     // Health check
     async checkHealth() {
         try {
-            const response = await fetch(`${API_BASE_URL}/health`);
+            const response = await fetch(`${getSigtsApiBaseUrl()}/health`);
             return response.ok;
         } catch {
             return false;
@@ -1191,4 +1298,6 @@ const AppState = {
     }
 };
 
-const API_URL = API_BASE_URL;
+let API_URL = getSigtsApiBaseUrl();
+window.ensureSigtsApiReachable = ensureSigtsApiReachable;
+window.getSigtsApiBaseUrl = getSigtsApiBaseUrl;

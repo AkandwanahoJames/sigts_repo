@@ -111,6 +111,9 @@ function initLiveAccessStatusHooks() {
 async function init() {
     showLoading();
     try {
+        if (typeof ensureSigtsApiReachable === 'function') {
+            await ensureSigtsApiReachable();
+        }
         registerServiceWorker();
         initHashRouting();
         initLiveAccessStatusHooks();

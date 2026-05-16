@@ -37,11 +37,18 @@ function toLiteral(value) {
 
 function main() {
     const frontendRoot = path.resolve(__dirname, '..');
+    const repoRoot = path.resolve(frontendRoot, '..');
     const envPath = path.join(frontendRoot, '.env');
     const outPath = path.join(frontendRoot, 'public', 'runtime-config.js');
 
-    const env = parseEnvFile(envPath);
-    const apiPort = Number.parseInt(env.API_PORT || '', 10) || 8001;
+    const env = {
+        ...parseEnvFile(path.join(repoRoot, '.env')),
+        ...parseEnvFile(path.join(repoRoot, 'backend', '.env')),
+        ...parseEnvFile(envPath)
+    };
+
+    const backendPort = Number.parseInt(env.PORT || '', 10);
+    const apiPort = Number.parseInt(env.API_PORT || '', 10) || backendPort || 8000;
     const explicitApiUrl = env.API_URL || '';
     const runtimeConfig = {
         NODE_ENV: env.NODE_ENV || 'development',
@@ -56,16 +63,31 @@ function main() {
 window.__SIGTS_CONFIG__ = ${toLiteral(runtimeConfig)};
 (function() {
   var cfg = window.__SIGTS_CONFIG__ || {};
+  var pageOrigin = window.location && window.location.origin ? window.location.origin : 'http://localhost:3000';
+  var pagePort = window.location && window.location.port
+    ? window.location.port
+    : (window.location && window.location.protocol === 'https:' ? '443' : '80');
+
+  // Dev live-server (:3000 with --proxy) or nginx: API on same host
+  if (pagePort === '3000' || pagePort === '80' || pagePort === '443' || pagePort === '') {
+    window.__SIGTS_API_BASE__ = pageOrigin.replace(/\\/$/, '') + '/api';
+    return;
+  }
+
   if (cfg.API_URL) {
     try {
       var currentHost = window.location && window.location.hostname ? window.location.hostname : '';
-      var parsed = new URL(cfg.API_URL, window.location ? window.location.origin : 'http://localhost');
+      var parsed = new URL(cfg.API_URL, pageOrigin);
       var apiHost = parsed.hostname || '';
       var isLocalApiHost = apiHost === 'localhost' || apiHost === '127.0.0.1';
       if (currentHost && currentHost !== 'localhost' && currentHost !== '127.0.0.1' && isLocalApiHost) {
         parsed.hostname = currentHost;
       }
-      window.__SIGTS_API_BASE__ = parsed.toString().replace(/\/$/, '');
+      var href = parsed.toString().replace(/\\/$/, '');
+      if (!/\\/api$/i.test(href)) {
+        href = parsed.origin + '/api';
+      }
+      window.__SIGTS_API_BASE__ = href;
       return;
     } catch (_) {
       window.__SIGTS_API_BASE__ = cfg.API_URL;
@@ -74,13 +96,13 @@ window.__SIGTS_CONFIG__ = ${toLiteral(runtimeConfig)};
   }
   var protocol = window.location && window.location.protocol ? window.location.protocol : 'http:';
   var hostname = window.location && window.location.hostname ? window.location.hostname : 'localhost';
-  var port = Number(cfg.API_PORT) || 8001;
+  var port = Number(cfg.API_PORT) || 8000;
   window.__SIGTS_API_BASE__ = protocol + '//' + hostname + ':' + port + '/api';
 })();
 `;
 
     fs.writeFileSync(outPath, output, 'utf8');
-    console.log(`Generated runtime config at ${outPath}`);
+    console.log(`Generated runtime config at ${outPath} (API port ${apiPort})`);
 }
 
 main();

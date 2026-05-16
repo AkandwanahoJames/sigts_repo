@@ -3,31 +3,69 @@ const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
 const { logger } = require('../utils/logger');
 
-// Create transporter
-const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT) || 587,
-    secure: false,
-    auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
+function smtpPassword() {
+    return process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '';
+}
+
+function smtpFromAddress() {
+    return process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@bwindi.local';
+}
+
+function isEmailConfigured() {
+    return Boolean(process.env.SMTP_USER && smtpPassword());
+}
+
+let transporter = null;
+
+function getTransporter() {
+    if (!isEmailConfigured()) return null;
+    if (!transporter) {
+        transporter = nodemailer.createTransport({
+            host: process.env.SMTP_HOST || 'smtp.gmail.com',
+            port: parseInt(process.env.SMTP_PORT, 10) || 587,
+            secure: false,
+            auth: {
+                user: process.env.SMTP_USER,
+                pass: smtpPassword()
+            }
+        });
     }
-});
+    return transporter;
+}
+
+async function sendMail(mailOptions) {
+    const transport = getTransporter();
+    if (!transport) {
+        logger.warn(
+            `Email not sent (SMTP not configured): ${mailOptions.subject} → ${mailOptions.to}`
+        );
+        return false;
+    }
+    const from = mailOptions.from || `"Bwindi SIGTS" <${smtpFromAddress()}>`;
+    await transport.sendMail({ ...mailOptions, from });
+    return true;
+}
 
 /**
  * Send verification email
  */
-async function sendVerificationEmail(email, userId) {
-    const verificationSecret = process.env.JWT_EMAIL_VERIFICATION_SECRET || process.env.JWT_SECRET || 'bwindi-dev-email-verify-secret';
+async function sendVerificationEmail(email, userId, clientOrigin) {
+    const verificationSecret =
+        process.env.JWT_EMAIL_VERIFICATION_SECRET
+        || process.env.JWT_SECRET
+        || 'bwindi-dev-email-verify-secret';
     const verificationToken = jwt.sign(
         { sub: userId, typ: 'email_verify' },
         verificationSecret,
         { expiresIn: '24h' }
     );
-    const verificationUrl = `${process.env.CLIENT_URL}/verify-email?token=${verificationToken}`;
+    const base = (clientOrigin || process.env.CLIENT_URL || 'http://localhost:3000')
+        .split(',')[0]
+        .trim()
+        .replace(/\/$/, '');
+    const verificationUrl = `${base}/verify-email?token=${verificationToken}`;
 
-    const mailOptions = {
-        from: `"Bwindi Tour Guide" <${process.env.SMTP_USER}>`,
+    const sent = await sendMail({
         to: email,
         subject: 'Verify Your Email - Bwindi Smart Tour Guide',
         html: `
@@ -40,24 +78,22 @@ async function sendVerificationEmail(email, userId) {
                 <p style="color: #666; font-size: 12px;">Bwindi Impenetrable National Park - Smart Information Guide Tour System</p>
             </div>
         `
-    };
+    });
 
-    try {
-        await transporter.sendMail(mailOptions);
+    if (sent) {
         logger.info(`Verification email sent to ${email}`);
-    } catch (error) {
-        logger.error(`Failed to send verification email to ${email}:`, error);
     }
+    return sent;
 }
 
 /**
  * Send password reset email
  */
 async function sendPasswordResetEmail(email, token, username) {
-    const resetUrl = `${process.env.CLIENT_URL}/reset-password?token=${token}`;
+    const base = (process.env.CLIENT_URL || 'http://localhost:3000').split(',')[0].trim().replace(/\/$/, '');
+    const resetUrl = `${base}/reset-password?token=${token}`;
 
-    const mailOptions = {
-        from: `"Bwindi Tour Guide" <${process.env.SMTP_USER}>`,
+    const sent = await sendMail({
         to: email,
         subject: 'Reset Your Password - Bwindi Smart Tour Guide',
         html: `
@@ -72,14 +108,12 @@ async function sendPasswordResetEmail(email, token, username) {
                 <p style="color: #666; font-size: 12px;">Bwindi Impenetrable National Park - Smart Information Guide Tour System</p>
             </div>
         `
-    };
+    });
 
-    try {
-        await transporter.sendMail(mailOptions);
+    if (sent) {
         logger.info(`Password reset email sent to ${email}`);
-    } catch (error) {
-        logger.error(`Failed to send password reset email to ${email}:`, error);
     }
+    return sent;
 }
 
 /**
@@ -88,28 +122,30 @@ async function sendPasswordResetEmail(email, token, username) {
 async function sendActivityNotificationEmail(email, username, activityTitle, activityDetails = '') {
     const safeUsername = username || 'User';
     const safeDetails = activityDetails || 'No additional details were provided.';
-    const mailOptions = {
-        from: `"Bwindi Tour Guide" <${process.env.SMTP_USER}>`,
+    const sent = await sendMail({
         to: email,
         subject: `${activityTitle} - Bwindi Smart Tour Guide`,
         html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h1 style="color: #2E7D32;">Activity Notification</h1>
                 <p>Hello ${safeUsername},</p>
-                <p>${activityTitle}</p>
+                <p><strong>${activityTitle}</strong></p>
                 <p>${safeDetails}</p>
                 <hr>
                 <p style="color: #666; font-size: 12px;">Bwindi Impenetrable National Park - Smart Information Guide Tour System</p>
             </div>
         `
-    };
+    });
 
-    try {
-        await transporter.sendMail(mailOptions);
+    if (sent) {
         logger.info(`Activity email sent to ${email}: ${activityTitle}`);
-    } catch (error) {
-        logger.error(`Failed to send activity email to ${email}:`, error);
     }
+    return sent;
 }
 
-module.exports = { sendVerificationEmail, sendPasswordResetEmail, sendActivityNotificationEmail };
+module.exports = {
+    sendVerificationEmail,
+    sendPasswordResetEmail,
+    sendActivityNotificationEmail,
+    isEmailConfigured
+};

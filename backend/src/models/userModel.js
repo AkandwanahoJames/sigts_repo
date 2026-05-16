@@ -22,10 +22,13 @@ class UserModel {
      * Find user by username or email
      */
     static async findByUsernameOrEmail(username, email) {
+        const { normalizeUsername, normalizeEmail } = require('../utils/userIdentity');
         const result = await pool.query(
             `SELECT user_id, username, email, password_hash, user_type, is_active
-             FROM users WHERE username = $1 OR email = $2`,
-            [username, email]
+             FROM users
+             WHERE LOWER(TRIM(username)) = $1 OR LOWER(TRIM(email)) = $2
+             LIMIT 1`,
+            [normalizeUsername(username), normalizeEmail(email)]
         );
         return result.rows[0] || null;
     }

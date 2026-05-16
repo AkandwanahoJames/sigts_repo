@@ -979,6 +979,32 @@ body.auth-page {
     box-shadow: var(--shadow-md);
 }
 
+/* Register has more fields than login — avoid clipping the submit control */
+.auth-mode-register .auth-card {
+    display: flex;
+    flex-direction: column;
+    max-height: min(90vh, calc(100dvh - 48px));
+    overflow: hidden;
+}
+
+.auth-mode-register .auth-tabs {
+    flex-shrink: 0;
+}
+
+.auth-mode-register .auth-form {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.auth-mode-register .auth-primary-btn {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin-top: 12px;
+}
+
 /* Stack layout: slightly tighter vertical rhythm but still inset from edges */
 @media (max-width: 900px) {
     .auth-portal-side {

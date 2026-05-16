@@ -52,6 +52,10 @@ class AuthManager {
         if (!phone || phone.length < 6) return { success: false, error: 'Phone number is required (at least 6 characters)' };
         if (!password || password.length < 4) return { success: false, error: 'Password must be at least 4 characters' };
         if (password !== confirmPassword) return { success: false, error: 'Passwords do not match' };
+
+        if (typeof ensureSigtsApiReachable === 'function') {
+            await ensureSigtsApiReachable();
+        }
         
         const nameParts = fullName.split(/\s+/).filter(Boolean);
         const firstName = nameParts.shift() || '';
@@ -70,16 +74,50 @@ class AuthManager {
             })
         });
 
+        const apiBase = typeof getSigtsApiBaseUrl === 'function'
+            ? getSigtsApiBaseUrl()
+            : (typeof API_URL !== 'undefined' ? API_URL : (window.__SIGTS_API_BASE__ || 'API'));
+
         if (!result) {
-            return { success: false, error: 'Registration service unavailable' };
+            return {
+                success: false,
+                error: `Cannot reach the registration server (${apiBase}). Start the backend (npm run dev --workspace=backend) or open http://localhost:8001/`
+            };
+        }
+
+        if (result.network) {
+            return {
+                success: false,
+                error: result.error || `Cannot reach the registration server (${apiBase}).`
+            };
         }
 
         if (result.error) {
-            return { success: false, error: result.error };
+            const detail = result.detail ? ` (${result.detail})` : '';
+            const msg = String(result.error);
+            const friendly = /not found/i.test(msg) && /\/auth\//i.test(msg)
+                ? `Registration service misconfigured (${getSigtsApiBaseUrl?.() || 'API'}). Hard-refresh the page or open http://localhost:8001/`
+                : `${msg}${detail}`;
+            return {
+                success: false,
+                error: friendly,
+                field: result.field || null,
+                code: result.code || null
+            };
         }
 
         if (result.errors?.length) {
-            return { success: false, error: result.errors[0].msg || 'Registration failed' };
+            const first = result.errors[0];
+            const field = first.path || first.param || 'field';
+            return { success: false, error: `${field}: ${first.msg || first.message || 'invalid'}`, field };
+        }
+
+        if (result.success === false) {
+            return { success: false, error: result.message || 'Registration failed' };
+        }
+
+        if (result.success !== true && result.status && result.status >= 400) {
+            return { success: false, error: result.message || result.error || 'Registration failed', field: result.field };
         }
 
         return {
@@ -303,6 +341,13 @@ class AuthManager {
                 console.debug(`[auth] demo login flow completed in ${Math.round(loginEnd - loginStart)}ms`);
             }
             return this.completeLogin(demo.user, demo.token, rememberMe, null);
+        }
+
+        if (result?.code === 'USER_NOT_FOUND') {
+            return { success: false, error: 'No account found with that username or email.' };
+        }
+        if (result?.code === 'ACCOUNT_INACTIVE' || (result?.error || '').toLowerCase().includes('deactivated')) {
+            return { success: false, error: result?.error || 'This account is deactivated. Contact support.' };
         }
 
         // (failed-attempt counter intentionally not incremented during testing)

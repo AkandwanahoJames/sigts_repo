@@ -4307,8 +4307,10 @@ body.auth-page {
     background: rgba(255, 255, 255, 0.88);
     box-shadow: 0 20px 40px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
     backdrop-filter: blur(10px);
-    max-height: 90vh;
-    overflow: hidden;
+    max-height: min(90vh, calc(100dvh - 48px));
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .auth-tabs {
@@ -4660,14 +4662,37 @@ body.auth-page {
     50% { transform: translateY(10px); opacity: 1; }
 }
 
-/* Fit register vertically */
+/* Register: more fields than login — scroll fields, keep submit visible */
 .auth-mode-register .auth-card {
     padding-top: 24px;
     padding-bottom: 24px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .auth-mode-register .auth-tabs {
     margin-bottom: 20px;
+    flex-shrink: 0;
+}
+
+.auth-mode-register .auth-form {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+}
+
+.auth-mode-register .auth-primary-btn {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin-top: 12px;
+    box-shadow:
+        0 -10px 20px rgba(255, 255, 255, 0.92),
+        0 12px 24px rgba(22, 101, 52, 0.22);
 }
 
 .auth-mode-register .auth-form-head {
@@ -4887,6 +4912,9 @@ body.auth-page {
         transform: scale(0.93);
         transform-origin: center center;
     }
+    .auth-mode-register .auth-card {
+        transform: none;
+    }
     .auth-form {
         gap: 12px;
     }
@@ -4908,6 +4936,9 @@ body.auth-page {
 @media (max-height: 700px) {
     .auth-card {
         transform: scale(0.84);
+    }
+    .auth-mode-register .auth-card {
+        transform: none;
     }
     .auth-portal-main {
         padding: 14px;

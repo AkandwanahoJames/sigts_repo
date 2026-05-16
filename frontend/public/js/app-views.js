@@ -5599,6 +5599,12 @@ async function handleRegistration() {
     const message = result.message || (result.success ? 'Success! Please login.' : result.error);
     showToast(message, result.success ? 'success' : 'danger');
     setAuthFeedback(message, result.success ? 'success' : 'error');
+    if (!result.success && result.field) {
+        const el = document.getElementById(
+            result.field === 'email' ? 'regEmail' : result.field === 'username' ? 'regUsername' : ''
+        );
+        el?.focus();
+    }
     if (result.success) renderView('login');
 }
 
