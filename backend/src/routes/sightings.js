@@ -173,7 +173,9 @@ router.get('/recent', authenticateJWT, async (req, res) => {
         let query = `
             SELECT s.sighting_id, s.timestamp, s.number_observed, s.behavior,
                    a.name as animal_name, a.conservation_status,
-                   l.name as location_name, l.location_type,
+                   l.location_id, l.name as location_name, l.location_type,
+                   ST_Y(l.coordinates::geometry) as latitude,
+                   ST_X(l.coordinates::geometry) as longitude,
                    CASE 
                        WHEN s.tourguide_id IS NOT NULL THEN 'guide'
                        WHEN s.tourist_id IS NOT NULL OR s.reported_by_tourist IS NOT NULL THEN 'tourist'

@@ -5,6 +5,13 @@ const express = require('express');
 const { query, validationResult, param } = require('express-validator');
 const { pool } = require('../config/database');
 const { authenticateJWT } = require('../middleware/auth');
+const {
+    SOURCE_URL,
+    GORILLA_GOLDEN_RULES,
+    TOURIST_SPECIES,
+    TRAIL_REMINDERS
+} = require('../data/touristBiodiversityManifest');
+const stayingSafeGuide = require('../data/stayingSafeGuideManifest');
 
 const router = express.Router();
 
@@ -151,6 +158,195 @@ router.get('/weather', async (_req, res) => {
     } catch (e) {
         console.error('Weather error:', e);
         res.status(500).json({ error: 'Weather unavailable', success: false });
+    }
+});
+
+/** Full staying-safe travel guide (sections, packing, FAQs, tips, park guide rows). */
+router.get('/staying-safe-guide', async (_req, res) => {
+    try {
+        const [faqRes, tipRes, guideRes] = await Promise.all([
+            pool.query(
+                `SELECT faq_id, question_en, answer_en, category, helpful_count, sort_order
+                 FROM faqs
+                 WHERE is_published = true
+                   AND (category LIKE 'staying_safe_%' OR category IN ('health', 'packing', 'preparation', 'wildlife', 'trekking'))
+                 ORDER BY sort_order ASC NULLS LAST, question_en ASC`
+            ),
+            pool.query(
+                `SELECT tip_id, title, content, category, priority
+                 FROM safety_tips
+                 WHERE is_active = true
+                 ORDER BY priority ASC NULLS LAST, title ASC`
+            ),
+            pool.query(
+                `SELECT destinfo_id, category, title, content_en, is_emergency, sort_order
+                 FROM destination_info
+                 WHERE is_active = true
+                   AND (
+                     title ILIKE '%staying safe%'
+                     OR title ILIKE '%packing%'
+                     OR title ILIKE '%gorilla%'
+                     OR title ILIKE '%trail%'
+                     OR title ILIKE '%evacuation%'
+                     OR title ILIKE '%kampala%'
+                     OR title ILIKE '%transport%'
+                     OR title ILIKE '%health checklist%'
+                     OR title ILIKE '%UWA guide%'
+                     OR title ILIKE '%Golden rules%'
+                   )
+                 ORDER BY sort_order ASC NULLS LAST, title ASC`
+            )
+        ]);
+
+        res.json({
+            source_url: stayingSafeGuide.SOURCE_URL,
+            title: stayingSafeGuide.TITLE,
+            intro: stayingSafeGuide.INTRO,
+            recap: stayingSafeGuide.RECAP_ITEMS,
+            sections: stayingSafeGuide.SECTIONS,
+            packing: stayingSafeGuide.PACKING,
+            gorilla_golden_rules: GORILLA_GOLDEN_RULES,
+            faqs: faqRes.rows,
+            safety_tips: tipRes.rows,
+            park_guide: guideRes.rows
+        });
+    } catch (e) {
+        console.error('Staying safe guide error:', e);
+        res.status(500).json({ error: 'Failed to load staying safe guide' });
+    }
+});
+
+/** Public park POIs for map tab (no auth — cached by the SPA). */
+router.get('/locations/public', async (_req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT location_id, name, location_type,
+                    ST_X(coordinates::geometry) AS longitude,
+                    ST_Y(coordinates::geometry) AS latitude,
+                    description, trigger_radius, facilities, best_viewing_time
+             FROM locations
+             ORDER BY name ASC
+             LIMIT 120`
+        );
+        res.json({ locations: result.rows, total: result.rowCount });
+    } catch (e) {
+        console.error('Public locations error:', e);
+        res.status(500).json({ error: 'Failed to load public locations' });
+    }
+});
+
+/** Tourist-facing trek routes with GeoJSON geometry for the map tab. */
+router.get('/routes/public', async (_req, res) => {
+    try {
+        const routesRes = await pool.query(
+            `SELECT route_id, name, description, distance_km, duration_hours, difficulty, elevation_profile,
+                    ST_AsGeoJSON(path_geometry)::json AS path_geometry
+             FROM tour_routes
+             ORDER BY name ASC`
+        );
+
+        const stopsRes = await pool.query(
+            `SELECT rl.route_id, rl.stop_order, rl.estimated_time_from_prev, rl.stop_duration, rl.points_of_interest,
+                    l.location_id, l.name AS location_name, l.location_type,
+                    ST_Y(l.coordinates::geometry) AS lat,
+                    ST_X(l.coordinates::geometry) AS lng
+             FROM route_locations rl
+             JOIN locations l ON l.location_id = rl.location_id
+             ORDER BY rl.route_id, rl.stop_order ASC`
+        );
+
+        const stopsByRoute = new Map();
+        for (const row of stopsRes.rows) {
+            const key = row.route_id;
+            if (!stopsByRoute.has(key)) stopsByRoute.set(key, []);
+            stopsByRoute.get(key).push({
+                stop_order: row.stop_order,
+                location_id: row.location_id,
+                location_name: row.location_name,
+                location_type: row.location_type,
+                lat: row.lat,
+                lng: row.lng,
+                estimated_time_from_prev: row.estimated_time_from_prev,
+                stop_duration: row.stop_duration,
+                points_of_interest: row.points_of_interest
+            });
+        }
+
+        const routes = routesRes.rows.map((row) => ({
+            route_id: row.route_id,
+            name: row.name,
+            description: row.description,
+            distance_km: row.distance_km,
+            duration_hours: row.duration_hours,
+            difficulty: row.difficulty,
+            elevation_profile: row.elevation_profile,
+            path_geometry: row.path_geometry,
+            stops: stopsByRoute.get(row.route_id) || []
+        }));
+
+        res.json({
+            source_url: SOURCE_URL,
+            routes,
+            route_count: routes.length
+        });
+    } catch (e) {
+        console.error('Public routes error:', e);
+        res.status(500).json({ error: 'Failed to load trek routes' });
+    }
+});
+
+/** Tourist biodiversity + staying-safe wildlife (photos from animals catalogue). */
+router.get('/tourist-biodiversity', async (_req, res) => {
+    try {
+        const names = TOURIST_SPECIES.map((s) => s.name);
+        const result = await pool.query(
+            `SELECT animal_id, name, scientific_name, description, conservation_status,
+                    habitat, diet, lifespan, image_urls, fun_facts
+             FROM animals
+             WHERE name = ANY($1::text[])`,
+            [names]
+        );
+        const byName = new Map(result.rows.map((row) => [row.name, row]));
+
+        const species = TOURIST_SPECIES.map((entry, index) => {
+            const animal = byName.get(entry.name) || { name: entry.name };
+            return {
+                sort_order: index + 1,
+                group: entry.group,
+                group_label: entry.group_label,
+                safety_tip: entry.safety_tip,
+                animal_id: animal.animal_id || null,
+                name: animal.name || entry.name,
+                scientific_name: animal.scientific_name || null,
+                description: animal.description || null,
+                conservation_status: animal.conservation_status || null,
+                habitat: animal.habitat || null,
+                image_urls: animal.image_urls || [],
+                fun_facts: animal.fun_facts || []
+            };
+        });
+
+        const groups = [];
+        const seen = new Set();
+        for (const row of species) {
+            if (seen.has(row.group)) continue;
+            seen.add(row.group);
+            groups.push({ id: row.group, label: row.group_label });
+        }
+
+        res.json({
+            source_url: SOURCE_URL,
+            intro:
+                'Wildlife and trail reminders from the official Bwindi “Staying Safe” travel guide — gorillas, forest elephants, primates, antelope, snakes/insects, and birding with binoculars.',
+            gorilla_golden_rules: GORILLA_GOLDEN_RULES,
+            trail_reminders: TRAIL_REMINDERS,
+            groups,
+            species,
+            species_count: species.length
+        });
+    } catch (e) {
+        console.error('Tourist biodiversity error:', e);
+        res.status(500).json({ error: 'Failed to load tourist biodiversity' });
     }
 });
 

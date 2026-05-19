@@ -31,15 +31,16 @@ const env = {
 };
 
 const apiPort = Number.parseInt(env.API_PORT || env.PORT || '', 10) || 8000;
-const proxyTarget = `http://127.0.0.1:${apiPort}`;
+const apiBase = `http://127.0.0.1:${apiPort}/api`;
 
 require('child_process').execSync('node scripts/generateRuntimeConfig.js', { cwd: frontendRoot, stdio: 'inherit' });
 
-console.log(`SIGTS frontend: http://localhost:3000  (API → ${proxyTarget}/api)`);
+console.log(`SIGTS frontend: http://localhost:3000`);
+console.log(`SIGTS API (browser): ${apiBase}`);
 
 const child = spawn(
     'npx',
-    ['live-server', 'public', '--host=0.0.0.0', '--port=3000', '--no-browser', `--proxy=/api:${proxyTarget}`],
+    ['live-server', 'public', '--host=0.0.0.0', '--port=3000', '--no-browser', '--spa'],
     { cwd: frontendRoot, stdio: 'inherit', shell: true }
 );
 

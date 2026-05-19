@@ -37,8 +37,29 @@ function resolveSigtsApiBaseUrl() {
         if (sameOriginApi) return sameOriginApi;
     }
 
-    // Dev UI (live-server :3000 with --proxy=/api) or nginx: API on same host
-    if (pagePort === '3000' || pagePort === '80' || pagePort === '443' || pagePort === '') {
+    // live-server on :3000 — call backend port directly (its /api proxy strips the prefix)
+    if (pagePort === '3000') {
+        const configuredBase = RUNTIME_CONFIG.API_URL || window.__SIGTS_API_BASE__;
+        if (typeof configuredBase === 'string' && configuredBase.trim()) {
+            try {
+                const parsed = new URL(configuredBase, pageOrigin);
+                const apiHost = parsed.hostname || '';
+                const isLocalApiHost = apiHost === 'localhost' || apiHost === '127.0.0.1';
+                if (window.location.hostname && isLocalApiHost && window.location.hostname !== apiHost) {
+                    parsed.hostname = window.location.hostname;
+                }
+                return normalizeSigtsApiBaseUrl(parsed.toString());
+            } catch (_) {
+                return normalizeSigtsApiBaseUrl(configuredBase);
+            }
+        }
+        const apiPort = Number(RUNTIME_CONFIG.API_PORT) || 8000;
+        const host = window.location.hostname || 'localhost';
+        return normalizeSigtsApiBaseUrl(`http://${host}:${apiPort}`);
+    }
+
+    // nginx / production: API on same host at /api
+    if (pagePort === '80' || pagePort === '443' || pagePort === '') {
         const proxied = normalizeSigtsApiBaseUrl(pageOrigin);
         if (proxied) return proxied;
     }
@@ -96,36 +117,39 @@ async function ensureSigtsApiReachable() {
 
     add(API_BASE_URL);
     add(window.__SIGTS_API_BASE__);
+    const preferred = Number(RUNTIME_CONFIG.API_PORT) || 8000;
+    const pagePort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
     if (host === 'localhost' || host === '127.0.0.1') {
-        const preferred = Number(RUNTIME_CONFIG.API_PORT) || 8000;
         add(`http://${host}:${preferred}/api`);
         [8001, 8000, 8080].forEach((p) => add(`http://${host}:${p}/api`));
-    } else {
-        add(window.location.origin);
+    } else if (pagePort === '3000') {
+        const protocol = window.location.protocol || 'http:';
+        add(`${protocol}//${host}:${preferred}/api`);
+        [8001, 8000, 8080].forEach((p) => add(`${protocol}//${host}:${p}/api`));
     }
 
     for (const base of candidates) {
         const apiBase = normalizeSigtsApiBaseUrl(base);
-        if (!apiBase) continue;
+        if (!apiBase || !/\/api$/i.test(apiBase)) continue;
         try {
             const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
             const timer = ctrl ? window.setTimeout(() => ctrl.abort(), 2500) : null;
-            // Must probe /api/health — root /health exists but API routes live under /api
             const res = await fetch(`${apiBase}/health`, {
                 method: 'GET',
                 cache: 'no-store',
                 ...(ctrl ? { signal: ctrl.signal } : {})
             });
             if (timer) window.clearTimeout(timer);
-            if (res.ok) {
-                if (apiBase !== API_BASE_URL) {
-                    console.info('[SIGTS] API reachable at', apiBase);
-                }
-                API_BASE_URL = apiBase;
-                API_URL = apiBase;
-                window.__SIGTS_API_BASE__ = apiBase;
-                return apiBase;
+            if (!res.ok) continue;
+            const body = await res.json().catch(() => null);
+            if (!body || typeof body.database === 'undefined') continue;
+            if (apiBase !== API_BASE_URL) {
+                console.info('[SIGTS] API reachable at', apiBase);
             }
+            API_BASE_URL = apiBase;
+            API_URL = apiBase;
+            window.__SIGTS_API_BASE__ = apiBase;
+            return apiBase;
         } catch (_) {
             /** try next candidate */
         }
@@ -437,8 +461,13 @@ class APIService {
         const result = await this.request(`/sightings/recent?limit=${limit}`);
         if (Array.isArray(result)) return result;
         if (result && result.success && result.data) return result.data;
-        // Fallback to localStorage
-        return JSON.parse(localStorage.getItem('sightings') || '[]').slice(0, limit);
+        try {
+            const raw = localStorage.getItem('sightings');
+            const parsed = raw ? JSON.parse(raw) : [];
+            return Array.isArray(parsed) ? parsed.slice(0, limit) : [];
+        } catch (_) {
+            return [];
+        }
     }
 
     async reportSighting(sightingData) {
@@ -589,10 +618,33 @@ class APIService {
     // Locations endpoints
     async getLocations() {
         const result = await this.request('/locations');
-        if (result?.locations) return result.locations;
-        if (Array.isArray(result)) return result;
-        if (result && result.success && result.data) return result.data;
-        return JSON.parse(localStorage.getItem('offline_locations') || '[]');
+        if (result?.locations?.length) return result.locations;
+        if (Array.isArray(result) && result.length) return result;
+        if (result?.success && Array.isArray(result.data) && result.data.length) return result.data;
+        try {
+            const pub = await fetch(`${getSigtsApiBaseUrl()}/locations/public`, { cache: 'no-store' });
+            if (pub.ok) {
+                const body = await pub.json();
+                if (body?.locations?.length) {
+                    try {
+                        localStorage.setItem('offline_locations', JSON.stringify(body.locations));
+                    } catch (_) {
+                        /**/
+                    }
+                    return body.locations;
+                }
+            }
+        } catch (_) {
+            /**/
+        }
+        try {
+            const raw = localStorage.getItem('offline_locations');
+            const parsed = raw ? JSON.parse(raw) : [];
+            if (Array.isArray(parsed) && parsed.length) return parsed;
+        } catch (_) {
+            /**/
+        }
+        return Array.isArray(window.BWINDI_MAP_FALLBACK_LOCATIONS) ? window.BWINDI_MAP_FALLBACK_LOCATIONS : [];
     }
 
     async getLocationById(id) {
@@ -646,6 +698,61 @@ class APIService {
         try {
             const raw = localStorage.getItem('offline_safety_tips_cache');
             return raw ? JSON.parse(raw) : [];
+        } catch (_) {
+            return [];
+        }
+    }
+
+    async getTouristBiodiversity() {
+        const result = await this.request('/tourist-biodiversity');
+        if (result?.species && Array.isArray(result.species)) {
+            try {
+                localStorage.setItem('offline_tourist_biodiversity_cache', JSON.stringify(result));
+            } catch (_) {
+                /**/
+            }
+            return result;
+        }
+        try {
+            const raw = localStorage.getItem('offline_tourist_biodiversity_cache');
+            return raw ? JSON.parse(raw) : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    async getStayingSafeGuide() {
+        const result = await this.request('/staying-safe-guide');
+        if (result?.sections && Array.isArray(result.sections)) {
+            try {
+                localStorage.setItem('offline_staying_safe_guide_cache', JSON.stringify(result));
+            } catch (_) {
+                /**/
+            }
+            return result;
+        }
+        try {
+            const raw = localStorage.getItem('offline_staying_safe_guide_cache');
+            return raw ? JSON.parse(raw) : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    async getPublicRoutes() {
+        const result = await this.request('/routes/public');
+        if (result?.routes && Array.isArray(result.routes)) {
+            try {
+                localStorage.setItem('offline_public_routes_cache', JSON.stringify(result));
+            } catch (_) {
+                /**/
+            }
+            return result.routes;
+        }
+        try {
+            const raw = localStorage.getItem('offline_public_routes_cache');
+            const parsed = raw ? JSON.parse(raw) : null;
+            return parsed?.routes && Array.isArray(parsed.routes) ? parsed.routes : [];
         } catch (_) {
             return [];
         }
@@ -709,9 +816,13 @@ class APIService {
         const result = await this.request('/tours/schedule');
         if (Array.isArray(result)) return result;
         if (result && result.success && result.data) return result.data;
-        const tours = JSON.parse(localStorage.getItem('tour_sessions') || '[]');
-        const guideId = AppState.currentUser?.user_id;
-        return tours.filter(t => t.guide_id === guideId);
+        try {
+            const tours = JSON.parse(localStorage.getItem('tour_sessions') || '[]');
+            const guideId = AppState.currentUser?.user_id;
+            return Array.isArray(tours) ? tours.filter((t) => t.guide_id === guideId) : [];
+        } catch (_) {
+            return [];
+        }
     }
 
     async getTourScheduleView(mode = 'daily', anchor = '') {

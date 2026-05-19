@@ -112,7 +112,7 @@ router.get('/active-users', [
         const activeSinceInterval = `${windowMinutes} minutes`;
 
         const sql = hasHeartbeatColumn
-            ? `SELECT user_id, username, user_type, email,
+            ? `SELECT user_id, username, first_name, last_name, user_type, email,
                       COALESCE(last_location_time, last_login) AS last_seen,
                       last_login, last_lat, last_lng
                FROM users
@@ -120,7 +120,7 @@ router.get('/active-users', [
                  AND COALESCE(last_location_time, last_login) IS NOT NULL
                  AND COALESCE(last_location_time, last_login) > NOW() - ($1)::interval
                ORDER BY COALESCE(last_location_time, last_login) DESC`
-            : `SELECT user_id, username, user_type, email,
+            : `SELECT user_id, username, first_name, last_name, user_type, email,
                       last_login AS last_seen,
                       last_login, last_lat, last_lng
                FROM users
@@ -133,7 +133,7 @@ router.get('/active-users', [
         const activeUsers = rows.rows.map((row) => ({
             user_id: row.user_id,
             username: row.username,
-            name: row.username,
+            name: [row.first_name, row.last_name].filter(Boolean).join(' ').trim() || row.username,
             email: row.email,
             type: row.user_type,
             role: row.user_type,

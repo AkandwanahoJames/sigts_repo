@@ -105,14 +105,32 @@ function initLiveAccessStatusHooks() {
     };
     window.addEventListener('online', refresh);
     window.addEventListener('offline', refresh);
-    window.addEventListener('geofence:location', refresh);
+    window.addEventListener('geofence:location', () => {
+        refresh();
+        if (window.currentView === 'map' && typeof window.updateMapPlaceContext === 'function') {
+            const loc = Geofence?.currentLocation || AppState?.currentLocation;
+            if (loc?.lat != null && loc?.lng != null) {
+                window.updateMapPlaceContext(loc.lat, loc.lng);
+            }
+        }
+    });
+    window.addEventListener('alert', (event) => {
+        const message = event?.detail?.message;
+        if (!message || typeof showToast !== 'function') return;
+        const type = String(event.detail?.type || 'info').toLowerCase();
+        const toastType = type === 'warning' ? 'warning' : type === 'success' ? 'success' : 'info';
+        showToast(message, toastType);
+    });
 }
 
 async function init() {
     showLoading();
     try {
         if (typeof ensureSigtsApiReachable === 'function') {
-            await ensureSigtsApiReachable();
+            await Promise.race([
+                ensureSigtsApiReachable(),
+                new Promise((resolve) => window.setTimeout(() => resolve(null), 4000))
+            ]);
         }
         registerServiceWorker();
         initHashRouting();
@@ -161,7 +179,12 @@ async function init() {
         }
 
         const requestedView = window.location.hash.replace('#', '').trim();
+        const isResetPasswordPath = window.location.pathname.replace(/\/+$/, '') === '/reset-password';
         const isVerifyEmailPath = window.location.pathname.replace(/\/+$/, '') === '/verify-email';
+        if (isResetPasswordPath) {
+            await renderView('reset_password', { updateHash: false });
+            return;
+        }
         if (isVerifyEmailPath) {
             const token = new URLSearchParams(window.location.search).get('token');
             const verifyResult = await Auth.verifyEmailToken(token);

@@ -94,13 +94,9 @@ class AuthManager {
 
         if (result.error) {
             const detail = result.detail ? ` (${result.detail})` : '';
-            const msg = String(result.error);
-            const friendly = /not found/i.test(msg) && /\/auth\//i.test(msg)
-                ? `Registration service misconfigured (${getSigtsApiBaseUrl?.() || 'API'}). Hard-refresh the page or open http://localhost:8001/`
-                : `${msg}${detail}`;
             return {
                 success: false,
-                error: friendly,
+                error: `${result.error}${detail}`,
                 field: result.field || null,
                 code: result.code || null
             };
@@ -138,6 +134,10 @@ class AuthManager {
         let geo = AppState?.currentLocation
             ? { lat: AppState.currentLocation.lat, lng: AppState.currentLocation.lng }
             : null;
+
+        if (typeof ensureSigtsApiReachable === 'function') {
+            await ensureSigtsApiReachable();
+        }
 
         if (!geo && navigator.geolocation) {
             try {
@@ -343,8 +343,29 @@ class AuthManager {
             return this.completeLogin(demo.user, demo.token, rememberMe, null);
         }
 
+        if (result?.network) {
+            const apiBase = typeof getSigtsApiBaseUrl === 'function' ? getSigtsApiBaseUrl() : 'API';
+            return {
+                success: false,
+                error: result.error || `Cannot reach the sign-in server (${apiBase}). Start the backend and hard-refresh this page.`
+            };
+        }
+
         if (result?.code === 'USER_NOT_FOUND') {
-            return { success: false, error: 'No account found with that username or email.' };
+            const id = String(username || '').trim();
+            const looksLikeName = /\s/.test(id) && !id.includes('@');
+            return {
+                success: false,
+                error: looksLikeName
+                    ? 'No account matched that name. Sign in with your username or email address.'
+                    : 'No account found with that username or email.'
+            };
+        }
+        if (result?.code === 'INVALID_PASSWORD') {
+            return {
+                success: false,
+                error: 'Incorrect password. Use Forgot password if you need to set a new one.'
+            };
         }
         if (result?.code === 'ACCOUNT_INACTIVE' || (result?.error || '').toLowerCase().includes('deactivated')) {
             return { success: false, error: result?.error || 'This account is deactivated. Contact support.' };
@@ -484,6 +505,12 @@ class AuthManager {
             body: JSON.stringify({ email: value })
         });
         if (result?.success) return result;
+        if (result?.network) {
+            return {
+                success: false,
+                error: result.error || 'Cannot reach the server. Check that the backend is running.'
+            };
+        }
         return { success: false, error: result?.error || 'Failed to request password reset' };
     }
 
@@ -582,6 +609,7 @@ class GeofenceManager {
         this.locationHistory = [];
         this.wasInside = false;
         this.pois = [];
+        this.proximityCooldown = new Map();
     }
 
     async init() {
@@ -602,7 +630,31 @@ class GeofenceManager {
     }
 
     async loadPOIs() {
-        this.pois = JSON.parse(localStorage.getItem('offline_locations') || '[]');
+        const cached = JSON.parse(localStorage.getItem('offline_locations') || '[]');
+        if (Auth?.isAuthenticated?.() && typeof API?.getLocations === 'function') {
+            try {
+                const list = await API.getLocations();
+                if (Array.isArray(list) && list.length) {
+                    localStorage.setItem('offline_locations', JSON.stringify(list));
+                    this.pois = list.map((loc) => this.normalizePoiRecord(loc));
+                    return;
+                }
+            } catch (_) {
+                /**/
+            }
+        }
+        this.pois = (Array.isArray(cached) ? cached : []).map((loc) => this.normalizePoiRecord(loc));
+    }
+
+    normalizePoiRecord(loc = {}) {
+        const lat = Number(loc.lat ?? loc.latitude);
+        const lng = Number(loc.lng ?? loc.longitude);
+        return {
+            ...loc,
+            location_id: loc.location_id || loc.id || null,
+            lat: Number.isFinite(lat) ? lat : null,
+            lng: Number.isFinite(lng) ? lng : null
+        };
     }
 
     startTracking() {
@@ -707,13 +759,19 @@ class GeofenceManager {
     }
 
     checkProximityAlerts(lat, lng) {
-        this.pois.forEach(poi => {
-            if (poi.lat && poi.lng) {
-                const distance = this.calculateDistance(lat, lng, poi.lat, poi.lng);
-                if (distance <= 100) {
-                    this.showAlert(`Nearby: ${poi.name} (${Math.round(distance)}m)`, 'info');
-                }
-            }
+        const now = Date.now();
+        this.pois.forEach((poi) => {
+            const plat = Number(poi.lat);
+            const plng = Number(poi.lng);
+            if (!Number.isFinite(plat) || !Number.isFinite(plng)) return;
+            const distance = this.calculateDistance(lat, lng, plat, plng);
+            const radius = Number(poi.trigger_radius) > 0 ? Number(poi.trigger_radius) : 120;
+            if (distance > radius) return;
+            const key = String(poi.location_id || poi.name || `${plat},${plng}`);
+            const last = this.proximityCooldown.get(key) || 0;
+            if (now - last < 600000) return;
+            this.proximityCooldown.set(key, now);
+            this.showAlert(`Nearby: ${poi.name} (${Math.round(distance)} m)`, 'info');
         });
     }
 
@@ -856,9 +914,19 @@ class ContentManager {
             ]));
         }
         if (!localStorage.getItem('offline_locations') && !this.useAPI) {
-            localStorage.setItem('offline_locations', JSON.stringify([
-                { id: 1, name: 'Buhoma Gate', type: 'gate', lat: -1.0482, lng: 29.6612, description: 'Main entrance' }
-            ]));
+            const fallback = Array.isArray(window.BWINDI_MAP_FALLBACK_LOCATIONS)
+                ? window.BWINDI_MAP_FALLBACK_LOCATIONS
+                : [
+                      {
+                          location_id: 'fb-loc-buhoma-gate',
+                          name: 'Buhoma Gate',
+                          location_type: 'gate',
+                          latitude: -1.0482,
+                          longitude: 29.6612,
+                          description: 'Main entrance'
+                      }
+                  ];
+            localStorage.setItem('offline_locations', JSON.stringify(fallback));
         }
     }
 
@@ -978,16 +1046,20 @@ class ContentManager {
 
     async downloadOfflineContent() {
         // Fetch fresh data from API and store in localStorage
-        const [animals, locations, stories, themes, faqs, tips, guide, catalogMeta] = await Promise.all([
-            API.getAnimals(),
-            API.getLocations(),
-            API.getCulturalStories(),
-            API.getWildlifeTourThemes(),
-            API.getFaqs().catch(() => []),
-            API.getSafetyTips().catch(() => []),
-            API.getParkGuide().catch(() => []),
-            API.getContentCatalogMeta().catch(() => null)
-        ]);
+        const [animals, locations, stories, themes, faqs, tips, guide, catalogMeta, touristBio, stayingGuide, publicRoutes] =
+            await Promise.all([
+                API.getAnimals(),
+                API.getLocations(),
+                API.getCulturalStories(),
+                API.getWildlifeTourThemes(),
+                API.getFaqs().catch(() => []),
+                API.getSafetyTips().catch(() => []),
+                API.getParkGuide().catch(() => []),
+                API.getContentCatalogMeta().catch(() => null),
+                API.getTouristBiodiversity().catch(() => null),
+                API.getStayingSafeGuide().catch(() => null),
+                API.getPublicRoutes().catch(() => [])
+            ]);
 
         if (animals && animals.length) localStorage.setItem('offline_animals', JSON.stringify(animals));
         if (locations && locations.length) localStorage.setItem('offline_locations', JSON.stringify(locations));
@@ -999,6 +1071,15 @@ class ContentManager {
             if (Array.isArray(guide) && guide.length) localStorage.setItem('offline_park_guide_cache', JSON.stringify(guide));
             if (catalogMeta && typeof catalogMeta === 'object') {
                 localStorage.setItem('offline_catalog_meta_cache', JSON.stringify(catalogMeta));
+            }
+            if (touristBio && touristBio.species) {
+                localStorage.setItem('offline_tourist_biodiversity_cache', JSON.stringify(touristBio));
+            }
+            if (stayingGuide && stayingGuide.sections) {
+                localStorage.setItem('offline_staying_safe_guide_cache', JSON.stringify(stayingGuide));
+            }
+            if (Array.isArray(publicRoutes) && publicRoutes.length) {
+                localStorage.setItem('offline_public_routes_cache', JSON.stringify({ routes: publicRoutes }));
             }
         } catch (_) {
             /**/
@@ -1230,7 +1311,7 @@ function sigtsLocalAnswerFromAppContext(latestUserPlain, mergedThreadPlain, appC
     const parts = [];
     if (wantThemes && appContext.themes.length) {
         parts.push(
-            'Here is what this SIGTS install currently carries under tour session briefings (Animals tab tiles). Use the in-app modal for the full script; this is a short digest:'
+            'Here is what this SIGTS install currently carries under tour session briefings (Wildlife tab tiles). Use the in-app modal for the full script; this is a short digest:'
         );
         for (const t of appContext.themes.slice(0, 10)) {
             const head = t.session_title || t.slug || 'Tour session';
@@ -1239,7 +1320,7 @@ function sigtsLocalAnswerFromAppContext(latestUserPlain, mergedThreadPlain, appC
             parts.push(`• ${head}${sub}: ${body || 'Open the theme card in the app for the full briefing.'}`);
         }
         if (appContext.themes.length > 10) {
-            parts.push(`(${appContext.themes.length - 10} additional themes are in the Animals tab—open each tile for the full script.)`);
+            parts.push(`(${appContext.themes.length - 10} additional themes are in the Wildlife tab—open each tile for the full script.)`);
         }
     }
     if (wantAnimals && appContext.animals.length) {
@@ -1375,7 +1456,7 @@ function sigtsBuildBwindiScopedAnswer(question, locationName, appContext) {
         const bits = [];
         if (appContext.animals?.length) bits.push(`${appContext.animals.length} species in the Animals catalogue`);
         if (appContext.themes?.length) bits.push(`${appContext.themes.length} tour theme briefings`);
-        tail = ` SIGTS for Bwindi also holds ${bits.join(' and ')} here—open the Animals tab for tiles and species cards.`;
+        tail = ` SIGTS for Bwindi also holds ${bits.join(' and ')} here—open the Wildlife tab for tiles and species cards.`;
     }
     const core = `Bwindi Impenetrable National Park (BINP) in southwestern Uganda protects a large block of montane rainforest famous for mountain gorillas and exceptional Albertine Rift biodiversity. Typical visitor threads are regulated gorilla tracking or habituation, guided forest walks, birding, and community-linked cultural experiences. Stay with your assigned ranger team, respect UWA distance and health rules (wildlife diseases cut both ways), avoid flash where restricted, and treat SIGTS as a planning companion—your permit, briefing, and on-ground signs override any app text.${tail}${locationName ? ` Nearby map label in SIGTS: ${locationName} (verify on the ground).` : ''}`;
     const extraBlock = extras.length ? `\n\n${extras.join('\n\n')}` : '';
@@ -1869,13 +1950,45 @@ class AIRecommendationEngine {
             .filter((r) => r.count > 0)
             .sort((a, b) => b.trendScore - a.trendScore)
             .slice(0, limit);
-        return rows.map((r) => ({
-            id: r.id,
-            type: r.type,
-            name: r.id === 'dashboard' || r.type === 'tab' ? `Tab: ${r.id}` : `${r.type} ${r.id}`,
-            trendScore: r.trendScore,
-            reason: `${r.count} recent views in this app install (anonymous aggregate)`
-        }));
+        let animals = [];
+        let stories = [];
+        try {
+            if (typeof Content !== 'undefined') {
+                [animals, stories] = await Promise.all([Content.getAnimals(), Content.getCulturalStories()]);
+            }
+        } catch (_) {
+            /**/
+        }
+        const animalById = new Map((animals || []).map((a) => [String(a.animal_id || a.id), a]));
+        const storyById = new Map((stories || []).map((s) => [String(s.narrative_id || s.id), s]));
+        const tabLabels = {
+            wildlife: 'Wildlife',
+            animals: 'Wildlife',
+            map: 'Map',
+            culture: 'Culture',
+            info: 'Park info',
+            dashboard: 'Home',
+            ai_chat: 'Tour help',
+            sightings: 'Sightings',
+            saved: 'Saved'
+        };
+        return rows.map((r) => {
+            let name = r.id;
+            if (r.type === 'animal') {
+                name = animalById.get(r.id)?.name || `Species ${r.id.slice(0, 8)}`;
+            } else if (r.type === 'cultural' || r.type === 'story') {
+                name = storyById.get(r.id)?.title_en || `Story ${r.id.slice(0, 8)}`;
+            } else if (r.type === 'tab') {
+                name = tabLabels[r.id] || `Tab: ${r.id}`;
+            }
+            return {
+                id: r.id,
+                type: r.type,
+                name,
+                trendScore: r.trendScore,
+                reason: `${r.count} recent views on this device`
+            };
+        });
     }
 
     async getSimilarContent(contentType, contentId, limit = 6) {
@@ -1936,16 +2049,27 @@ class AIRecommendationEngine {
         else if (hour < 12) timeBand = 'morning';
         else if (hour < 17) timeBand = 'afternoon';
         else timeBand = 'evening';
+        let conditionNote =
+            season === 'wet'
+                ? 'Wet-season pacing: expect slower trail segments; plan rain layers.'
+                : 'Dry-season pacing: dustier ridges; carry extra water on exposed climbs.';
+        try {
+            if (typeof API !== 'undefined' && API.getParkWeatherForecast) {
+                const w = await API.getParkWeatherForecast();
+                if (w?.condition) {
+                    conditionNote += ` Live forecast: ${w.condition}, ${w.temperatureC ?? '—'}°C.`;
+                }
+            }
+        } catch (_) {
+            /**/
+        }
         return {
             season,
             recommendations: recs,
             hour,
             timeBand,
             month,
-            conditionNote:
-                season === 'wet'
-                    ? 'Wet-season pacing: expect slower trail segments; plan rain layers.'
-                    : 'Dry-season pacing: dustier ridges; carry extra water on exposed climbs.'
+            conditionNote
         };
     }
 }

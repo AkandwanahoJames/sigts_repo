@@ -18,9 +18,11 @@ const {
     isValidEmailShape,
     findRegistrationConflicts,
     findUserForLogin,
+    findUserByEmailForLogin,
     registrationConflictResponse,
     mapUniqueViolation
 } = require('../utils/userIdentity');
+const { resolvePublicAppBaseUrl } = require('../utils/appUrl');
 const crypto = require('crypto');
 
 function clientContext(req) {
@@ -412,7 +414,10 @@ router.post('/login', [
         }
         
         if (!isValid) {
-            return res.status(401).json({ error: 'Invalid credentials' });
+            return res.status(401).json({
+                error: 'Incorrect password',
+                code: 'INVALID_PASSWORD'
+            });
         }
 
         const coordinates = getRequestCoordinates(req);
@@ -425,30 +430,14 @@ router.post('/login', [
             });
         }
 
-        if (coordinates) {
-            if (ENFORCE_PARK_GEOFENCE && !bypassGeofence) {
-                const insidePark = await isInsidePark(coordinates.lat, coordinates.lng);
-                if (!insidePark) {
-                    return res.status(403).json({
-                        error: 'Access denied',
-                        message: 'You must be within park boundaries to access SIGTS'
-                    });
-                }
+        if (coordinates && ENFORCE_PARK_GEOFENCE && !bypassGeofence) {
+            const insidePark = await isInsidePark(coordinates.lat, coordinates.lng);
+            if (!insidePark) {
+                return res.status(403).json({
+                    error: 'Access denied',
+                    message: 'You must be within park boundaries to access SIGTS'
+                });
             }
-
-            await pool.query(
-                `UPDATE users
-                 SET last_lat = $1, last_lng = $2, last_login = CURRENT_TIMESTAMP
-                 WHERE user_id = $3`,
-                [coordinates.lat, coordinates.lng, user.user_id]
-            );
-        } else {
-            await pool.query(
-                `UPDATE users
-                 SET last_login = CURRENT_TIMESTAMP
-                 WHERE user_id = $1`,
-                [user.user_id]
-            );
         }
 
         const mfaResult = await pool.query(
@@ -488,6 +477,20 @@ router.post('/login', [
             clientContext(req)
         );
 
+        if (coordinates) {
+            await pool.query(
+                `UPDATE users
+                 SET last_lat = $1, last_lng = $2, last_login = CURRENT_TIMESTAMP
+                 WHERE user_id = $3`,
+                [coordinates.lat, coordinates.lng, user.user_id]
+            );
+        } else {
+            await pool.query(
+                `UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE user_id = $1`,
+                [user.user_id]
+            );
+        }
+
         res.json({
             success: true,
             token: accessToken,
@@ -519,19 +522,13 @@ router.post('/forgot-password', [
         return res.status(400).json({ errors: errors.array() });
     }
 
-    const email = req.body.email;
+    const email = normalizeEmail(req.body.email);
 
     try {
-        const userResult = await pool.query(
-            `SELECT user_id, username, email
-             FROM users
-             WHERE email = $1
-             LIMIT 1`,
-            [email]
-        );
+        const userRow = await findUserByEmailForLogin(pool, email);
 
-        if (userResult.rows.length > 0) {
-            const user = userResult.rows[0];
+        if (userRow) {
+            const user = userRow;
             const rawToken = crypto.randomBytes(32).toString('hex');
             const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
             const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
@@ -542,13 +539,24 @@ router.post('/forgot-password', [
                 [user.user_id, tokenHash, expiresAt]
             );
 
-            await sendPasswordResetEmail(user.email, rawToken, user.username);
+            const base = resolvePublicAppBaseUrl();
+            const resetUrl = `${base}/reset-password?token=${rawToken}`;
+            const emailSent = await sendPasswordResetEmail(user.email, rawToken, user.username);
             sendActivityNotificationEmail(
                 user.email,
                 user.username,
                 'Password reset requested',
                 'We received a password reset request for your account. If this was not you, secure your account immediately.'
             ).catch((err) => logger.error('Password-reset-request activity email failed:', err.message));
+
+            if (!emailSent && process.env.NODE_ENV !== 'production') {
+                logger.info(`Password reset (dev, email not sent): ${resetUrl}`);
+                return res.json({
+                    success: true,
+                    message: 'Password reset link created. Email is not configured in this environment.',
+                    devResetUrl: resetUrl
+                });
+            }
         }
 
         return res.json({

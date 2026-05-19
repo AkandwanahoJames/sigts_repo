@@ -68,8 +68,31 @@ window.__SIGTS_CONFIG__ = ${toLiteral(runtimeConfig)};
     ? window.location.port
     : (window.location && window.location.protocol === 'https:' ? '443' : '80');
 
-  // Dev live-server (:3000 with --proxy) or nginx: API on same host
-  if (pagePort === '3000' || pagePort === '80' || pagePort === '443' || pagePort === '') {
+  // Port 3000 (live-server): talk to backend port directly — proxy strips /api prefix
+  if (pagePort === '3000') {
+    var apiPort3000 = Number(cfg.API_PORT) || 8000;
+    var host3000 = window.location && window.location.hostname ? window.location.hostname : 'localhost';
+    if (cfg.API_URL) {
+      try {
+        var parsed3000 = new URL(cfg.API_URL, pageOrigin);
+        var apiHost3000 = parsed3000.hostname || '';
+        if (host3000 && (apiHost3000 === 'localhost' || apiHost3000 === '127.0.0.1') && host3000 !== apiHost3000) {
+          parsed3000.hostname = host3000;
+        }
+        var href3000 = parsed3000.toString().replace(/\\/$/, '');
+        if (!/\\/api$/i.test(href3000)) href3000 = parsed3000.origin + '/api';
+        window.__SIGTS_API_BASE__ = href3000;
+        return;
+      } catch (_) {
+        window.__SIGTS_API_BASE__ = cfg.API_URL;
+        return;
+      }
+    }
+    window.__SIGTS_API_BASE__ = (window.location.protocol || 'http:') + '//' + host3000 + ':' + apiPort3000 + '/api';
+    return;
+  }
+
+  if (pagePort === '80' || pagePort === '443' || pagePort === '') {
     window.__SIGTS_API_BASE__ = pageOrigin.replace(/\\/$/, '') + '/api';
     return;
   }

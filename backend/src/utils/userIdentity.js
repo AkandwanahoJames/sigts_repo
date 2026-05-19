@@ -70,15 +70,42 @@ async function findRegistrationConflicts(db, usernameRaw, emailRaw) {
     };
 }
 
+const LOGIN_USER_COLUMNS =
+    'user_id, username, password_hash, user_type, first_name, last_name, is_active, email';
+
 /**
- * Resolve login identifier: prefer username match, then email (avoids OR ambiguity).
+ * Email lookup aligned with registration (Gmail dot/subaddress folding).
+ */
+async function findUserByEmailForLogin(db, emailRaw) {
+    const email = normalizeEmail(emailRaw);
+    if (!email || !email.includes('@')) return null;
+
+    const result = await db.query(
+        `SELECT ${LOGIN_USER_COLUMNS}
+         FROM users
+         WHERE LOWER(TRIM(email)) = $1
+            OR (
+                $1 ~ '@(gmail|googlemail)\\.com$'
+                AND LOWER(TRIM(email)) ~ '@(gmail|googlemail)\\.com$'
+                AND LOWER(REPLACE(SPLIT_PART(TRIM(email), '@', 1), '.', ''))
+                    = LOWER(REPLACE(SPLIT_PART($1, '@', 1), '.', ''))
+                AND SPLIT_PART(LOWER(TRIM(email)), '@', 2) = SPLIT_PART($1, '@', 2)
+            )
+         LIMIT 1`,
+        [email]
+    );
+    return result.rows[0] || null;
+}
+
+/**
+ * Resolve login identifier: username, then email (canonical), then display name.
  */
 async function findUserForLogin(db, identifierRaw) {
     const identifier = String(identifierRaw || '').trim();
     if (!identifier) return null;
 
     const byUsername = await db.query(
-        `SELECT user_id, username, password_hash, user_type, first_name, last_name, is_active, email
+        `SELECT ${LOGIN_USER_COLUMNS}
          FROM users
          WHERE LOWER(TRIM(username)) = LOWER(TRIM($1))
          LIMIT 1`,
@@ -88,15 +115,27 @@ async function findUserForLogin(db, identifierRaw) {
         return { user: byUsername.rows[0], matchedBy: 'username' };
     }
 
-    const byEmail = await db.query(
-        `SELECT user_id, username, password_hash, user_type, first_name, last_name, is_active, email
-         FROM users
-         WHERE LOWER(TRIM(email)) = LOWER(TRIM($1))
-         LIMIT 1`,
-        [identifier]
-    );
-    if (byEmail.rows.length > 0) {
-        return { user: byEmail.rows[0], matchedBy: 'email' };
+    if (identifier.includes('@')) {
+        const byEmail = await findUserByEmailForLogin(db, identifier);
+        if (byEmail) {
+            return { user: byEmail, matchedBy: 'email' };
+        }
+    }
+
+    // Users often enter profile name ("First Last") though the form says email or username.
+    if (/\s/.test(identifier)) {
+        const displayName = identifier.replace(/\s+/g, ' ').trim().toLowerCase();
+        const byName = await db.query(
+            `SELECT ${LOGIN_USER_COLUMNS}
+             FROM users
+             WHERE LOWER(TRIM(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, '')))) = $1
+                OR LOWER(TRIM(CONCAT(COALESCE(last_name, ''), ' ', COALESCE(first_name, '')))) = $1
+             LIMIT 2`,
+            [displayName]
+        );
+        if (byName.rows.length === 1) {
+            return { user: byName.rows[0], matchedBy: 'name' };
+        }
     }
 
     return null;
@@ -192,6 +231,7 @@ module.exports = {
     normalizeEmail,
     isValidEmailShape,
     findRegistrationConflicts,
+    findUserByEmailForLogin,
     findUserForLogin,
     registrationConflictResponse,
     mapUniqueViolation

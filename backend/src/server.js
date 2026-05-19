@@ -414,7 +414,22 @@ app.set('pool', pool);
 // FRONTEND (SPA) — same origin as /api for reliable registration/login
 // =====================================================
 const FRONTEND_PUBLIC_DIR = path.join(__dirname, '../../frontend/public');
+const RUNTIME_CONFIG_GENERATOR = path.join(__dirname, '../../frontend/scripts/generateRuntimeConfig.js');
+if (fs.existsSync(RUNTIME_CONFIG_GENERATOR)) {
+    try {
+        require(RUNTIME_CONFIG_GENERATOR);
+    } catch (e) {
+        logger.warn(`Could not generate frontend runtime-config.js: ${e.message}`);
+    }
+}
 if (fs.existsSync(FRONTEND_PUBLIC_DIR)) {
+    const spaIndex = path.join(FRONTEND_PUBLIC_DIR, 'index.html');
+    const serveSpa = (req, res, next) => {
+        res.sendFile(spaIndex, (err) => {
+            if (err) next(err);
+        });
+    };
+    app.get(['/reset-password', '/verify-email'], serveSpa);
     app.use(express.static(FRONTEND_PUBLIC_DIR, { index: 'index.html', maxAge: process.env.NODE_ENV === 'production' ? '1d' : 0 }));
     app.get('*', (req, res, next) => {
         if (req.method !== 'GET' && req.method !== 'HEAD') return next();
@@ -425,6 +440,10 @@ if (fs.existsSync(FRONTEND_PUBLIC_DIR)) {
             || req.path === '/health'
             || req.path.startsWith('/socket.io')
         ) {
+            return next();
+        }
+        // Missing .js/.css/etc. must 404 — not index.html (breaks script loading).
+        if (/\.[a-z0-9]{1,12}$/i.test(req.path) && !/\.html?$/i.test(req.path)) {
             return next();
         }
         res.sendFile(path.join(FRONTEND_PUBLIC_DIR, 'index.html'), (err) => {

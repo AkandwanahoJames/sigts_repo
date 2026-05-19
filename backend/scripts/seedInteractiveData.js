@@ -43,7 +43,7 @@ async function ensureAnimalLocations() {
         ['Mountain Gorilla', 'Munyaga River Trail'],
         ['Mountain Gorilla', 'Bamboo Crest Trail'],
         ['Great Blue Turaco', 'Ruhija Ridge Viewpoint'],
-        ['African Elephant', 'Ivy River Crossing']
+        ['African Forest Elephant', 'Ivy River Crossing']
     ];
     for (const [animalName, locationName] of pairs) {
         await pool.query(

@@ -334,7 +334,7 @@ function getPhotoClassFromText(value = '') {
 
 function getQuickCardPhotoClass(cardKey = '') {
     const key = String(cardKey).toLowerCase();
-    if (key === 'animals') return 'photo-gorilla';
+    if (key === 'animals' || key === 'wildlife') return 'photo-gorilla';
     if (key === 'map') return 'photo-forest';
     if (key === 'culture') return 'photo-culture';
     if (key === 'info') return 'photo-leaf';
@@ -357,7 +357,8 @@ function getRecommendationPhotoClass(item = {}, index = 0) {
 function getPageTitle(view) {
     const titles = {
         dashboard: 'Home',
-        animals: 'Animals',
+        animals: 'Wildlife',
+        wildlife: 'Wildlife',
         map: 'Map',
         culture: 'Culture',
         sightings: 'Sightings',
@@ -376,6 +377,8 @@ function getPageTitle(view) {
 
 function getPageSubtitle(view) {
     const subtitles = {
+        wildlife: 'Staying-safe species, trail notes, and full ranger profiles.',
+        animals: 'Staying-safe species, trail notes, and full ranger profiles.',
         dashboard: "Search, browse categories, and pick up saved species or places.",
         saved: 'Bookmarks from your visits — tap to reopen details.',
         guide_dashboard: 'Track tours, guests, and active shifts.',
@@ -388,12 +391,14 @@ function getPageSubtitle(view) {
     return subtitles[view] || 'Role-based access with secure operational controls.';
 }
 
-const PUBLIC_VIEWS = new Set(['login', 'register']);
+const PUBLIC_VIEWS = new Set(['login', 'register', 'reset_password']);
 const APP_VIEWS = new Set([
     'login',
     'register',
+    'reset_password',
     'dashboard',
     'animals',
+    'wildlife',
     'map',
     'culture',
     'sightings',
@@ -409,7 +414,8 @@ const APP_VIEWS = new Set([
 ]);
 
 function normalizeView(view) {
-    const candidate = String(view || '').trim();
+    const raw = String(view || '').trim();
+    const candidate = raw === 'animals' ? 'wildlife' : raw;
     return APP_VIEWS.has(candidate) ? candidate : 'dashboard';
 }
 
@@ -421,12 +427,12 @@ function getEffectiveRole(user) {
 }
 
 const SHARED_APP_VIEWS = new Set([
-    'dashboard', 'animals', 'map', 'culture', 'sightings', 'saved', 'profile', 'info', 'ai_chat'
+    'dashboard', 'animals', 'wildlife', 'map', 'culture', 'sightings', 'saved', 'profile', 'info', 'ai_chat'
 ]);
 
 /** Temporary guest sessions: browse-only core park content (3.1.1.1). */
 const GUEST_ALLOWED_VIEWS = new Set([
-    'dashboard', 'animals', 'map', 'culture', 'info', 'ai_chat', 'profile'
+    'dashboard', 'animals', 'wildlife', 'map', 'culture', 'info', 'ai_chat', 'profile'
 ]);
 
 /** Whether the given role may open `view` (excludes login/register). */
@@ -500,10 +506,347 @@ let liveMapLayers = {
     markers: [],
     boundary: null,
     route: null,
-    activeTourRoute: null
+    activeTourRoute: null,
+    publicRouteLines: []
 };
+let liveMapPublicRoutes = [];
 let liveMapRefreshTimer = null;
 let liveMapPOIs = [];
+const SIGTS_MAP_FOCUS_KEY = 'sigts_map_focus_location_id';
+
+function getOfflineParkPois() {
+    if (liveMapPOIs.length) return liveMapPOIs;
+    try {
+        const raw = localStorage.getItem('offline_locations');
+        const list = raw ? JSON.parse(raw) : [];
+        return Array.isArray(list) ? list : [];
+    } catch (_) {
+        return [];
+    }
+}
+
+function safeParkDistance(lat1, lng1, lat2, lng2) {
+    if (typeof Geofence !== 'undefined' && typeof Geofence.calculateDistance === 'function') {
+        return Geofence.calculateDistance(lat1, lng1, lat2, lng2);
+    }
+    const R = 6371e3;
+    const φ1 = (lat1 * Math.PI) / 180;
+    const φ2 = (lat2 * Math.PI) / 180;
+    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+    const Δλ = ((lng2 - lng1) * Math.PI) / 180;
+    const a =
+        Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+        Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function normalizeMapLocationList(list) {
+    if (!Array.isArray(list)) return [];
+    return list.map((loc, index) => {
+        const lat = Number(loc.latitude ?? loc.lat);
+        const lng = Number(loc.longitude ?? loc.lng);
+        return {
+            ...loc,
+            location_id: loc.location_id || loc.id || `map-loc-${index}`,
+            location_type: loc.location_type || loc.type || 'viewpoint',
+            latitude: Number.isFinite(lat) ? lat : undefined,
+            longitude: Number.isFinite(lng) ? lng : undefined,
+            lat: Number.isFinite(lat) ? lat : loc.lat,
+            lng: Number.isFinite(lng) ? lng : loc.lng
+        };
+    });
+}
+
+function ensureMapFallbackLocations() {
+    const fallback = Array.isArray(window.BWINDI_MAP_FALLBACK_LOCATIONS)
+        ? window.BWINDI_MAP_FALLBACK_LOCATIONS
+        : [];
+    const existing = normalizeMapLocationList(getOfflineParkPois());
+    const merged = existing.length >= fallback.length ? existing : normalizeMapLocationList(fallback);
+    if (merged.length) {
+        try {
+            localStorage.setItem('offline_locations', JSON.stringify(merged));
+        } catch (_) {
+            /**/
+        }
+    }
+    return merged;
+}
+
+async function loadMapLocations() {
+    let list = [];
+    try {
+        if (typeof Content !== 'undefined' && Content.getLocations) {
+            list = await Content.getLocations();
+        } else {
+            list = await API.getLocations();
+        }
+    } catch (_) {
+        list = [];
+    }
+    list = normalizeMapLocationList(list);
+    if (!list.length) list = ensureMapFallbackLocations();
+    return list;
+}
+
+async function loadMapBoundaryGeo() {
+    try {
+        const response = await fetch(`${API_URL}/geofence/boundary`, {
+            headers: Auth?.token ? { Authorization: `Bearer ${Auth.token}` } : {}
+        });
+        if (response.ok) return await response.json();
+    } catch (_) {
+        /**/
+    }
+    return Geofence?.parkBoundary || {
+        minLat: -1.2,
+        maxLat: -1.0,
+        minLng: 29.6,
+        maxLng: 29.8
+    };
+}
+
+async function loadMapDataBundle() {
+    const warnings = [];
+    const locations = await loadMapLocations().catch(() => {
+        warnings.push('locations');
+        return ensureMapFallbackLocations();
+    });
+    const sightings = await API.getRecentSightings(50).catch(() => {
+        warnings.push('sightings');
+        return [];
+    });
+    const tours = await API.getToursForGuide().catch(() => {
+        warnings.push('tours');
+        return [];
+    });
+    const boundaryGeo = await loadMapBoundaryGeo().catch(() => {
+        warnings.push('boundary');
+        return Geofence?.parkBoundary || null;
+    });
+    const publicRoutes = await API.getPublicRoutes().catch(() => {
+        warnings.push('routes');
+        return [];
+    });
+    return {
+        locations,
+        sightings: Array.isArray(sightings) ? sightings : [],
+        tours: Array.isArray(tours) ? tours : [],
+        boundaryGeo,
+        publicRoutes: Array.isArray(publicRoutes) ? publicRoutes : [],
+        warnings
+    };
+}
+
+async function requestMapGpsFix() {
+    if (!navigator.geolocation) {
+        updateMapPlaceContext(null, null);
+        return null;
+    }
+    const existing = Geofence?.currentLocation || AppState?.currentLocation;
+    if (existing && Number.isFinite(existing.lat) && Number.isFinite(existing.lng)) {
+        updateMapPlaceContext(existing.lat, existing.lng);
+        setMapCoords(existing.lat, existing.lng);
+        return existing;
+    }
+    return new Promise((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const loc = {
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude,
+                    accuracy: position.coords.accuracy,
+                    timestamp: position.timestamp || Date.now()
+                };
+                if (typeof Geofence !== 'undefined' && Geofence) {
+                    Geofence.currentLocation = loc;
+                }
+                if (typeof AppState !== 'undefined') AppState.currentLocation = loc;
+                updateMapPlaceContext(loc.lat, loc.lng);
+                setMapCoords(loc.lat, loc.lng);
+                resolve(loc);
+            },
+            () => {
+                updateMapPlaceContext(null, null);
+                resolve(null);
+            },
+            { enableHighAccuracy: true, timeout: 14000, maximumAge: 45000 }
+        );
+    });
+}
+
+window.locateMeOnMap = async function locateMeOnMap() {
+    setMapStatus('Requesting GPS fix…');
+    const loc = await requestMapGpsFix();
+    if (loc && liveMapInstance) {
+        liveMapInstance.setView([loc.lat, loc.lng], Math.max(liveMapInstance.getZoom() || 0, 14));
+        await refreshLiveMapData();
+        showToast('Location updated on map.', 'success');
+    } else {
+        showToast('Could not get GPS. Check browser location permission.', 'warning');
+        setMapStatus('GPS unavailable — map still shows park places and routes.');
+    }
+};
+
+function findPoiByName(name) {
+    const q = String(name || '').trim().toLowerCase();
+    if (!q) return null;
+    const list = getOfflineParkPois();
+    return (
+        list.find((p) => String(p.name || '').toLowerCase() === q) ||
+        list.find((p) => String(p.name || '').toLowerCase().includes(q))
+    );
+}
+
+function findNearestParkPoi(lat, lng, pois) {
+    const list = Array.isArray(pois) && pois.length ? pois : getOfflineParkPois();
+    let best = null;
+    let bestDist = Infinity;
+    for (const poi of list) {
+        const coords = coerceLatLng(poi);
+        if (!coords) continue;
+        const dist = safeParkDistance(lat, lng, coords.lat, coords.lng);
+        if (dist < bestDist) {
+            bestDist = dist;
+            best = { poi, distMeters: dist, lat: coords.lat, lng: coords.lng };
+        }
+    }
+    return best;
+}
+
+function formatDistanceShort(meters) {
+    const m = Number(meters);
+    if (!Number.isFinite(m) || m < 0) return '—';
+    if (m < 1000) return `${Math.round(m)} m`;
+    return `${(m / 1000).toFixed(1)} km`;
+}
+
+function describeYouAreHere(lat, lng, insidePark) {
+    const nearest = findNearestParkPoi(lat, lng);
+    if (!nearest) {
+        return insidePark
+            ? 'Inside park — move toward a trail or gate to match a landmark'
+            : 'Outside park boundary — head to an official gate';
+    }
+    const name = nearest.poi.name || 'landmark';
+    if (nearest.distMeters <= 120) return `You are at or near ${name}`;
+    return `Near ${name} (${formatDistanceShort(nearest.distMeters)} away)`;
+}
+
+function readMapFocusId() {
+    try {
+        return String(sessionStorage.getItem(SIGTS_MAP_FOCUS_KEY) || '').trim();
+    } catch (_) {
+        return '';
+    }
+}
+
+function clearMapFocusId() {
+    try {
+        sessionStorage.removeItem(SIGTS_MAP_FOCUS_KEY);
+    } catch (_) {
+        /**/
+    }
+}
+
+function renderLocationLinkButtons(ids = [], names = []) {
+    const pairs = [];
+    const idList = (Array.isArray(ids) ? ids : []).map((id) => String(id || '').trim()).filter(Boolean);
+    const nameList = Array.isArray(names) ? names : [];
+    idList.forEach((id, index) => {
+        pairs.push({ id, name: nameList[index] || 'Place' });
+    });
+    if (!pairs.length && nameList.length) {
+        nameList.forEach((name) => {
+            const match = findPoiByName(name);
+            if (match) {
+                pairs.push({
+                    id: String(match.location_id || match.id || ''),
+                    name: String(name)
+                });
+            }
+        });
+    }
+    if (!pairs.length) return '';
+    return `<div class="location-link-row info-chip-row">${pairs
+        .map((pair) => {
+            const safeId = escAttrBareUuid(pair.id);
+            if (!safeId) return '';
+            return `<button type="button" class="small-btn" onclick="openMapAtLocation('${safeId}')">${icon('map', 'icon-sm')} ${escapeHtml(pair.name)}</button>
+                <button type="button" class="small-btn ghost-btn" onclick="openParkLocationDetail('${safeId}')">${icon('info', 'icon-sm')} Details</button>`;
+        })
+        .join('')}</div>`;
+}
+
+function updateMapPlaceContext(lat, lng) {
+    const youNode = document.getElementById('mapYouAreHere');
+    const ctxNode = document.getElementById('mapPlaceContext');
+    if (!youNode && !ctxNode) return;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        if (youNode) youNode.textContent = 'Waiting for GPS — allow location access';
+        if (ctxNode) ctxNode.textContent = '';
+        return;
+    }
+    const inside = Geofence?.isInsidePark?.(lat, lng);
+    const label = describeYouAreHere(lat, lng, inside);
+    if (youNode) youNode.textContent = label;
+    if (ctxNode) {
+        const nearest = findNearestParkPoi(lat, lng);
+        ctxNode.innerHTML = nearest
+            ? `<button type="button" class="small-btn" onclick="openMapAtLocation('${escAttrBareUuid(nearest.poi.location_id || nearest.poi.id)}')">${icon('target', 'icon-sm')} Center on ${escapeHtml(nearest.poi.name || 'nearest place')}</button>
+               <button type="button" class="small-btn ghost-btn" onclick="openParkLocationDetail('${escAttrBareUuid(nearest.poi.location_id || nearest.poi.id)}')">${icon('info', 'icon-sm')} Place info</button>`
+            : '';
+    }
+}
+
+function focusMapOnLocationId(locationId) {
+    const id = String(locationId || '').trim();
+    if (!id || !liveMapInstance) return false;
+    const poi =
+        liveMapPOIs.find((p) => String(p.location_id || p.id) === id) ||
+        getOfflineParkPois().find((p) => String(p.location_id || p.id) === id);
+    if (!poi) return false;
+    const coords = coerceLatLng(poi);
+    if (!coords) return false;
+    const destSelect = document.getElementById('mapDestination');
+    if (destSelect) {
+        const optionId = String(poi.id || poi.location_id || id);
+        if ([...destSelect.options].some((o) => o.value === optionId)) {
+            destSelect.value = optionId;
+        }
+    }
+    liveMapInstance.setView([coords.lat, coords.lng], 15);
+    setMapStatus(`Focused on ${poi.name || 'location'}`);
+    updateMapPlaceContext(coords.lat, coords.lng);
+    return true;
+}
+
+function applyPendingMapFocus() {
+    const focusId = readMapFocusId();
+    if (!focusId) return false;
+    const ok = focusMapOnLocationId(focusId);
+    if (ok) clearMapFocusId();
+    return ok;
+}
+
+window.openMapAtLocation = async function openMapAtLocation(locationId) {
+    const id = String(locationId || '').trim();
+    if (!id) return showToast('Missing location reference', 'warning');
+    try {
+        sessionStorage.setItem(SIGTS_MAP_FOCUS_KEY, id);
+    } catch (_) {
+        /**/
+    }
+    if (window.currentView === 'map' && liveMapInstance) {
+        if (focusMapOnLocationId(id)) clearMapFocusId();
+        else await refreshLiveMapData().then(() => applyPendingMapFocus());
+        return;
+    }
+    await navigateTo('map', { updateHash: true, suppressAccessToast: true });
+};
+
+window.updateMapPlaceContext = updateMapPlaceContext;
+
 let activeGuidanceTarget = null;
 let liveMapTileLayers = {};
 let measureStartPoint = null;
@@ -574,12 +917,23 @@ function renderParkAccessPanel() {
     const hasCoords = Number.isFinite(Number(state.location?.lat)) && Number.isFinite(Number(state.location?.lng));
     const latText = hasCoords ? Number(state.location.lat).toFixed(5) : 'Waiting for GPS';
     const lngText = hasCoords ? Number(state.location.lng).toFixed(5) : '--';
+    const placeLine = hasCoords
+        ? describeYouAreHere(state.location.lat, state.location.lng, state.insidePark)
+        : 'Enable location to see your nearest landmark';
+    const nearest = hasCoords ? findNearestParkPoi(state.location.lat, state.location.lng) : null;
+    const nearestBtn = nearest
+        ? `<div class="info-chip-row" style="margin-top:8px;"><button type="button" class="small-btn" onclick="openMapAtLocation('${escAttrBareUuid(nearest.poi.location_id || nearest.poi.id)}')">${icon('map', 'icon-sm')} Show on map</button></div>`
+        : hasCoords
+          ? `<div class="info-chip-row" style="margin-top:8px;"><button type="button" class="small-btn" onclick="navigateTo('map')">${icon('map', 'icon-sm')} Open map</button></div>`
+          : '';
     return `<section class="park-access-panel ${state.status}">
         <div class="park-access-head">
             <h3>${icon('shield', 'icon-sm')} Park Access Status</h3>
             ${renderStatusBadge(state.status === 'active' ? 'active' : 'warning')}
         </div>
         <p>${escapeHtml(getAccessStatusText(state))}</p>
+        <p class="park-access-place"><strong>${icon('target', 'icon-sm')} Where you are:</strong> ${escapeHtml(placeLine)}</p>
+        ${nearestBtn}
         <div class="park-access-meta">
             <span class="park-chip ${state.insidePark ? 'ok' : 'warn'}">Boundary: ${state.insidePark ? 'Inside' : 'Outside'}</span>
             <span class="park-chip ${state.online ? 'ok' : 'warn'}">Network: ${state.online ? 'Online' : 'Offline'}</span>
@@ -721,13 +1075,13 @@ function renderMobileTouristTabbar() {
     const tabs = isGuest
         ? [
             ['dashboard', 'home', 'Home'],
-            ['animals', 'paw', 'Species'],
+            ['wildlife', 'paw', 'Wildlife'],
             ['map', 'map', 'Map'],
             ['profile', 'user', 'You']
         ]
         : [
             ['dashboard', 'home', 'Home'],
-            ['animals', 'paw', 'Species'],
+            ['wildlife', 'paw', 'Wildlife'],
             ['map', 'map', 'Map'],
             ['saved', 'bookmark', 'Saved'],
             ['profile', 'user', 'You']
@@ -752,7 +1106,7 @@ function renderMainLayout(content) {
     const avatarIcon = isITManager ? icon('chart', 'icon-md') : (isGuide ? icon('ticket', 'icon-md') : icon('user', 'icon-md'));    
     let navItems = [
         { id: 'dashboard', icon: 'home', label: 'Home' },
-        { id: 'animals', icon: 'paw', label: 'Animals' },
+        { id: 'wildlife', icon: 'paw', label: 'Wildlife' },
         { id: 'map', icon: 'map', label: 'Map' },
         { id: 'culture', icon: 'book', label: 'Culture' },
         { id: 'ai_chat', icon: 'feather', label: 'Chat' },
@@ -789,7 +1143,18 @@ const __sigtsViewInFlight = new Map(); // key -> Promise<string>
 
 function getViewCacheKey(view) {
     const role = getEffectiveRole(Auth.getCurrentUser() || {});
-    return `${role}::${String(view || '')}`;
+    const v = String(view || '');
+    if (v === 'wildlife' || v === 'animals') {
+        let group = 'all';
+        try {
+            const raw = sessionStorage.getItem(SIGTS_ANIMALS_GUIDE_GROUP_KEY);
+            group = raw && ['all', ...ANIMALS_GUIDE_GROUP_ORDER].includes(raw) ? raw : 'all';
+        } catch (_) {
+            /**/
+        }
+        return `${role}::wildlife::group_${group}`;
+    }
+    return `${role}::${v}`;
 }
 
 function getCachedViewHtml(view) {
@@ -892,7 +1257,7 @@ function renderViewSkeleton(view) {
 
     if (view === 'dashboard') return `${card(4)}${card(3)}`;
     if (view === 'saved') return `${card(4)}`;
-    if (view === 'animals' || view === 'culture') return `${card(4)}${card(4)}`;
+    if (view === 'wildlife' || view === 'animals' || view === 'culture') return `${card(4)}${card(4)}`;
     if (view === 'it_dashboard' || view === 'it_predictive_analytics' || view === 'guide_dashboard' || view === 'intranet') return `${card(4)}${card(3)}`;
     return card(4);
 }
@@ -900,7 +1265,9 @@ function renderViewSkeleton(view) {
 async function computeViewContent(view) {
     switch (view) {
         case 'dashboard': return await renderDashboardContent();
-        case 'animals': return await renderAnimalsContent();
+        case 'animals':
+        case 'wildlife':
+            return await renderWildlifeContent();
         case 'map': return renderMapContent();
         case 'culture': return await renderCultureContent();
         case 'sightings': return await renderSightingsContent();
@@ -1135,7 +1502,7 @@ function speciesAIPromptFromRecord(animal = {}) {
     return `Field brief for Bwindi: ${name}${sci ? ` (${sci})` : ''}. Usual trail zones, habitat, visitor rules, seasonality, status, one rumor to correct. Rangers’ safety line comes first.`;
 }
 
-/** One catalogue tile (Animals tab + dashboard spotlight). */
+/** One catalogue tile (Wildlife tab + dashboard spotlight). */
 function renderAnimalSpeciesCardHtml(animal) {
     const rawId = animal.animal_id || animal.id || '';
     const id = escapeHtml(String(rawId));
@@ -1194,7 +1561,7 @@ function renderDashboardSpeciesSpotlight(animals) {
     const picks = pickDashboardSpotlightAnimals(animals, 24);
     if (!picks.length) return '';
     const cards = picks.map((a) => renderAnimalSpeciesCardHtml(a)).join('');
-    return `<div class="section-card dashboard-species-spotlight"><div class="section-header"><h3>${icon('paw', 'icon-sm')} Species to explore</h3></div><p class="animals-page-blurb">A sample from the Bwindi catalogue on this device. Tap a card for ranger-style notes, or browse the full list.</p><div class="info-chip-row" style="margin-bottom:12px;"><button type="button" class="small-btn" onclick="navigateTo('animals')">${icon('grid', 'icon-sm')} Open full biodiversity list</button></div><div class="animals-list animals-list--responsive">${cards}</div></div>`;
+    return `<div class="section-card dashboard-species-spotlight"><div class="section-header"><h3>${icon('paw', 'icon-sm')} Species to explore</h3></div><p class="animals-page-blurb">A sample from the Bwindi catalogue on this device. Tap a card for ranger-style notes, or browse the full list.</p><div class="info-chip-row" style="margin-bottom:12px;"><button type="button" class="small-btn" onclick="navigateTo('wildlife')">${icon('grid', 'icon-sm')} Open wildlife catalogue</button></div><div class="animals-list animals-list--responsive">${cards}</div></div>`;
 }
 
 function culturalAIPromptFromRecord(story = {}) {
@@ -1325,7 +1692,7 @@ function applySIGTSAIPrefill() {
     }
 }
 
-/** Session storage key: selected tour thematic filter on the Animals tab */
+/** Session storage key: selected tour thematic filter on the Wildlife tab */
 const SIGTS_TOUR_FOCUS_KEY = 'sigts_tour_focus';
 
 const BWINDI_TOUR_THEMES = [
@@ -1481,7 +1848,80 @@ window.setAnimalTourFocus = async function setAnimalTourFocus(key) {
     } catch (_) {
         /**/
     }
-    await navigateTo('animals', { updateHash: false, suppressAccessToast: true });
+    await navigateTo('wildlife', { updateHash: false, suppressAccessToast: true });
+};
+
+function applyWildlifeGuideGroupFilter(activeGroup) {
+    const group = activeGroup || getValidatedAnimalsGuideGroup();
+    const label = group.replace(/_/g, ' ');
+    document.querySelectorAll('.wildlife-filter-chip').forEach((chip) => {
+        const id = chip.getAttribute('data-guide-filter') || '';
+        chip.classList.toggle('wildlife-filter-chip--active', id === group);
+    });
+    const grid = document.getElementById('animals-catalog-grid');
+    if (!grid) return 0;
+    let visibleCards = 0;
+    grid.querySelectorAll('.wildlife-section').forEach((section) => {
+        const sectionId = section.getAttribute('data-guide-section') || '';
+        const sectionMatch = group === 'all' || sectionId === group;
+        section.style.display = sectionMatch ? '' : 'none';
+        if (!sectionMatch) return;
+        section.querySelectorAll('.wildlife-species-card, .staying-safe-animal-card').forEach((card) => {
+            if (card.style.display !== 'none') visibleCards += 1;
+        });
+    });
+    const searchRow = document.querySelector('.wildlife-search');
+    let hint = searchRow?.querySelector('.wildlife-search__hint');
+    if (group !== 'all') {
+        const hintHtml = `Showing <strong>${escapeHtml(label)}</strong> — tap <strong>All species</strong> to reset.`;
+        if (hint) hint.innerHTML = hintHtml;
+        else if (searchRow) {
+            hint = document.createElement('p');
+            hint.className = 'wildlife-search__hint';
+            hint.innerHTML = hintHtml;
+            searchRow.appendChild(hint);
+        }
+    } else if (hint) {
+        hint.remove();
+    }
+    let empty = grid.querySelector('.wildlife-filter-empty');
+    if (group !== 'all' && visibleCards === 0) {
+        if (!empty) {
+            empty = document.createElement('p');
+            empty.className = 'wildlife-filter-empty animals-page-blurb';
+            grid.appendChild(empty);
+        }
+        empty.textContent = `No species listed under “${label}” in the staying-safe guide on this device.`;
+        empty.style.display = '';
+    } else if (empty) {
+        empty.style.display = 'none';
+    }
+    return visibleCards;
+}
+
+window.setAnimalsGuideGroupFilter = async function setAnimalsGuideGroupFilter(key) {
+    const valid = new Set(['all', ...ANIMALS_GUIDE_GROUP_ORDER]);
+    const k = valid.has(key) ? key : 'all';
+    try {
+        sessionStorage.setItem(SIGTS_ANIMALS_GUIDE_GROUP_KEY, k);
+    } catch (_) {
+        /**/
+    }
+    invalidateSigtsViewCache('wildlife');
+    invalidateSigtsViewCache('animals');
+    if (window.currentView === 'wildlife' || window.currentView === 'animals') {
+        applyWildlifeGuideGroupFilter(k);
+        applyAnimalsCatalogFilter();
+        let n = 0;
+        document.querySelectorAll('#animals-catalog-grid .wildlife-species-card, #animals-catalog-grid .staying-safe-animal-card').forEach((c) => {
+            if (c.style.display !== 'none') n += 1;
+        });
+        const label = k === 'all' ? 'All species' : k.replace(/_/g, ' ');
+        showToast(n ? `Showing ${label} (${n} species)` : `No species in ${label} on this device`, n ? 'success' : 'info');
+        document.getElementById('animals-catalog-grid')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+    }
+    await navigateTo('wildlife', { updateHash: false, suppressAccessToast: true });
 };
 
 /** Close stacked rich modal (tour briefing / species) then apply species filter */
@@ -1575,6 +2015,11 @@ window.openAnimalSpeciesDetail = async function openAnimalSpeciesDetail(animalId
         ? `<ul class="ui-modal-facts">${facts.map((f) => `<li>${escapeHtml(f)}</li>`).join('')}</ul>`
         : '<p class="ui-modal-muted">Fun facts arriving soon.</p>';
 
+    const guideTip = getStayingSafeTipForSpeciesName(animal.name);
+    const guideTipHtml = guideTip
+        ? `<div class="ui-modal-staying-safe-callout"><strong>${icon('shield', 'icon-sm')} Staying Safe guide — on the trail</strong><p>${escapeHtml(guideTip)}</p></div>`
+        : '';
+
     const imgList = Array.isArray(animal.image_urls) ? animal.image_urls.map((u) => String(u || '').trim()).filter(Boolean) : [];
     const galleryExtra = imgList.slice(1, 7);
     const galleryHtml = galleryExtra.length
@@ -1603,10 +2048,11 @@ window.openAnimalSpeciesDetail = async function openAnimalSpeciesDetail(animalId
           <span class="animal-status neutral-chip">${escapeHtml(animal.diet || 'Mixed diet')}</span>
           <span class="animal-status neutral-chip">${escapeHtml(animal.lifespan ? `Lifespan: ${animal.lifespan}` : 'Lifespan: see guide')}</span>
         </div>
+        ${guideTipHtml}
         ${videoHtml}
         <p>${escapeHtml(animal.description || 'Description coming soon via rangers.')}</p>
         <p><strong>${icon('leaf', 'icon-sm')} Habitat</strong><br>${escapeHtml(animal.habitat || 'Montane rainforest mosaic')}</p>
-        ${joinMaybeList(animal.common_locations) ? `<p><strong>${icon('map', 'icon-sm')} Often near</strong><br>${escapeHtml(joinMaybeList(animal.common_locations))}</p>` : ''}
+        ${renderLocationLinkButtons(animal.location_ids, animal.common_locations) ? `<h4 class="ui-modal-section-title">${icon('map', 'icon-sm')} Places in the park</h4>${renderLocationLinkButtons(animal.location_ids, animal.common_locations)}` : joinMaybeList(animal.common_locations) ? `<p><strong>${icon('map', 'icon-sm')} Often near</strong><br>${escapeHtml(joinMaybeList(animal.common_locations))}</p>` : ''}
         ${behHtml}
         ${galleryHtml}
         ${similarHtml}
@@ -1727,7 +2173,7 @@ window.openParkLocationDetail = async function openParkLocationDetail(locationId
 
     overlay?.querySelector('.sigts-loc-map')?.addEventListener('click', () => {
         overlay.querySelector('.ui-modal-close')?.click();
-        navigateTo('map');
+        openMapAtLocation(lid);
     });
     overlay?.querySelector('.sigts-detail-bookmark-btn')?.addEventListener('click', () => {
         const on = Content.toggleBookmark({ type: 'location', id: lid, title: loc.name });
@@ -1768,7 +2214,7 @@ window.openCulturalStoryDetail = async function openCulturalStoryDetail(narrativ
     const body = `
         <p>${escapeHtml(story?.narrative_en || story?.story || 'Full narrative unavailable offline.')}</p>
         ${story?.cultural_significance ? `<p><strong>${icon('book', 'icon-sm')} Why it matters</strong><br>${escapeHtml(story.cultural_significance)}</p>` : ''}
-        ${joinMaybeList(story?.related_locations) ? `<p><strong>${icon('map', 'icon-sm')} Linked places</strong><br>${escapeHtml(joinMaybeList(story.related_locations))}</p>` : ''}`;
+        ${renderLocationLinkButtons(story?.location_ids, story?.related_locations) ? `<h4 class="ui-modal-section-title">${icon('map', 'icon-sm')} Places in the park</h4>${renderLocationLinkButtons(story.location_ids, story.related_locations)}` : joinMaybeList(story?.related_locations) ? `<p><strong>${icon('map', 'icon-sm')} Linked places</strong><br>${escapeHtml(joinMaybeList(story.related_locations))}</p>` : ''}`;
 
     const footer = `
         <div class="sigts-detail-footer-actions">
@@ -1861,7 +2307,7 @@ function renderTourismBookmarksRow() {
 /** Travel-style discovery header: hero search + horizontal category chips (tourist Home). */
 function renderDiscoveryHomePanel() {
     const chipDefs = [
-        ['animals', 'paw', 'Species'],
+        ['wildlife', 'paw', 'Wildlife'],
         ['map', 'map', 'Map'],
         ['culture', 'book', 'Culture'],
         ['info', 'info', 'Park info'],
@@ -1906,7 +2352,7 @@ async function renderSavedContent() {
             <h3 class="sigts-saved-hero-title">Nothing saved yet</h3>
             <p class="animals-page-blurb">Open any species, map place, or culture story and tap the <strong>bookmark</strong> in the header to keep it here.</p>
             <div class="sigts-saved-hero-actions">
-                <button type="button" class="login-btn" onclick="navigateTo('animals')">${icon('paw', 'icon-sm')} Browse species</button>
+                <button type="button" class="login-btn" onclick="navigateTo('wildlife')">${icon('paw', 'icon-sm')} Browse wildlife</button>
                 <button type="button" class="small-btn ghost-btn" onclick="navigateTo('map')">${icon('map', 'icon-sm')} Open map</button>
             </div>
         </section></div>`;
@@ -1922,6 +2368,7 @@ async function renderSavedContent() {
             if (b.type === 'animal') openFn = `openAnimalSpeciesDetail('${safeId}')`;
             else if (b.type === 'location') openFn = `openParkLocationDetail('${safeId}')`;
             else if (b.type === 'cultural') openFn = `openCulturalStoryDetail('${safeId}')`;
+            else if (b.type === 'tab') openFn = `navigateTo('${escAttr(rawId === 'animals' ? 'wildlife' : rawId)}')`;
             else openFn = `showToast('Open this item from its original tab.','info')`;
             const ic = b.type === 'location' ? 'map' : b.type === 'cultural' ? 'book' : b.type === 'animal' ? 'paw' : 'bookmark';
             const safeType = escAttr(String(b.type || ''));
@@ -1954,12 +2401,16 @@ async function renderDashboardContent() {
         primaryItems: recommendations.map((r) => ({
             title: r.name,
             match: `${Math.round(r.score * 100)}% match`,
-            reason: r.reason
+            reason: r.reason,
+            actionKind: 'tour_reco',
+            actionId: r.id,
+            goIcon: 'chevronRight'
         })),
         quote: '"The best view comes after the hardest climb."',
         seasonalTitle: seasonal.season === 'dry' ? `${icon('sun', 'icon-sm')} Dry Season` : `${icon('rain', 'icon-sm')} Wet Season`,
         seasonalItems: seasonal.recommendations,
         seasonalActionLabel: 'Open tour help',
+        seasonalAction: 'ai_chat',
         seasonalFootnote: seasonal.conditionNote || '',
         animalCount: animals.length
     });
@@ -1969,8 +2420,127 @@ async function renderDashboardContent() {
 }
 
 function renderDashboardQuickGrid(animalCount = 0) {
-    return `<div class="quick-grid"><div class="quick-card quick-photo ${getQuickCardPhotoClass('animals')}" onclick="navigateTo('animals')"><div class="quick-icon">${icon('paw', 'icon-xl')}</div><div class="quick-label">Animals</div><div class="quick-count">${animalCount} species</div></div><div class="quick-card quick-photo ${getQuickCardPhotoClass('map')}" onclick="navigateTo('map')"><div class="quick-icon">${icon('map', 'icon-xl')}</div><div class="quick-label">Map</div></div><div class="quick-card quick-photo ${getQuickCardPhotoClass('culture')}" onclick="navigateTo('culture')"><div class="quick-icon">${icon('book', 'icon-xl')}</div><div class="quick-label">Culture</div></div><div class="quick-card quick-photo ${getQuickCardPhotoClass('info')}" onclick="navigateTo('info')"><div class="quick-icon">${icon('info', 'icon-xl')}</div><div class="quick-label">Info</div></div></div>`;
+    return `<div class="quick-grid"><div class="quick-card quick-photo ${getQuickCardPhotoClass('wildlife')}" onclick="navigateTo('wildlife')"><div class="quick-icon">${icon('paw', 'icon-xl')}</div><div class="quick-label">Wildlife</div><div class="quick-count">${animalCount} species</div></div><div class="quick-card quick-photo ${getQuickCardPhotoClass('map')}" onclick="navigateTo('map')"><div class="quick-icon">${icon('map', 'icon-xl')}</div><div class="quick-label">Map</div></div><div class="quick-card quick-photo ${getQuickCardPhotoClass('culture')}" onclick="navigateTo('culture')"><div class="quick-icon">${icon('book', 'icon-xl')}</div><div class="quick-label">Culture</div></div><div class="quick-card quick-photo ${getQuickCardPhotoClass('info')}" onclick="navigateTo('info')"><div class="quick-icon">${icon('info', 'icon-xl')}</div><div class="quick-label">Info</div></div></div>`;
 }
+
+function escJsAttr(s) {
+    return String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+function dashboardRecActionAttrs(item) {
+    const kind = item?.actionKind;
+    if (!kind) {
+        return { card: '', btn: ' disabled aria-disabled="true" title="No linked action"' };
+    }
+    const id = escJsAttr(item.actionId || '');
+    const label = escJsAttr(item.title || '');
+    const fn = `sigtsOpenDashboardRec('${escJsAttr(kind)}','${id}','${label}')`;
+    return {
+        card: ` role="button" tabindex="0" onclick="${fn}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${fn};}"`,
+        btn: ` onclick="event.stopPropagation();${fn}"`
+    };
+}
+
+window.sigtsRunDashboardAction = async function sigtsRunDashboardAction(action) {
+    const a = String(action || '').trim();
+    if (a === 'clock_in_out') {
+        await clockInOut();
+        return;
+    }
+    if (a === 'wildlife') {
+        await navigateTo('wildlife');
+        return;
+    }
+    if (a === 'it_analytics') {
+        await navigateTo('it_predictive_analytics');
+        return;
+    }
+    if (a === 'it_live_users') {
+        document.getElementById('adminLiveUsersList')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+    }
+    if (a === 'intranet_peers') {
+        document.getElementById('intranetPeersSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+    }
+    if (a === 'map') {
+        await navigateTo('map');
+        return;
+    }
+    await navigateTo('ai_chat');
+};
+
+window.sigtsOpenDashboardRec = async function sigtsOpenDashboardRec(kind, id, label) {
+    const k = String(kind || '').trim();
+    const rawId = String(id || '').trim();
+    const title = String(label || '').trim();
+    if (k === 'tour_reco') {
+        if (rawId === 'batwa_cultural' || rawId === 'community_crafts') {
+            await navigateTo('culture');
+            return;
+        }
+        if (/gorilla|primate|forest|birding|photography/.test(rawId)) {
+            await navigateTo('wildlife');
+            return;
+        }
+        await navigateToAIWithPrompt(
+            title ? `Visitor planning: ${title} at Bwindi Impenetrable National Park.` : 'Help me plan a Bwindi trek experience.'
+        );
+        return;
+    }
+    if (k === 'tour_prep' && rawId) {
+        await openTourPreparation(rawId);
+        return;
+    }
+    if (k === 'tour_start' && rawId) {
+        await startTour(rawId);
+        return;
+    }
+    if (k === 'metric_sync' || k === 'metric_satisfaction') {
+        await navigateTo('it_predictive_analytics');
+        return;
+    }
+    if (k === 'metric_users') {
+        document.getElementById('adminLiveUsersList')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+    }
+    if (k === 'access_governance') {
+        document.getElementById('intranetAccessPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+    }
+    showToast('No action linked for this card yet.', 'info');
+};
+
+window.sigtsOpenFeedItem = async function sigtsOpenFeedItem(type, id) {
+    const t = String(type || '').trim().toLowerCase();
+    const rawId = String(id || '').trim();
+    if (!rawId) {
+        showToast('Item unavailable.', 'warning');
+        return;
+    }
+    if (t === 'animal') {
+        await openAnimalSpeciesDetail(rawId);
+        return;
+    }
+    if (t === 'cultural' || t === 'story') {
+        await openCulturalStoryDetail(rawId);
+        return;
+    }
+    if (t === 'location') {
+        await openParkLocationDetail(rawId);
+        return;
+    }
+    if (t === 'tab') {
+        await navigateTo(rawId === 'animals' ? 'wildlife' : rawId);
+        return;
+    }
+    const tabViews = new Set(['wildlife', 'animals', 'map', 'culture', 'info', 'dashboard', 'sightings', 'saved', 'ai_chat', 'profile']);
+    if (tabViews.has(t)) {
+        await navigateTo(t === 'animals' ? 'wildlife' : t);
+        return;
+    }
+    showToast('Open this item from its section in the app.', 'info');
+};
 
 function renderDashboardShell({
     primaryTitle,
@@ -1980,16 +2550,24 @@ function renderDashboardShell({
     seasonalTitle,
     seasonalItems,
     seasonalActionLabel,
+    seasonalAction = 'ai_chat',
     seasonalFootnote = '',
     animalCount
 }) {
-    return `${renderDashboardQuickGrid(animalCount)}<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon(primaryIcon, 'icon-sm')} ${primaryTitle}</h3></div><div id="recList">${primaryItems.map((item, index) => {
-        const recClass = item.avatarType === 'icon' ? 'rec-card system-rec' : 'rec-card';
-        const iconOnlyAvatar = item.avatarType === 'icon'
-            ? `<div class="rec-avatar metric-avatar metric-avatar-${escapeHtml(item.metricColor || 'default')}" aria-hidden="true"><span class="metric-avatar-icon">${icon(item.iconName || 'info', 'icon-md')}</span></div>`
-            : `<div class="rec-avatar ${item.avatarClass || getRecommendationPhotoClass(item, index)}" aria-hidden="true">${item.iconName ? `<span class="rec-symbol">${icon(item.iconName, 'icon-md')}</span>` : ''}</div>`;
-        return `<div class="${recClass}">${iconOnlyAvatar}<div class="rec-info"><div class="rec-title">${escapeHtml(item.title)}</div>${item.match ? `<div class="rec-match">${escapeHtml(item.match)}</div>` : ''}<div class="rec-reason">${escapeHtml(item.reason)}</div></div><button class="rec-go" aria-label="Open">${icon(item.goIcon || 'map', 'icon-sm')}</button></div>`;
-    }).join('') || '<div class="empty-state">No items available.</div>'}</div></div><div class="dashboard-quote-card"><blockquote>${escapeHtml(quote)}</blockquote></div></div><div class="section-card seasonal-card"><div class="section-header"><h3>${icon('leaf', 'icon-sm')} Seasonal: ${seasonalTitle}</h3></div><div class="seasonal-list">${seasonalItems.map((a) => `<div class="seasonal-item">• ${escapeHtml(a)}</div>`).join('') || '<div class="seasonal-item">• No seasonal updates available</div>'}</div>${seasonalFootnote ? `<p class="animals-page-blurb" style="padding:0 18px 12px;margin:0;">${escapeHtml(seasonalFootnote)}</p>` : ''}<div class="seasonal-bottom"><div class="seasonal-image-strip photo-leaf" aria-hidden="true"></div><button type="button" class="seasonal-action-btn" onclick="navigateTo('ai_chat')">${escapeHtml(seasonalActionLabel || 'View Suggestions')}</button></div></div>`;}
+    const seasonalFn = `sigtsRunDashboardAction('${escJsAttr(seasonalAction)}')`;
+    return `${renderDashboardQuickGrid(animalCount)}<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon(primaryIcon, 'icon-sm')} ${primaryTitle}</h3></div><div id="recList">${primaryItems
+        .map((item, index) => {
+            const recClass =
+                item.avatarType === 'icon' ? 'rec-card system-rec rec-card--interactive' : 'rec-card rec-card--interactive';
+            const act = dashboardRecActionAttrs(item);
+            const iconOnlyAvatar =
+                item.avatarType === 'icon'
+                    ? `<div class="rec-avatar metric-avatar metric-avatar-${escapeHtml(item.metricColor || 'default')}" aria-hidden="true"><span class="metric-avatar-icon">${icon(item.iconName || 'info', 'icon-md')}</span></div>`
+                    : `<div class="rec-avatar ${item.avatarClass || getRecommendationPhotoClass(item, index)}" aria-hidden="true">${item.iconName ? `<span class="rec-symbol">${icon(item.iconName, 'icon-md')}</span>` : ''}</div>`;
+            return `<div class="${recClass}"${act.card}>${iconOnlyAvatar}<div class="rec-info"><div class="rec-title">${escapeHtml(item.title)}</div>${item.match ? `<div class="rec-match">${escapeHtml(item.match)}</div>` : ''}<div class="rec-reason">${escapeHtml(item.reason)}</div></div><button type="button" class="rec-go" aria-label="Open ${escapeHtml(item.title)}"${act.btn}>${icon(item.goIcon || 'chevronRight', 'icon-sm')}</button></div>`;
+        })
+        .join('') || '<div class="empty-state">No items available.</div>'}</div></div><div class="dashboard-quote-card"><blockquote>${escapeHtml(quote)}</blockquote></div></div><div class="section-card seasonal-card"><div class="section-header"><h3>${icon('leaf', 'icon-sm')} Seasonal: ${seasonalTitle}</h3></div><div class="seasonal-list">${seasonalItems.map((a) => `<div class="seasonal-item">• ${escapeHtml(a)}</div>`).join('') || '<div class="seasonal-item">• No seasonal updates available</div>'}</div>${seasonalFootnote ? `<p class="animals-page-blurb" style="padding:0 18px 12px;margin:0;">${escapeHtml(seasonalFootnote)}</p>` : ''}<div class="seasonal-bottom"><div class="seasonal-image-strip photo-leaf" aria-hidden="true"></div><button type="button" class="seasonal-action-btn" onclick="${seasonalFn}">${escapeHtml(seasonalActionLabel || 'View Suggestions')}</button></div></div>`;
+}
 
 function renderDashboardAiModuleStrip(recommendations, personalized, trending, profile) {
     const pref =
@@ -2000,45 +2578,270 @@ function renderDashboardAiModuleStrip(recommendations, personalized, trending, p
         .slice(0, 4)
         .map(
             (r) =>
-                `<button type="button" class="small-btn" onclick="window.sigtsBoostReco && window.sigtsBoostReco('${escapeHtml(String(r.id))}')">${icon('target', 'icon-sm')} ${escapeHtml(r.name)}</button>`
+                `<button type="button" class="small-btn" onclick="window.sigtsBoostReco && window.sigtsBoostReco('${escapeHtml(String(r.id))}', ${JSON.stringify(r.name || '')})">${icon('target', 'icon-sm')} ${escapeHtml(r.name)}</button>`
         )
         .join(' ');
     const pLines = (personalized || [])
-        .map(
-            (p) =>
-                `<div class="seasonal-item"><strong>${escapeHtml(p.name)}</strong> <span class="tour-focus-count">${Math.round(Number(p.relevanceScore || 0) * 100)}%</span> — ${escapeHtml(p.type || '')}</div>`
-        )
+        .map((p) => {
+            const t = escJsAttr(p.type || 'animal');
+            const id = escJsAttr(p.id || '');
+            return `<button type="button" class="seasonal-item sigts-feed-row" onclick="sigtsOpenFeedItem('${t}','${id}')"><strong>${escapeHtml(p.name)}</strong> <span class="tour-focus-count">${Math.round(Number(p.relevanceScore || 0) * 100)}%</span> — ${escapeHtml(p.type || '')}</button>`;
+        })
         .join('');
     const tLines = (trending || [])
-        .map((t) => `<div class="seasonal-item">${escapeHtml(t.name)} — ${escapeHtml(t.reason || '')}</div>`)
+        .map((t) => {
+            const ttype = escJsAttr(t.type || 'tab');
+            const id = escJsAttr(t.id || '');
+            return `<button type="button" class="seasonal-item sigts-feed-row" onclick="sigtsOpenFeedItem('${ttype}','${id}')">${escapeHtml(t.name)} — ${escapeHtml(t.reason || '')}</button>`;
+        })
         .join('');
-    return `<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('paw', 'icon-sm')} Personalized content</h3>${pref}</div><div class="seasonal-list">${pLines || '<div class="seasonal-item">Browse Animals and Culture to train this list.</div>'}</div></div><div class="section-card"><div class="section-header"><h3>${icon('chart', 'icon-sm')} Popularity (this device)</h3></div><div class="seasonal-list">${tLines || '<div class="seasonal-item">Opens and catalogue views fill trending.</div>'}</div><div class="info-chip-row" style="padding:12px 16px 16px;flex-wrap:wrap;gap:8px;">${boosted}<button type="button" class="small-btn ghost-btn" onclick="navigateTo('ai_chat')">${icon('note', 'icon-sm')} Ask a question (NLP)</button></div></div></div>`;
+    return `<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('paw', 'icon-sm')} Personalized content</h3>${pref}</div><div class="seasonal-list">${pLines || '<div class="seasonal-item">Browse Wildlife and Culture to train this list.</div>'}</div></div><div class="section-card"><div class="section-header"><h3>${icon('chart', 'icon-sm')} Popularity (this device)</h3></div><div class="seasonal-list">${tLines || '<div class="seasonal-item">Opens and catalogue views fill trending.</div>'}</div><div class="info-chip-row" style="padding:12px 16px 16px;flex-wrap:wrap;gap:8px;">${boosted}<button type="button" class="small-btn ghost-btn" onclick="navigateTo('ai_chat')">${icon('note', 'icon-sm')} Ask a question (NLP)</button></div></div></div>`;
+}
+
+const SIGTS_ANIMALS_GUIDE_GROUP_KEY = 'sigts_animals_guide_group';
+const ANIMALS_GUIDE_GROUP_ORDER = ['great_apes', 'megafauna', 'primates', 'antelope'];
+
+function readStayingSafeGuideCache() {
+    try {
+        const raw = localStorage.getItem('offline_tourist_biodiversity_cache');
+        return raw ? JSON.parse(raw) : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+function getStayingSafeTipForSpeciesName(name) {
+    const cache = readStayingSafeGuideCache();
+    const species = cache?.species;
+    if (!Array.isArray(species)) return '';
+    const row = species.find((s) => String(s.name || '') === String(name || ''));
+    return row?.safety_tip ? String(row.safety_tip) : '';
+}
+
+function getValidatedAnimalsGuideGroup() {
+    const valid = new Set(['all', ...ANIMALS_GUIDE_GROUP_ORDER]);
+    try {
+        const raw = sessionStorage.getItem(SIGTS_ANIMALS_GUIDE_GROUP_KEY);
+        const k = typeof raw === 'string' ? raw.trim() : 'all';
+        return valid.has(k) ? k : 'all';
+    } catch (_) {
+        return 'all';
+    }
+}
+
+function mergeGuideSpeciesWithCatalogue(guidePayload, catalogueAnimals) {
+    const byName = new Map((catalogueAnimals || []).map((a) => [String(a.name || ''), a]));
+    const rows = Array.isArray(guidePayload?.species) ? guidePayload.species : [];
+    return rows.map((entry, index) => {
+        const db = byName.get(entry.name) || {};
+        return {
+            ...db,
+            ...entry,
+            animal_id: entry.animal_id || db.animal_id || db.id || null,
+            name: entry.name || db.name,
+            scientific_name: entry.scientific_name || db.scientific_name || '',
+            description: entry.description || db.description || '',
+            conservation_status: entry.conservation_status || db.conservation_status || 'least_concern',
+            image_urls: entry.image_urls?.length ? entry.image_urls : db.image_urls || [],
+            safety_tip: entry.safety_tip || '',
+            group: entry.group || 'general',
+            group_label: entry.group_label || 'Wildlife',
+            sort_order: index
+        };
+    });
+}
+
+function renderWildlifeSpeciesCardHtml(row) {
+    const rawId = row.animal_id || row.id || '';
+    const id = escapeHtml(String(rawId));
+    const linked = Boolean(rawId);
+    const thumb = firstSpeciesImage(row);
+    const sci = escapeHtml(String(row.scientific_name || 'Scientific name unavailable'));
+    const status = String(row.conservation_status || 'least_concern').toLowerCase().replace(/\s+/g, '_');
+    const statusLabel = escapeHtml(String(row.conservation_status || 'least_concern').replace(/_/g, ' '));
+    const safetyTip = escapeHtml(String(row.safety_tip || ''));
+    const teaserSource = row.description ? String(row.description) : 'Open the full species profile for ranger field notes.';
+    const teaser = escapeHtml(truncateSnippet(teaserSource, 140));
+    const searchBlob = `${String(row.name || '')} ${String(row.scientific_name || '')} ${String(row.group || '')}`
+        .toLowerCase()
+        .replace(/"/g, '');
+    const thumbHtml = thumb
+        ? `<img class="wildlife-species-card__img" src="${escapeHtml(thumb)}" alt="${escapeHtml(row.name || 'Species')}" loading="lazy" decoding="async" />`
+        : `<div class="wildlife-species-card__img wildlife-species-card__img--fallback" aria-hidden="true">${icon(getAnimalIconName(row.name), 'icon-xl')}</div>`;
+    const openAttr = linked
+        ? `onclick="openAnimalSpeciesDetail('${id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAnimalSpeciesDetail('${id}');}"`
+        : '';
+    const profileBtn = linked
+        ? `<button type="button" class="wildlife-btn wildlife-btn--primary" onclick="event.stopPropagation();openAnimalSpeciesDetail('${id}')">${icon('book', 'icon-sm')} Profile</button>`
+        : `<span class="wildlife-species-card__pending">Syncing profile…</span>`;
+    return `<article class="wildlife-species-card staying-safe-animal-card" tabindex="0" data-species-q="${escapeHtml(searchBlob)}" data-guide-group="${escapeHtml(String(row.group || ''))}" aria-label="${escapeHtml(row.name)} wildlife profile" ${openAttr}>
+            <div class="wildlife-species-card__visual">
+                <div class="wildlife-species-card__ring">${thumbHtml}</div>
+            </div>
+            <h4 class="wildlife-species-card__name">${escapeHtml(row.name)}</h4>
+            <p class="wildlife-species-card__sci">${sci}</p>
+            <span class="wildlife-species-card__status status-${escapeHtml(status.replace(/_/g, '-'))}">${statusLabel}</span>
+            <p class="wildlife-species-card__safety"><strong>On the trail</strong> ${safetyTip}</p>
+            <p class="wildlife-species-card__teaser">${teaser}</p>
+            <div class="wildlife-species-card__actions">
+                ${profileBtn}
+                <button type="button" class="wildlife-btn wildlife-btn--ghost" onclick="event.stopPropagation();navigateTo('info')">${icon('info', 'icon-sm')} Safety</button>
+            </div>
+        </article>`;
+}
+
+function renderGuideLinkedAnimalCardHtml(row) {
+    return renderWildlifeSpeciesCardHtml(row);
+}
+
+function renderWildlifeGroupSections(rows, activeGroup) {
+    const grouped = new Map();
+    rows.forEach((row) => {
+        const g = String(row.group || 'general');
+        if (!grouped.has(g)) grouped.set(g, { label: row.group_label || g, rows: [] });
+        grouped.get(g).rows.push(row);
+    });
+    const order = [
+        ...ANIMALS_GUIDE_GROUP_ORDER.filter((g) => grouped.has(g)),
+        ...[...grouped.keys()].filter((g) => !ANIMALS_GUIDE_GROUP_ORDER.includes(g))
+    ];
+    return order
+        .map((groupId) => {
+            if (activeGroup !== 'all' && activeGroup !== groupId) return '';
+            const block = grouped.get(groupId);
+            if (!block?.rows?.length) return '';
+            const cards = block.rows.map((r) => renderWildlifeSpeciesCardHtml(r)).join('');
+            return `<section class="wildlife-section" data-guide-section="${escapeHtml(groupId)}">
+                <div class="wildlife-section__head">
+                    <span class="wildlife-section__eyebrow">${escapeHtml(block.label)}</span>
+                    <h3 class="wildlife-section__title">${escapeHtml(block.label)}</h3>
+                    <span class="wildlife-section__count">${block.rows.length} species</span>
+                </div>
+                <div class="wildlife-species-grid">${cards}</div>
+            </section>`;
+        })
+        .join('');
+}
+
+function renderAnimalsGuideGroupSections(rows, activeGroup) {
+    return renderWildlifeGroupSections(rows, activeGroup);
+}
+
+async function renderWildlifeContent() {
+    const [guidePayload, catalogueAnimals] = await Promise.all([
+        API.getTouristBiodiversity().catch(() => readStayingSafeGuideCache()),
+        Content.getAnimals().catch(() => [])
+    ]);
+
+    if (guidePayload?.species?.length) {
+        try {
+            localStorage.setItem('offline_tourist_biodiversity_cache', JSON.stringify(guidePayload));
+        } catch (_) {
+            /**/
+        }
+    }
+
+    const guideRows = mergeGuideSpeciesWithCatalogue(guidePayload, catalogueAnimals);
+    if (!guideRows.length) {
+        return `<div class="wildlife-screen"><div class="wildlife-empty section-card"><div class="empty-state">Wildlife catalogue unavailable. Connect once, then open the Info tab or run the backend seed.</div></div></div>`;
+    }
+
+    const sourceUrl = String(
+        guidePayload?.source_url || 'https://www.bwindiimpenetrablenationalpark.com/travel-guide/staying-safe/'
+    ).trim();
+    const activeGroup = getValidatedAnimalsGuideGroup();
+    const heroImg =
+        firstSpeciesImage(guideRows.find((r) => /gorilla/i.test(String(r.name || ''))) || guideRows[0]) ||
+        '/images/gorilla-card.png';
+
+    const groupChips = [
+        { id: 'all', label: 'All species' },
+        ...ANIMALS_GUIDE_GROUP_ORDER.filter((g) => guideRows.some((r) => r.group === g)).map((g) => {
+            const label = guideRows.find((r) => r.group === g)?.group_label || g;
+            return { id: g, label };
+        })
+    ];
+
+    const chipsHtml = groupChips
+        .map((chip) => {
+            const on = activeGroup === chip.id ? ' wildlife-filter-chip--active' : '';
+            return `<button type="button" class="wildlife-filter-chip${on}" data-guide-filter="${escapeHtml(chip.id)}" onclick="setAnimalsGuideGroupFilter(${JSON.stringify(chip.id)})">${escapeHtml(chip.label)}</button>`;
+        })
+        .join('');
+
+    const rules =
+        Array.isArray(guidePayload?.gorilla_golden_rules) && guidePayload.gorilla_golden_rules.length
+            ? `<div class="wildlife-missions">
+                <h4 class="wildlife-missions__title">${icon('paw', 'icon-sm')} Golden rules — gorilla trekking</h4>
+                <ol class="wildlife-missions__list">${guidePayload.gorilla_golden_rules
+                    .map(
+                        (rule, idx) =>
+                            `<li><span class="wildlife-missions__num">${idx + 1}</span><div><strong>${escapeHtml(rule.title || '')}</strong><p>${escapeHtml(rule.detail || '')}</p></div></li>`
+                    )
+                    .join('')}</ol>
+               </div>`
+            : '';
+
+    const reminders =
+        Array.isArray(guidePayload?.trail_reminders) && guidePayload.trail_reminders.length
+            ? `<div class="wildlife-reminders">${guidePayload.trail_reminders
+                  .map(
+                      (item) =>
+                          `<div class="wildlife-reminder-card"><strong>${escapeHtml(item.title || '')}</strong><p>${escapeHtml(item.detail || '')}</p></div>`
+                  )
+                  .join('')}</div>`
+            : '';
+
+    const hero = `<header class="wildlife-hero">
+        <div class="wildlife-hero__copy">
+            <span class="wildlife-hero__eyebrow">Bwindi Impenetrable National Park</span>
+            <h2 class="wildlife-hero__title">Animal Safari</h2>
+            <p class="wildlife-hero__tagline">${escapeHtml(
+                guidePayload?.intro ||
+                    'Meet the species named in the official Staying Safe guide — with trail safety notes and full ranger profiles.'
+            )}</p>
+            <p class="wildlife-hero__source">Source: <a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Staying Safe travel guide</a></p>
+            <div class="wildlife-filter-row">${chipsHtml}</div>
+            <div class="wildlife-hero__actions">
+                <button type="button" class="wildlife-btn wildlife-btn--primary" onclick="navigateTo('map')">${icon('map', 'icon-sm')} Trek routes</button>
+                <button type="button" class="wildlife-btn wildlife-btn--ghost" onclick="navigateTo('info')">${icon('info', 'icon-sm')} Park safety</button>
+            </div>
+        </div>
+        <div class="wildlife-hero__visual" aria-hidden="true">
+            <div class="wildlife-hero__arch">
+                <img src="${escapeHtml(heroImg)}" alt="" loading="lazy" decoding="async" />
+            </div>
+        </div>
+    </header>`;
+
+    const searchToolbar = `<div class="wildlife-search section-card">
+        <label class="wildlife-search__label" for="animals-catalog-search">${icon('search', 'icon-sm')} Find a species</label>
+        <div class="wildlife-search__row">
+            <input id="animals-catalog-search" type="search" class="wildlife-search__input" placeholder="Search by name or group…" maxlength="220" autocomplete="off" />
+            <button type="button" class="wildlife-btn wildlife-btn--primary" onclick="applyAnimalsCatalogFilter()">Search</button>
+            <button type="button" class="wildlife-btn wildlife-btn--ghost" onclick="document.getElementById('animals-catalog-search').value='';applyAnimalsCatalogFilter();">Clear</button>
+        </div>
+        ${activeGroup !== 'all' ? `<p class="wildlife-search__hint">Showing <strong>${escapeHtml(activeGroup.replace(/_/g, ' '))}</strong> — tap <strong>All species</strong> to reset.</p>` : ''}
+    </div>`;
+
+    const groupSections = renderWildlifeGroupSections(guideRows, activeGroup);
+    const linkedCount = guideRows.filter((r) => r.animal_id).length;
+    const catalogueNote =
+        catalogueAnimals.length > guideRows.length
+            ? `<aside class="wildlife-footnote section-card">
+                <p>Guide highlights <strong>${guideRows.length}</strong> staying-safe species (${linkedCount} with full profiles). The park database lists <strong>${catalogueAnimals.length}</strong> taxa for researchers.</p>
+               </aside>`
+            : '';
+
+    return `<div class="wildlife-screen">${hero}${rules}${reminders}${searchToolbar}<div id="animals-catalog-grid" class="wildlife-catalog">${groupSections}</div>${catalogueNote}</div>`;
 }
 
 async function renderAnimalsContent() {
-    const animals = await Content.getAnimals();
-    if (!animals.length) {
-        return `<div class="section-card"><div class="empty-state">No animal records available yet. Run backend seed to load the Bwindi catalogue.</div></div>`;
-    }
-
-    const focus = getValidatedAnimalTourFocus();
-    const filtered = animals.filter((a) => animalMatchesBwindiTourFocus(a, focus));
-    const thumbs = buildTourFocusThumbnailMap(animals);
-    const tourStrip = renderBwindiTourThemeStrip(animals, focus, thumbs);
-
-    const filterBanner = '';
-
-    const intro = `<div class="section-card animals-page-intro"><div class="section-header"><h3>${icon('leaf', 'icon-sm')} Bwindi biodiversity</h3></div><div class="animals-page-blurb">Browse the species catalogue for ranger-style notes across primates, forest birds, elephants, butterflies, and other Red List taxa. Use Tour help if you want AI-assisted prompts before or after your trek.</div><div class="info-chip-row"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${JSON.stringify('Bwindi newcomer checklist: main sectors, wet vs dry pacing, gorilla visit etiquette (short bullets).')})">${icon('target', 'icon-sm')} Tour help: first trek</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${JSON.stringify('Birding from main Bwindi trailheads: which Albertine specialties are realistic without playback or nest pressure?')})">${icon('bird', 'icon-sm')} Tour help: birding</button></div></div>`;
-
-    const searchToolbar = `<div class="section-card sigts-catalog-toolbar"><div class="section-header"><h3>${icon('search', 'icon-sm')} Find a species</h3></div><div class="info-chip-row" style="flex-wrap:wrap;"><input id="animals-catalog-search" type="search" class="auth-input" style="min-width:200px;flex:1;" placeholder="Search by name…" maxlength="220" autocomplete="off" /><button type="button" class="login-btn" onclick="applyAnimalsCatalogFilter()">${icon('search', 'icon-sm')} Filter</button><button type="button" class="small-btn ghost-btn" onclick="document.getElementById('animals-catalog-search').value='';applyAnimalsCatalogFilter();">Clear</button></div>${focus !== 'all' ? `<p class="animals-page-blurb" style="margin:8px 0 0;">Showing <strong>${focus.replace(/_/g, ' ')}</strong> — tap <strong>All species</strong> in themes above for the full list.</p>` : ''}</div>`;
-
-    const cards = (filtered.length ? filtered : animals).map((animal) => renderAnimalSpeciesCardHtml(animal)).join('');
-
-    return `${tourStrip}${intro}${searchToolbar}${filterBanner}<div id="animals-catalog-grid" class="animals-list animals-list--responsive">${cards}</div>`;
+    return renderWildlifeContent();
 }
 
 function renderMapContent() {
-    return `<div class="map-container"><div id="bwindiLiveMap" class="map-canvas"></div><div class="map-overlay"><div class="map-status" id="mapStatus">Loading Bwindi live map...</div><div class="map-coords" id="mapCoords">Lat: --, Lng: --</div><div class="map-guidance"><select id="mapLayer" class="map-destination" onchange="changeMapLayer()"><option value="standard">Standard</option><option value="topo">Terrain</option><option value="satellite">Satellite</option><option value="trails">Trails Focus</option></select><button class="small-btn" onclick="cacheVisibleMapTiles()">Cache Area</button><button type="button" class="small-btn" onclick="toggleSpeciesHeatmapLayer()">${icon('target', 'icon-sm')} Species heat</button></div><div class="map-guidance"><input id="mapSearchInput" class="map-destination" placeholder="Search location..." /><button class="small-btn" onclick="searchMapLocation()">Find</button></div><div class="map-guidance"><select id="mapDestination" class="map-destination"><option value="">Select destination...</option></select><button class="small-btn" onclick="openMapGuidance()">Guide Me</button></div><div class="map-guidance"><button class="small-btn" onclick="startDistanceMeasure()">Set A</button><button class="small-btn" onclick="setDistanceMeasurePointB()">Set B</button><button class="small-btn" onclick="measureToCurrent()">A → Me</button></div><div class="map-guidance-text" id="mapGuidanceText">Select a destination to get turn-by-turn guidance.</div><div id="mapDirectionsList" class="map-directions">Directions will appear here.</div><div id="mapCompassStatus" class="map-compass">Compass: --</div><div id="mapElevationProfile" class="map-elevation">Elevation profile unavailable.</div><div class="map-nearby" id="mapNearbyList">Nearby POIs will appear here.</div></div></div>`;
+    return `<div class="map-container"><div id="bwindiLiveMap" class="map-canvas"></div><div class="map-overlay"><div class="map-you-are-here" id="mapYouAreHere">Locating you in the park…</div><div class="map-place-context" id="mapPlaceContext"></div><div class="map-guidance map-locate-row"><button type="button" class="login-btn" onclick="locateMeOnMap()">Locate me</button></div><div class="map-status" id="mapStatus">Loading Bwindi live map...</div><div class="map-coords" id="mapCoords">Lat: --, Lng: --</div><div class="map-guidance"><select id="mapLayer" class="map-destination" onchange="changeMapLayer()"><option value="standard">Standard</option><option value="topo">Terrain</option><option value="satellite">Satellite</option><option value="trails">Trails Focus</option></select><button class="small-btn" onclick="cacheVisibleMapTiles()">Cache Area</button><button type="button" class="small-btn" onclick="toggleSpeciesHeatmapLayer()">${icon('target', 'icon-sm')} Species heat</button></div><div class="map-guidance"><select id="mapTrekRoute" class="map-destination" onchange="highlightMapTrekRoute()"><option value="">Show trek route...</option></select></div><div class="map-guidance"><input id="mapSearchInput" class="map-destination" placeholder="Search location..." /><button class="small-btn" onclick="searchMapLocation()">Find</button></div><div class="map-guidance"><select id="mapDestination" class="map-destination"><option value="">Select destination...</option></select><button class="small-btn" onclick="openMapGuidance()">Guide Me</button></div><div class="map-guidance"><button class="small-btn" onclick="startDistanceMeasure()">Set A</button><button class="small-btn" onclick="setDistanceMeasurePointB()">Set B</button><button class="small-btn" onclick="measureToCurrent()">A → Me</button></div><div class="map-guidance-text" id="mapGuidanceText">Select a destination to get turn-by-turn guidance.</div><div id="mapDirectionsList" class="map-directions">Directions will appear here.</div><div id="mapCompassStatus" class="map-compass">Compass: --</div><div id="mapElevationProfile" class="map-elevation">Elevation profile unavailable.</div><div class="map-nearby" id="mapNearbyList">Nearby POIs will appear here.</div></div></div>`;
 }
 
 function normalizeCoordinatePair(point) {
@@ -2046,9 +2849,12 @@ function normalizeCoordinatePair(point) {
     const a = Number(point[0]);
     const b = Number(point[1]);
     if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
-    // GeoJSON commonly stores [lng, lat]. Heuristic keeps coordinates in valid lat/lng ranges.
-    if (Math.abs(a) <= 90 && Math.abs(b) <= 180) return [a, b];
-    return [b, a];
+    // Bwindi: lat ≈ -1.x, lng ≈ 29.x — detect GeoJSON [lng, lat] vs [lat, lng].
+    if (Math.abs(a) <= 3 && Math.abs(b) >= 20 && Math.abs(b) <= 40) return [a, b];
+    if (Math.abs(b) <= 3 && Math.abs(a) >= 20 && Math.abs(a) <= 40) return [b, a];
+    if (Math.abs(a) <= 90 && Math.abs(b) > 90) return [a, b];
+    if (Math.abs(b) <= 90 && Math.abs(a) > 90) return [b, a];
+    return [a, b];
 }
 
 function getBoundaryLatLngs(boundary) {
@@ -2096,6 +2902,10 @@ function clearLiveMapLayers() {
         try { liveMapInstance.removeLayer(liveMapLayers.activeTourRoute); } catch (_) {}
     }
     liveMapLayers.activeTourRoute = null;
+    (liveMapLayers.publicRouteLines || []).forEach((layer) => {
+        try { liveMapInstance.removeLayer(layer); } catch (_) {}
+    });
+    liveMapLayers.publicRouteLines = [];
 }
 
 function setMapStatus(text) {
@@ -2111,6 +2921,9 @@ function setMapCoords(lat, lng) {
         } else {
             node.textContent = 'Lat: --, Lng: --';
         }
+    }
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        updateMapPlaceContext(lat, lng);
     }
 }
 
@@ -2306,8 +3119,11 @@ window.searchMapLocation = function () {
     }
     const coords = coerceLatLng(match);
     if (!coords) return;
+    const destSelect = document.getElementById('mapDestination');
+    if (destSelect) destSelect.value = String(match.id || match.location_id || '');
     liveMapInstance.setView([coords.lat, coords.lng], 14);
     setMapStatus(`Centered on ${match.name}`);
+    updateMapPlaceContext(coords.lat, coords.lng);
 };
 
 window.startDistanceMeasure = function () {
@@ -2395,6 +3211,47 @@ function createDivMarker(lat, lng, className, label) {
     return marker;
 }
 
+function lineStringToLatLngs(geometry) {
+    if (!geometry || geometry.type !== 'LineString' || !Array.isArray(geometry.coordinates)) return [];
+    return geometry.coordinates
+        .map(normalizeCoordinatePair)
+        .filter(Boolean)
+        .map((p) => [p[0], p[1]]);
+}
+
+window.highlightMapTrekRoute = function () {
+    const select = document.getElementById('mapTrekRoute');
+    if (!select || !liveMapInstance) return;
+    const routeId = select.value;
+    if (!routeId) {
+        setMapStatus(`Bwindi live: ${liveMapPOIs.length} POIs — select a trek route to highlight`);
+        return;
+    }
+    const route = liveMapPublicRoutes.find((r) => String(r.route_id) === String(routeId));
+    if (!route) return;
+    const latlngs = lineStringToLatLngs(route.path_geometry);
+    if (latlngs.length < 2) return;
+    if (liveMapLayers.activeTourRoute) {
+        try { liveMapInstance.removeLayer(liveMapLayers.activeTourRoute); } catch (_) {}
+    }
+    liveMapLayers.activeTourRoute = window.L.polyline(latlngs, {
+        color: trailDifficultyColor(route.difficulty || 'moderate'),
+        weight: 5,
+        opacity: 0.95
+    }).addTo(liveMapInstance);
+    liveMapLayers.activeTourRoute.bindPopup(
+        `<strong>${escapeHtml(route.name || 'Route')}</strong><br>${escapeHtml(route.description || '')}<br>${escapeHtml(String(route.distance_km || ''))} km · ${escapeHtml(String(route.difficulty || ''))}`
+    );
+    const stopLatLngs = (route.stops || []).map((s) => coerceLatLng(s)).filter(Boolean).map((c) => [c.lat, c.lng]);
+    const boundsPoints = latlngs.concat(stopLatLngs);
+    if (boundsPoints.length >= 2) {
+        liveMapInstance.fitBounds(window.L.latLngBounds(boundsPoints).pad(0.2));
+    } else {
+        liveMapInstance.fitBounds(liveMapLayers.activeTourRoute.getBounds().pad(0.2));
+    }
+    setMapStatus(`Highlighted: ${route.name} (${route.difficulty || 'trek'}) — ${(route.stops || []).length} stops`);
+};
+
 function coerceLatLng(record = {}) {
     const latKeys = ['lat', 'latitude', 'location_lat', 'current_lat'];
     const lngKeys = ['lng', 'longitude', 'location_lng', 'current_lng'];
@@ -2422,20 +3279,54 @@ async function refreshLiveMapData() {
         const heatmapOn = () => localStorage.getItem('sigts_map_species_heat') === '1';
         let heatCells = [];
 
-        const [locations, sightings, tours, boundaryGeo] = await Promise.all([
-            API.getLocations(),
-            API.getRecentSightings(50),
-            API.getToursForGuide(),
-            (async () => {
-                try {
-                    const response = await fetch(`${API_URL}/geofence/boundary`, {
-                        headers: Auth?.token ? { Authorization: `Bearer ${Auth.token}` } : {}
-                    });
-                    if (response.ok) return await response.json();
-                } catch (_) {}
-                return Geofence?.parkBoundary || null;
-            })()
-        ]);
+        const mapBundle = await loadMapDataBundle();
+        const locations = mapBundle.locations;
+        const sightings = mapBundle.sightings;
+        const tours = mapBundle.tours;
+        const boundaryGeo = mapBundle.boundaryGeo;
+        const publicRoutes = mapBundle.publicRoutes;
+        const mapWarnings = mapBundle.warnings;
+
+        liveMapPublicRoutes = Array.isArray(publicRoutes) ? publicRoutes : [];
+        const trekRouteSelect = document.getElementById('mapTrekRoute');
+        if (trekRouteSelect) {
+            const currentRoute = trekRouteSelect.value;
+            trekRouteSelect.innerHTML =
+                '<option value="">Show trek route...</option>' +
+                liveMapPublicRoutes
+                    .map(
+                        (r) =>
+                            `<option value="${escapeHtml(String(r.route_id || ''))}">${escapeHtml(r.name || 'Route')} (${escapeHtml(String(r.difficulty || ''))})</option>`
+                    )
+                    .join('');
+            if (currentRoute && liveMapPublicRoutes.some((r) => String(r.route_id) === currentRoute)) {
+                trekRouteSelect.value = currentRoute;
+            }
+        }
+
+        for (const route of liveMapPublicRoutes) {
+            const latlngs = lineStringToLatLngs(route.path_geometry);
+            if (latlngs.length < 2) continue;
+            const layer = window.L.polyline(latlngs, {
+                color: trailDifficultyColor(route.difficulty || 'moderate'),
+                weight: 3,
+                opacity: 0.4,
+                dashArray: route.difficulty === 'difficult' ? '8,5' : null
+            }).addTo(liveMapInstance);
+            layer.bindPopup(
+                `<strong>${escapeHtml(route.name || 'Trek route')}</strong><br>${escapeHtml(String(route.description || '').slice(0, 160))}${String(route.description || '').length > 160 ? '…' : ''}<br><em>${escapeHtml(String(route.distance_km || ''))} km · ${escapeHtml(String(route.duration_hours || ''))} h</em>`
+            );
+            liveMapLayers.publicRouteLines.push(layer);
+            for (const stop of route.stops || []) {
+                const stopCoords = coerceLatLng(stop);
+                if (!stopCoords) continue;
+                const lid = escAttrBareUuid(stop.location_id);
+                const orderLabel = stop.stop_order != null ? `Stop ${stop.stop_order}` : 'Route stop';
+                const stopPopup = `<div><strong>${escapeHtml(stop.location_name || 'Stop')}</strong><br>${escapeHtml(orderLabel)} · ${escapeHtml(route.name || 'Route')}<br><button type="button" class="small-btn" onclick="window.openParkLocationDetail('${lid}')">Details</button> <button type="button" class="small-btn ghost-btn" onclick="window.openMapAtLocation('${lid}')">On map</button></div>`;
+                const stopMarker = createDivMarker(stopCoords.lat, stopCoords.lng, 'map-marker-stop', stopPopup);
+                liveMapLayers.markers.push(stopMarker);
+            }
+        }
 
         if (heatmapOn() && Auth?.isAuthenticated?.()) {
             try {
@@ -2468,6 +3359,9 @@ async function refreshLiveMapData() {
             }
             liveMapPOIs = liveMapPOIs.map((loc, idx) => ({ ...loc, id: String(loc.location_id || loc.id || idx) }));
         }
+        if (pois.length && Geofence && typeof Geofence.normalizePoiRecord === 'function') {
+            Geofence.pois = pois.map((loc) => Geofence.normalizePoiRecord(loc));
+        }
 
         const poiMarkers = pois
             .map((loc) => {
@@ -2476,7 +3370,7 @@ async function refreshLiveMapData() {
                 const difficulty = getTrailDifficulty(loc);
                 const lid = escAttrBareUuid(loc.location_id || loc.id);
                 const ltype = escapeHtml(String(loc.location_type || loc.type || 'location'));
-                const popup = `<div><strong>${escapeHtml(loc.name || 'POI')}</strong><br>${ltype}<br>Trail: ${escapeHtml(difficulty)}<br><button type="button" class="small-btn" onclick="window.openParkLocationDetail('${lid}')">Details</button></div>`;
+                const popup = `<div><strong>${escapeHtml(loc.name || 'POI')}</strong><br>${ltype}<br>Trail: ${escapeHtml(difficulty)}<br><button type="button" class="small-btn" onclick="window.openParkLocationDetail('${lid}')">Details</button> <button type="button" class="small-btn ghost-btn" onclick="window.openMapAtLocation('${lid}')">Guide me</button></div>`;
                 return createDivMarker(coords.lat, coords.lng, markerClassForLocation(loc), popup);
             })
             .filter(Boolean);
@@ -2566,7 +3460,7 @@ async function refreshLiveMapData() {
                 .map((p) => {
                     const coords = coerceLatLng(p);
                     if (!coords) return null;
-                    const dist = Geofence.calculateDistance(current.lat, current.lng, coords.lat, coords.lng);
+                    const dist = safeParkDistance(current.lat, current.lng, coords.lat, coords.lng);
                     return { name: p.name || 'POI', dist, id: p.location_id || p.id };
                 })
                 .filter(Boolean)
@@ -2618,16 +3512,47 @@ async function refreshLiveMapData() {
         if (liveMapLayers.route) layers.push(liveMapLayers.route);
         if (liveMapLayers.activeTourRoute) layers.push(liveMapLayers.activeTourRoute);
         layers.push(...liveMapLayers.markers);
-        if (layers.length) {
+
+        const mapUser = Geofence?.currentLocation || AppState?.currentLocation;
+        if (applyPendingMapFocus()) {
+            /** focused on saved location */
+        } else if (mapUser && Number.isFinite(mapUser.lat) && Number.isFinite(mapUser.lng)) {
+            liveMapInstance.setView([mapUser.lat, mapUser.lng], Math.max(liveMapInstance.getZoom() || 0, 13));
+            updateMapPlaceContext(mapUser.lat, mapUser.lng);
+        } else if (layers.length) {
             const group = window.L.featureGroup(layers);
             liveMapInstance.fitBounds(group.getBounds().pad(0.18));
         } else {
             liveMapInstance.setView(defaultCenter, 11);
         }
 
-        setMapStatus(`Bwindi live: ${poiMarkers.length} POIs, ${sightingMarkers.length} sightings`);
+        const gpsNote =
+            mapUser && Number.isFinite(mapUser.lat)
+                ? ''
+                : ' · tap Locate me for GPS';
+        const warnNote = mapWarnings?.length ? ` (${mapWarnings.join(', ')} from cache)` : '';
+        setMapStatus(
+            `Bwindi live: ${poiMarkers.length} POIs, ${liveMapPublicRoutes.length} trek routes, ${sightingMarkers.length} sightings${gpsNote}${warnNote}`
+        );
     } catch (error) {
-        setMapStatus('Map loaded with limited data. Check API connectivity.');
+        console.error('Map refresh error:', error);
+        try {
+            const fallbacks = ensureMapFallbackLocations();
+            liveMapPOIs = fallbacks
+                .filter((loc) => coerceLatLng(loc))
+                .map((loc, idx) => ({ ...loc, id: String(loc.location_id || loc.id || idx) }));
+            const destSelect = document.getElementById('mapDestination');
+            if (destSelect) {
+                destSelect.innerHTML =
+                    '<option value="">Select destination...</option>' +
+                    liveMapPOIs.map((loc) => `<option value="${escapeHtml(String(loc.id))}">${escapeHtml(loc.name || 'POI')}</option>`).join('');
+            }
+            liveMapInstance?.setView([-1.05, 29.7], 12);
+            setMapStatus(`Park map (offline): ${liveMapPOIs.length} places — use Locate me for GPS`);
+        } catch (_) {
+            setMapStatus('Map could not load. Refresh the page or check the server.');
+        }
+        await requestMapGpsFix();
     }
 }
 
@@ -2663,6 +3588,8 @@ async function initializeLiveMap() {
     });
     liveMapTileLayers.standard.addTo(liveMapInstance);
 
+    ensureMapFallbackLocations();
+    await requestMapGpsFix();
     await refreshLiveMapData();
     liveMapRefreshTimer = setInterval(() => {
         refreshLiveMapData();
@@ -3145,6 +4072,193 @@ function formatSigtsInstant(iso) {
     }
 }
 
+/** Full Bwindi staying-safe guide (Info tab). */
+function renderStayingSafeGuideSectionHtml(guide) {
+    if (!guide || !Array.isArray(guide.sections) || !guide.sections.length) return '';
+
+    const sourceUrl = String(guide.source_url || '').trim();
+    const intro = escapeHtml(String(guide.intro || ''));
+    const title = escapeHtml(String(guide.title || 'Staying safe in Bwindi'));
+
+    const recapHtml =
+        Array.isArray(guide.recap) && guide.recap.length
+            ? `<div class="staying-safe-recap">${guide.recap
+                  .map(
+                      (item) =>
+                          `<div class="staying-safe-recap-card"><strong>${escapeHtml(item.title || '')}</strong><p>${escapeHtml(item.detail || '')}</p></div>`
+                  )
+                  .join('')}</div>`
+            : '';
+
+    const packing = guide.packing || {};
+    const packingHtml = `<div class="staying-safe-packing">
+        <h4 class="tourist-wildlife-subhead">${icon('target', 'icon-sm')} Packing smart</h4>
+        <div class="staying-safe-packing-grid">
+            <div><strong>Clothing</strong><ul>${(packing.clothing || []).map((b) => `<li>${escapeHtml(b)}</li>`).join('')}</ul></div>
+            <div><strong>Gear</strong><ul>${(packing.gear || []).map((b) => `<li>${escapeHtml(b)}</li>`).join('')}</ul></div>
+            <div><strong>Personal care</strong><ul>${(packing.personal_care || []).map((b) => `<li>${escapeHtml(b)}</li>`).join('')}</ul></div>
+        </div>
+    </div>`;
+
+    const rules =
+        Array.isArray(guide.gorilla_golden_rules) && guide.gorilla_golden_rules.length
+            ? `<ol class="tourist-wildlife-rules">${guide.gorilla_golden_rules
+                  .map(
+                      (rule) =>
+                          `<li><strong>${escapeHtml(rule.title || 'Rule')}</strong> — ${escapeHtml(rule.detail || '')}</li>`
+                  )
+                  .join('')}</ol>`
+            : '';
+
+    const sectionsHtml = guide.sections
+        .map((sec) => {
+            const secIcon = sec.icon && typeof icon === 'function' ? icon(sec.icon, 'icon-sm') : icon('shield', 'icon-sm');
+            const bullets = (sec.bullets || []).map((b) => `<li>${escapeHtml(b)}</li>`).join('');
+            return `<details class="staying-safe-details"><summary>${secIcon} ${escapeHtml(sec.title || 'Section')}</summary>
+                <p class="staying-safe-summary">${escapeHtml(sec.summary || '')}</p>
+                ${bullets ? `<ul class="staying-safe-bullets">${bullets}</ul>` : ''}
+            </details>`;
+        })
+        .join('');
+
+    const stayingFaqs = (guide.faqs || []).filter((f) => String(f.category || '').startsWith('staying_safe_'));
+    const faqsHtml = stayingFaqs.length
+        ? `<div class="staying-safe-faqs"><h4 class="tourist-wildlife-subhead">${icon('note', 'icon-sm')} Staying safe FAQs</h4>${stayingFaqs
+              .map(
+                  (faq) =>
+                      `<details class="staying-safe-faq"><summary>${escapeHtml(faq.question_en || '')}</summary><p>${escapeHtml(faq.answer_en || '')}</p></details>`
+              )
+              .join('')}</div>`
+        : '';
+
+    const tipsByCat = {};
+    (guide.safety_tips || []).forEach((tip) => {
+        const cat = String(tip.category || 'general');
+        if (!tipsByCat[cat]) tipsByCat[cat] = [];
+        tipsByCat[cat].push(tip);
+    });
+    const tipsHtml = Object.keys(tipsByCat).length
+        ? `<div class="staying-safe-tips"><h4 class="tourist-wildlife-subhead">${icon('shield', 'icon-sm')} Quick safety tips</h4>${Object.entries(tipsByCat)
+              .map(
+                  ([cat, rows]) =>
+                      `<div class="staying-safe-tip-group"><strong>${escapeHtml(cat.replace(/_/g, ' '))}</strong>${rows
+                          .map(
+                              (tip) =>
+                                  `<div class="seasonal-item" style="margin:6px 0 0;"><em>${escapeHtml(tip.title || '')}</em> — ${escapeHtml(tip.content || '')}</div>`
+                          )
+                          .join('')}</div>`
+              )
+              .join('')}</div>`
+        : '';
+
+    const sourceLink = sourceUrl
+        ? `<p class="tourist-wildlife-source">Full guide: <a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Bwindi Impenetrable NP — Staying Safe</a></p>`
+        : '';
+
+    return `<div class="section-card staying-safe-guide-section">
+        <div class="section-header"><h3>${icon('shield', 'icon-sm')} ${title}</h3></div>
+        <p class="animals-page-blurb tourist-wildlife-intro">${intro}</p>
+        ${recapHtml}
+        ${rules ? `<div class="tourist-wildlife-rules-wrap"><h4 class="tourist-wildlife-subhead">${icon('paw', 'icon-sm')} Golden rules — gorilla trekking</h4>${rules}</div>` : ''}
+        ${packingHtml}
+        <div class="staying-safe-sections">${sectionsHtml}</div>
+        ${faqsHtml}
+        ${tipsHtml}
+        ${sourceLink}
+        <div class="info-chip-row" style="padding:0 18px 16px;">
+            <button type="button" class="small-btn" onclick="navigateTo('map')">${icon('map', 'icon-sm')} Trek routes on map</button>
+            <button type="button" class="small-btn ghost-btn" onclick="submitContentHelpfulness('info', '', 'Staying safe guide')">${icon('target', 'icon-sm')} Helpful?</button>
+        </div>
+    </div>`;
+}
+
+/** Photo cards for staying-safe tourist biodiversity (Info tab). */
+function renderTouristBiodiversitySectionHtml(payload) {
+    if (!payload || !Array.isArray(payload.species) || !payload.species.length) {
+        return '';
+    }
+    const sourceUrl = String(payload.source_url || '').trim();
+    const intro = escapeHtml(
+        String(
+            payload.intro ||
+                'Wildlife you are likely to meet in Bwindi, with ranger-backed safety notes from the official travel guide.'
+        )
+    );
+    const rules =
+        Array.isArray(payload.gorilla_golden_rules) && payload.gorilla_golden_rules.length
+            ? `<ol class="tourist-wildlife-rules">${payload.gorilla_golden_rules
+                  .map(
+                      (rule) =>
+                          `<li><strong>${escapeHtml(rule.title || 'Rule')}</strong> — ${escapeHtml(rule.detail || '')}</li>`
+                  )
+                  .join('')}</ol>`
+            : '';
+
+    const reminders =
+        Array.isArray(payload.trail_reminders) && payload.trail_reminders.length
+            ? `<div class="tourist-wildlife-reminders">${payload.trail_reminders
+                  .map(
+                      (item) =>
+                          `<div class="seasonal-item" style="margin:8px 0;"><strong>${escapeHtml(item.title || '')}</strong> — ${escapeHtml(item.detail || '')}</div>`
+                  )
+                  .join('')}</div>`
+            : '';
+
+    const cards = payload.species
+        .map((row) => {
+            const animal = {
+                animal_id: row.animal_id,
+                name: row.name,
+                scientific_name: row.scientific_name,
+                description: row.description,
+                conservation_status: row.conservation_status,
+                image_urls: row.image_urls
+            };
+            const thumb = firstSpeciesImage(animal);
+            const id = escapeHtml(String(row.animal_id || ''));
+            const status = String(row.conservation_status || 'least_concern')
+                .toLowerCase()
+                .replace(/\s+/g, '_');
+            const statusLabel = escapeHtml(String(row.conservation_status || 'least_concern').replace(/_/g, ' '));
+            const thumbHtml = thumb
+                ? `<img class="tourist-wildlife-card__img" src="${escapeHtml(thumb)}" alt="${escapeHtml(row.name || 'Species')}" loading="lazy" decoding="async" />`
+                : `<div class="tourist-wildlife-card__img tourist-wildlife-card__img--fallback">${icon(getAnimalIconName(row.name), 'icon-xl')}</div>`;
+            const detailBtn = id
+                ? `<button type="button" class="small-btn ghost-btn" onclick="openAnimalSpeciesDetail('${id}')">${icon('book', 'icon-sm')} Species profile</button>`
+                : '';
+            return `<article class="tourist-wildlife-card">
+                ${thumbHtml}
+                <div class="tourist-wildlife-card__body">
+                    <div class="tourist-wildlife-card__head">
+                        <h4 class="tourist-wildlife-card__name">${escapeHtml(row.name || 'Species')}</h4>
+                        <span class="animal-status status-${escapeHtml(status.replace(/_/g, '-'))}">${statusLabel}</span>
+                    </div>
+                    <p class="tourist-wildlife-card__sci">${escapeHtml(String(row.scientific_name || ''))}</p>
+                    <p class="tourist-wildlife-card__safety"><strong>${icon('shield', 'icon-sm')} On the trail:</strong> ${escapeHtml(row.safety_tip || '')}</p>
+                    <div class="tourist-wildlife-card__actions">${detailBtn}</div>
+                </div>
+            </article>`;
+        })
+        .join('');
+
+    const sourceLink = sourceUrl
+        ? `<p class="tourist-wildlife-source">Guide reference: <a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Bwindi Impenetrable NP — Staying Safe</a></p>`
+        : '';
+
+    return `<div class="section-card tourist-wildlife-section">
+        <div class="section-header"><h3>${icon('paw', 'icon-sm')} Wildlife to know &amp; stay safe</h3></div>
+        <p class="animals-page-blurb tourist-wildlife-intro">${intro}</p>
+        ${rules ? `<div class="tourist-wildlife-rules-wrap"><h4 class="tourist-wildlife-subhead">${icon('shield', 'icon-sm')} Golden rules — gorilla trekking</h4>${rules}</div>` : ''}
+        ${reminders}
+        <div class="info-wildlife-grid">${cards}</div>
+        ${sourceLink}
+        <div class="info-chip-row" style="padding:0 18px 16px;">
+            <button type="button" class="small-btn" onclick="navigateTo('wildlife')">${icon('paw', 'icon-sm')} Guide species (Wildlife tab)</button>
+            <button type="button" class="small-btn ghost-btn" onclick="submitContentHelpfulness('info', '', 'Wildlife to know & stay safe')">${icon('target', 'icon-sm')} Helpful?</button>
+        </div>
+    </div>`;
+}
+
 async function renderInfoContent() {
     const planPrompt = JSON.stringify(
         'One-week low-footprint trekking plan in southwest Uganda, Bwindi core: daily rhythm, water, altitude, tipping, rainforest kit, radio check with guides.');
@@ -3158,6 +4272,8 @@ async function renderInfoContent() {
     let faqs = [];
     let tips = [];
     let guide = [];
+    let touristBiodiversity = null;
+    let stayingSafeGuide = null;
     try {
         weather = await API.getParkWeatherForecast();
         if (!weather) {
@@ -3176,17 +4292,42 @@ async function renderInfoContent() {
     }
 
     try {
-        [catalogMeta, faqs, tips, guide] = await Promise.all([
+        [catalogMeta, faqs, tips, guide, touristBiodiversity, stayingSafeGuide] = await Promise.all([
             API.getContentCatalogMeta().catch(() => null),
             API.getFaqs().catch(() => []),
             API.getSafetyTips().catch(() => []),
-            API.getParkGuide().catch(() => [])
+            API.getParkGuide().catch(() => []),
+            API.getTouristBiodiversity().catch(() => null),
+            API.getStayingSafeGuide().catch(() => null)
         ]);
     } catch (_) {
         /**/
     }
 
     const offlineV = Number(localStorage.getItem('offline_version') || '0');
+
+    let emergencyContacts = [];
+    try {
+        const ec = await API.getGuideEmergencyContacts().catch(() => null);
+        emergencyContacts = Array.isArray(ec?.contacts) ? ec.contacts : [];
+    } catch (_) {
+        emergencyContacts = [];
+    }
+    const hoursFromGuide = (guide || []).find((g) => /hour|gate|open|time/i.test(`${g.category || ''} ${g.title || ''}`));
+    const openingHoursText =
+        hoursFromGuide?.content_en ||
+        'Typical UWA gate window: <strong>06:00 to 19:00</strong> (confirm with your issued permit).';
+    const emergencyListHtml = emergencyContacts.length
+        ? `<div class="emergency-contact-list">${emergencyContacts
+              .map((c) => {
+                  const phone = String(c.phone || '').trim();
+                  const tel = phone ? `<a class="emergency-contact-tel" href="tel:${escapeHtml(phone.replace(/\s+/g, ''))}">${escapeHtml(phone)}</a>` : '<span class="ui-modal-muted">No number on file</span>';
+                  return `<div class="emergency-contact-row"><strong>${escapeHtml(c.contact_type || 'Contact')}</strong> — ${escapeHtml(c.name || '')}<br/>${tel}</div>`;
+              })
+              .join('')}</div>`
+        : `<p class="animals-page-blurb">Operational numbers appear when the server is reachable. On trek, follow your guide’s radio chain first.</p><p><strong>UWA</strong> coordinates park emergencies through your assigned guide and sector warden.</p>`;
+    const emergencyHtml = `<div class="section-card"><div class="section-header"><h3>${icon('phone', 'icon-sm')} Emergency</h3></div><div style="padding:16px;">${icon('shield', 'icon-sm')} ${emergencyListHtml}<div class="info-chip-row" style="margin-top:10px;flex-wrap:wrap;"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${JSON.stringify('Trail injury before medics: who gets called first on a Bwindi trek (order of escalation).')});">${icon('target', 'icon-sm')} Tour help: casualty chain</button><button type="button" class="small-btn ghost-btn" onclick="submitContentHelpfulness('info', '', 'Emergency Contacts')">${icon('target', 'icon-sm')} Helpful?</button></div></div></div>`;
+    const openingHoursHtml = `<div class="section-card"><div class="section-header"><h3>${icon('clock', 'icon-sm')} Opening Hours</h3></div><div style="padding:16px;">${openingHoursText}<div class="info-chip-row" style="margin-top:10px;"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${JSON.stringify('Packing: dawn gorilla briefing vs afternoon forest walk in Bwindi.')});">${icon('target', 'icon-sm')} Tour help: gear timing</button></div><button class="small-btn" style="margin-top:10px;" onclick="submitContentHelpfulness('info', '', 'Opening Hours')">${icon('target', 'icon-sm')} Helpful?</button></div></div>`;
 
     const guideHtml =
         guide && guide.length
@@ -3211,8 +4352,14 @@ async function renderInfoContent() {
            </div></div>`
         : '';
 
+    const hasStayingSafeGuide =
+        stayingSafeGuide && Array.isArray(stayingSafeGuide.sections) && stayingSafeGuide.sections.length;
+    const faqsForList = hasStayingSafeGuide
+        ? (faqs || []).filter((f) => !String(f.category || '').startsWith('staying_safe_'))
+        : faqs || [];
+
     const safetyHtml =
-        tips && tips.length
+        !hasStayingSafeGuide && tips && tips.length
             ? `<div class="section-card"><div class="section-header"><h3>${icon('shield', 'icon-sm')} Safety tips</h3></div><div style="padding:12px 18px;">${tips
                   .slice()
                   .sort((a, b) => Number(a.priority || 9) - Number(b.priority || 9))
@@ -3226,8 +4373,8 @@ async function renderInfoContent() {
             : '';
 
     const faqsHtml =
-        faqs && faqs.length
-            ? `<div class="section-card"><div class="section-header"><h3>${icon('note', 'icon-sm')} FAQs</h3></div><div style="padding:12px 18px;">${faqs
+        faqsForList && faqsForList.length
+            ? `<div class="section-card"><div class="section-header"><h3>${icon('note', 'icon-sm')} FAQs</h3></div><div style="padding:12px 18px;">${faqsForList
                   .map(
                       (faq) =>
                           `<div class="seasonal-item" style="margin-bottom:10px;"><strong>${escapeHtml(faq.category || '').replace(/_/g, ' ')}</strong><details style="margin-top:6px;"><summary>${escapeHtml(
@@ -3250,13 +4397,16 @@ async function renderInfoContent() {
         Park guide: ${escapeHtml(formatSigtsInstant(metaTimes.park_guide))}
        </div></div>`;
 
-    return `${weatherHtml}<div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Park snapshot</h3></div><div class="park-info-copy">Roughly <strong>331 km²</strong> of steep montane rainforest on the Albertine Rift shoulder, known for mountain gorillas, rich birdlife, elephants, diverse primates, and dense montane vegetation. SIGTS stitches maps, ranger copy, offline packs, and this app’s Tour help tab so groups can cross-check ecology, etiquette, culture, and safety on the trail.</div><div class="info-chip-row"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${conservationPrompt});">${icon('book', 'icon-sm')} Tour help: conservation gist</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${birdPrompt});">${icon('bird', 'icon-sm')} Tour help: birds</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${planPrompt});">${icon('map', 'icon-sm')} Tour help: week pacing</button></div><button type="button" class="small-btn ghost-btn" style="margin-top:10px;" onclick="submitContentHelpfulness('info', '', 'Park snapshot')">${icon('target', 'icon-sm')} Helpful?</button></div>
+    const wildlifeHtml = renderTouristBiodiversitySectionHtml(touristBiodiversity);
+    const stayingSafeGuideHtml = renderStayingSafeGuideSectionHtml(stayingSafeGuide);
+
+    return `${weatherHtml}${stayingSafeGuideHtml}${wildlifeHtml}<div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Park snapshot</h3></div><div class="park-info-copy">Roughly <strong>331 km²</strong> of steep montane rainforest on the Albertine Rift shoulder, known for mountain gorillas, rich birdlife, elephants, diverse primates, and dense montane vegetation. SIGTS stitches maps, ranger copy, offline packs, and this app’s Tour help tab so groups can cross-check ecology, etiquette, culture, and safety on the trail.</div><div class="info-chip-row"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${conservationPrompt});">${icon('book', 'icon-sm')} Tour help: conservation gist</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${birdPrompt});">${icon('bird', 'icon-sm')} Tour help: birds</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${planPrompt});">${icon('map', 'icon-sm')} Tour help: week pacing</button></div><button type="button" class="small-btn ghost-btn" style="margin-top:10px;" onclick="submitContentHelpfulness('info', '', 'Park snapshot')">${icon('target', 'icon-sm')} Helpful?</button></div>
 ${guideHtml}
 ${safetyHtml}
 ${faqsHtml}
 ${versionHtml}
-    <div class="section-card"><div class="section-header"><h3>${icon('clock', 'icon-sm')} Opening Hours</h3></div><div style="padding:16px;">Typical UWA gate window: <strong>06:00 to 19:00</strong> (confirm with your issued permit).<div class="info-chip-row" style="margin-top:10px;"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${JSON.stringify('Packing: dawn gorilla briefing vs afternoon forest walk in Bwindi.')});">${icon('target', 'icon-sm')} Tour help: gear timing</button></div><button class="small-btn" style="margin-top:10px;" onclick="submitContentHelpfulness('info', '', 'Opening Hours')">${icon('target', 'icon-sm')} Helpful?</button></div></div>
-    <div class="section-card"><div class="section-header"><h3>${icon('phone', 'icon-sm')} Emergency</h3></div><div style="padding:16px;">${icon('shield', 'icon-sm')} UWA / emergency coordination: replace placeholder with live operations desk numbers before production.<br><button type="button" class="small-btn" style="margin-top:10px;" onclick="navigateToAIWithPrompt(${JSON.stringify('Trail injury before medics: who gets called first on a Bwindi trek (order of escalation).')});">${icon('target', 'icon-sm')} Tour help: casualty chain</button><br><button class="small-btn" style="margin-top:10px;" onclick="submitContentHelpfulness('info', '', 'Emergency Contacts')">${icon('target', 'icon-sm')} Helpful?</button></div></div>`;
+    ${openingHoursHtml}
+    ${emergencyHtml}`;
 }
 
 function renderAIChatContent() {
@@ -3278,9 +4428,10 @@ function renderAIChatContent() {
         .join('');
     const historyBlock = historyRows
         ? `<div class="ai-simy-history"><div class="ai-simy-history-head"><span class="ai-simy-history-title">History</span><button type="button" class="ai-simy-linkish" onclick="clearSigtsChatThread()">Clear all</button></div><div class="ai-simy-history-list">${historyRows}</div></div>`
-        : `<div class="ai-simy-history"><div class="ai-simy-history-head"><span class="ai-simy-history-title">History</span></div><p class="ai-simy-muted">Your recent questions will appear here so you can load them into the composer.</p></div>`;
+        : `<div class="ai-simy-history"><div class="ai-simy-history-head"><span class="ai-simy-history-title">History</span></div><div class="ai-simy-history-list ai-simy-history-list--empty"><p class="ai-simy-muted">Your recent questions will appear here so you can load them into the composer.</p></div></div>`;
 
     return `<div class="ai-simy-shell">
+        <div class="ai-simy-scroll" tabindex="0" aria-label="Tour help chat content">
         <div class="ai-simy-topbar">
             <button type="button" class="ai-simy-iconbtn" onclick="navigateTo('dashboard')" aria-label="Open home">${icon('menu', 'icon-md')}</button>
             <div class="ai-simy-brand"><span class="ai-simy-brand-mark">${icon('feather', 'icon-sm')}</span><span>Bwindi assistant</span></div>
@@ -3313,6 +4464,7 @@ function renderAIChatContent() {
             </div>
             <p id="aiPrefillBanner" class="ai-prefill-banner ai-simy-prefill-banner" aria-live="polite">Animals, Culture, or Info can drop a draft here. Shift+Enter adds a line; Enter sends.</p>
             <div id="aiChatMessages" class="ai-chat-messages" role="log" aria-relevant="additions text" aria-live="polite">${getSigtsChatInitialMessagesHtml()}</div>
+        </div>
         </div>
         <div class="ai-chat-composer-float ai-simy-composer-float" role="region" aria-label="Chat composer">
             <div class="ai-chat-composer ai-simy-composer">
@@ -3350,7 +4502,10 @@ async function renderGuideDashboard() {
     const guideItems = (dashboard.today || []).slice(0, 3).map((t) => ({
         title: t.route_name || 'Gorilla Trek',
         match: `${new Date(t.scheduled_start).toLocaleTimeString()}`,
-        reason: `Guests: ${t.current_participants || 0} • Tap Guide tab actions to start this tour`
+        reason: `Guests: ${t.current_participants || 0} • Open preparation checklist`,
+        actionKind: 'tour_prep',
+        actionId: t.tour_session_id,
+        goIcon: 'clock'
     }));
     if (!guideItems.length) {
         guideItems.push({
@@ -3385,6 +4540,7 @@ async function renderGuideDashboard() {
             `Shift: ${dashboard.activeShift ? 'On duty' : 'Off duty'}`
         ],
         seasonalActionLabel: dashboard.activeShift ? 'Clock Out' : 'Clock In',
+        seasonalAction: 'clock_in_out',
         animalCount: animals.length
     })}<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('clock', 'icon-sm')} Tour Schedule (Today)</h3></div><div class="seasonal-list">${(dashboard.today || []).length ? dashboard.today.map((t) => `<div class="seasonal-item"><strong>${escapeHtml(t.route_name || 'Tour Route')}</strong> - ${new Date(t.scheduled_start).toLocaleTimeString()} (${t.confirmed_guests || t.group_size || 0} guests) <button class="small-btn" onclick="startTour('${t.tour_session_id}')">Start</button> <button class="small-btn" onclick="openTourPreparation('${t.tour_session_id}')">Prepare</button></div>`).join('') : '<div class="seasonal-item">No tours today.</div>'}</div></div><div class="section-card"><div class="section-header"><h3>${icon('grid', 'icon-sm')} Weekly Assignments</h3></div><div class="seasonal-list">${weeklyRows.length ? weeklyRows.slice(0, 8).map((t) => `<div class="seasonal-item">${new Date(t.scheduled_start).toLocaleDateString()} ${new Date(t.scheduled_start).toLocaleTimeString()} - ${escapeHtml(t.route_name || 'Route')} (${t.confirmed_guests || t.group_size || 0})</div>`).join('') : '<div class="seasonal-item">No weekly assignments.</div>'}</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Guest List Management</h3></div><div class="seasonal-list">${participants.length ? participants.slice(0, 10).map((p) => `<div class="seasonal-item">${escapeHtml(p.first_name || p.username || 'Tourist')} ${escapeHtml(p.last_name || '')} • ${escapeHtml(p.nationality || 'N/A')} <button class="small-btn" onclick="openGuestProfile('${p.tourist_id}')">Profile</button></div>`).join('') : '<div class="seasonal-item">No participants assigned yet.</div>'}</div></div><div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Tour Preparation Checklist</h3></div><div class="seasonal-list">${prepChecklist.length ? prepChecklist.map((c) => `<div class="seasonal-item">${c.done ? '✅' : '⬜'} ${escapeHtml(c.label || c.key)}</div>`).join('') : '<div class="seasonal-item">No checklist loaded.</div>'}</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('map', 'icon-sm')} Active Tour Mode</h3></div><div class="seasonal-list"><div class="seasonal-item">Guide profile: ${profileLine}</div><div class="seasonal-item">Tracked guests: ${activeGuests.length}</div><div class="seasonal-item">Elapsed: ${activeMode?.timer?.elapsed_minutes ?? 0} min • Remaining: ${activeMode?.timer?.remaining_minutes ?? 'N/A'} min</div>${activeGuests.slice(0, 5).map((g) => `<div class="seasonal-item">${escapeHtml(g.name || 'Guest')} - ${g.position ? `${Number(g.position.lat).toFixed(4)}, ${Number(g.position.lng).toFixed(4)}` : 'No GPS'}</div>`).join('') || ''}</div></div><div class="section-card"><div class="section-header"><h3>${icon('phone', 'icon-sm')} Emergency Communication</h3></div><div class="seasonal-list">${emergencyContacts.length ? emergencyContacts.slice(0, 6).map((c) => `<div class="seasonal-item">${escapeHtml(c.contact_type || 'Emergency')} - ${escapeHtml(c.name || 'Contact')} (${escapeHtml(c.phone || 'N/A')})</div>`).join('') : '<div class="seasonal-item">No emergency contacts available.</div>'}</div></div></div><div class="section-card"><div class="section-header"><h3>${icon('bell', 'icon-sm')} Guide-to-guide messages</h3></div><p class="animals-page-blurb">Operational notes to peers (DB migration 011).</p><div class="info-chip-row" style="flex-wrap:wrap;gap:8px;"><select id="guideMsgPeerSelect" class="map-destination" style="flex:1;min-width:180px;"><option value="">Select peer…</option></select></div><div id="guideMsgThread" class="seasonal-list" style="max-height:200px;overflow:auto;margin-top:8px;"><div class="seasonal-item">Loading…</div></div><textarea id="guideMsgBody" class="map-destination" style="margin-top:8px;min-height:72px;width:100%;box-sizing:border-box;" placeholder="Operational note"></textarea><div class="info-chip-row" style="margin-top:8px;"><button type="button" class="login-btn" onclick="sendGuideDeskNote()">${icon('target', 'icon-sm')} Send</button><button type="button" class="small-btn ghost-btn" onclick="refreshGuideDeskInbox()">${icon('grid', 'icon-sm')} Refresh</button></div></div><div class="shift-controls"><button class="login-btn" onclick="clockInOut()">${dashboard.activeShift ? 'Clock Out' : 'Clock In'}</button><button class="small-btn" onclick="addTourNotePrompt()">Add Tour Note</button><button class="small-btn" onclick="viewActiveTourCompletionReport()">Completion Report</button></div><div id="activeTourPanel" style="${guideManager.activeTour ? 'display:block' : 'display:none'}"><div id="tourTimerDisplay" class="tour-timer">00:00:00</div><button onclick="quickSighting()">Log Sighting</button><button onclick="endActiveTour()">End Tour</button></div></div>`;}
 
@@ -3457,7 +4613,8 @@ async function renderITManagerDashboard() {
                 iconName: 'users',
                 goIcon: 'users',
                 avatarType: 'icon',
-                metricColor: 'users'
+                metricColor: 'users',
+                actionKind: 'metric_users'
             },
             {
                 title: 'Pending Sync',
@@ -3466,7 +4623,8 @@ async function renderITManagerDashboard() {
                 iconName: 'database',
                 goIcon: 'download',
                 avatarType: 'icon',
-                metricColor: 'sync'
+                metricColor: 'sync',
+                actionKind: 'metric_sync'
             },
             {
                 title: 'Visitor Satisfaction',
@@ -3475,7 +4633,8 @@ async function renderITManagerDashboard() {
                 iconName: 'smile',
                 goIcon: 'chart',
                 avatarType: 'icon',
-                metricColor: 'satisfaction'
+                metricColor: 'satisfaction',
+                actionKind: 'metric_satisfaction'
             }
         ],
         quote: '"Reliable systems make better field decisions."',
@@ -3486,7 +4645,8 @@ async function renderITManagerDashboard() {
             `Guides on duty: ${metrics.guidesOnDuty || 0}`,
             `Inventory items: ${metrics.inventoryItems || 0}`
         ],
-        seasonalActionLabel: 'View Suggestions',
+        seasonalActionLabel: 'Open predictive analytics',
+        seasonalAction: 'it_analytics',
         animalCount: animals.length
     })}<div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Current Users (Realtime)</h3><span id="adminLiveUsersStamp" class="status-badge neutral">Updated just now • ${(liveOps.peers || []).length} active now / ${Number(metrics.activeUsers || 0)} total</span></div><div id="adminLiveUsersList">${liveUsersHtml}</div></div>${accountDirHtml}${predictiveCtaHtml}<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('building', 'icon-sm')} Intranet Connectivity</h3></div><div class="analytics-list"><div class="analytics-row"><span>Intranet</span><div class="analytics-bar"><div style="width:${liveOps.intranetStatus?.isIntranet ? 100 : 35}%;"></div></div><strong>${liveOps.intranetStatus?.isIntranet ? 'Connected' : 'External'}</strong></div><div class="analytics-row"><span>Device IP</span><span></span><strong>${escapeHtml(liveOps.intranetStatus?.ip || 'Unknown')}</strong></div><div class="analytics-row"><span>Pending Sync</span><span></span><strong>${liveOps.syncStatus?.pending || liveOps.syncStatus?.pending_items || 0}</strong></div></div></div><div class="section-card"><div class="section-header"><h3>${icon('user', 'icon-sm')} Live Peers / Guests</h3></div><div class="seasonal-list">${(liveOps.peers || []).length ? liveOps.peers.slice(0, 8).map((p) => `<div class="seasonal-item">• ${escapeHtml(p.name || 'Peer')} (${escapeHtml(p.type || 'user')})${p.location ? ` @ ${Number(p.location.lat).toFixed(4)}, ${Number(p.location.lng).toFixed(4)}` : ''}</div>`).join('') : '<div class="seasonal-item">• No live peers detected in last 5 minutes.</div>'}</div></div></div>${rareAlertsHtml}${safeZoneHtml}<div class="admin-actions"><button class="admin-action-btn" onclick="handleMFASetup()">${icon('shield', 'icon-sm')} Configure MFA</button><button class="admin-action-btn" onclick="clearAllCache()">Clear Cache</button><button class="admin-action-btn" onclick="exportData()">Export Data</button><button class="admin-action-btn danger" onclick="resetApp()">Reset App</button></div></div>`;}
 
@@ -3871,6 +5031,11 @@ async function renderIntranetDashboard() {
     const outsideCount = peers.filter((p) => p.location && !Geofence?.isInsidePark?.(p.location.lat, p.location.lng)).length;
     const unknownCount = Math.max(0, peers.length - insideCount - outsideCount);
     const activeEmployees = employees.filter((e) => String(e.status || '').toLowerCase() === 'active').length;
+    const opsSettled = await Promise.allSettled([Intranet.getAnnouncements(), Intranet.getInventory()]);
+    const announcements = opsSettled[0].status === 'fulfilled' && Array.isArray(opsSettled[0].value) ? opsSettled[0].value : [];
+    const inventory = opsSettled[1].status === 'fulfilled' && Array.isArray(opsSettled[1].value) ? opsSettled[1].value : [];
+    const announcementsHtml = `<div class="section-card"><div class="section-header"><h3>${icon('bell', 'icon-sm')} Announcements</h3></div><div class="info-chip-row" style="padding:0 16px 12px;"><button type="button" class="small-btn" onclick="showAddAnnouncementModal()">${icon('plus', 'icon-sm')} Post announcement</button></div><div class="seasonal-list">${announcements.length ? announcements.slice(0, 8).map((a) => `<div class="seasonal-item"><strong>${escapeHtml(a.title || 'Notice')}</strong> <span class="status-badge neutral">${escapeHtml(a.priority || 'medium')}</span><p>${escapeHtml(a.content || '')}</p><button type="button" class="small-btn ghost-btn" onclick="deleteAnnouncement('${escJsAttr(String(a.id))}')">Delete</button></div>`).join('') : '<div class="seasonal-item">No announcements yet — post one for staff.</div>'}</div></div>`;
+    const inventoryHtml = `<div class="section-card"><div class="section-header"><h3>${icon('grid', 'icon-sm')} Inventory</h3></div><div class="info-chip-row" style="padding:0 16px 12px;flex-wrap:wrap;gap:8px;"><button type="button" class="small-btn" onclick="showAddInventoryModal()">${icon('plus', 'icon-sm')} Add item</button></div><div class="seasonal-list">${inventory.length ? inventory.slice(0, 12).map((item) => `<div class="seasonal-item"><strong>${escapeHtml(item.name || 'Item')}</strong> — qty ${escapeHtml(String(item.quantity ?? 0))} (${escapeHtml(item.category || '')}) <button type="button" class="small-btn ghost-btn" onclick="updateInventoryQuantity('${escJsAttr(String(item.id))}')">Update qty</button></div>`).join('') : '<div class="seasonal-item">No inventory rows on server.</div>'}</div></div>`;
 
     return `<div class="intranet-dashboard">
         ${renderDashboardShell({
@@ -3880,19 +5045,23 @@ async function renderIntranetDashboard() {
                 {
                     title: 'Boundary Rule',
                     match: 'Inside park required',
-                    reason: 'Users are expected to operate inside approved park boundaries for protected actions.'
+                    reason: 'Users are expected to operate inside approved park boundaries for protected actions.',
+                    actionKind: 'access_governance'
                 },
                 {
                     title: 'Network Rule',
                     match: effectiveIntranet ? 'Intranet linked' : 'External network',
                     reason: effectiveIntranet
                         ? `Connected via trusted network (${effectiveIp || 'IP unavailable'}).`
-                        : 'Currently outside the trusted intranet network; restricted workflows should be limited until connectivity is restored.'
+                        : 'Currently outside the trusted intranet network; restricted workflows should be limited until connectivity is restored.',
+                    actionKind: 'intranet_peers'
                 },
                 {
-                    title: 'Simulation Controls',
-                    match: 'Simulation available',
-                    reason: 'Use the Park Access Status simulation controls above to verify inside/outside and online/offline behavior safely.'
+                    title: 'Live peer tracking',
+                    match: `${peers.length} devices`,
+                    reason: 'Scroll to the live presence list for coordinates and boundary status.',
+                    actionKind: 'intranet_peers',
+                    goIcon: 'users'
                 }
             ],
             quote: '"Conservation systems are strongest when access is location-aware."',
@@ -3903,11 +5072,12 @@ async function renderIntranetDashboard() {
                 `Inside boundary: ${insideCount}`,
                 `Outside/unknown: ${outsideCount + unknownCount}`
             ],
-            seasonalActionLabel: 'Monitor Access',
+            seasonalActionLabel: 'View live peers',
+            seasonalAction: 'intranet_peers',
             animalCount: activeEmployees
         })}
         <div class="dashboard-feature-grid">
-            <div class="section-card">
+            <div class="section-card" id="intranetAccessPanel">
                 <div class="section-header"><h3>${icon('building', 'icon-sm')} Network & Boundary Compliance</h3></div>
                 <div class="analytics-list">
                     <div class="analytics-row"><span>Intranet Link</span><div class="analytics-bar"><div id="intranetLinkBar" style="width:${effectiveIntranet ? 100 : 35}%;"></div></div><strong id="intranetLinkValue">${effectiveIntranet ? 'Connected' : 'External'}</strong></div>
@@ -3921,7 +5091,7 @@ async function renderIntranetDashboard() {
                     <div class="analytics-row"><span>Peers outside boundary</span><span></span><strong>${outsideCount}</strong></div>
                 </div>
             </div>
-            <div class="section-card">
+            <div class="section-card" id="intranetPeersSection">
                 <div class="section-header"><h3>${icon('user', 'icon-sm')} Live Access Presence</h3></div>
                 <div class="seasonal-list">${(peers || []).length ? peers.slice(0, 12).map((p) => {
                     const isInside = p.location ? !!Geofence?.isInsidePark?.(p.location.lat, p.location.lng) : null;
@@ -3950,6 +5120,7 @@ async function renderIntranetDashboard() {
                 <div class="seasonal-item">4) Reset simulation to restore normal operations.</div>
             </div>
         </div>
+        <div class="dashboard-feature-grid">${announcementsHtml}${inventoryHtml}</div>
         <div class="admin-actions">
             <button class="admin-action-btn" onclick="runInteractiveMapSeedFromUI()">${icon('database', 'icon-sm')} Seed Map Demo Data</button>
         </div>
@@ -4223,10 +5394,11 @@ window.sendAIChatMessage = async function () {
     }
 };
 
-window.sigtsBoostReco = function (tourId) {
+window.sigtsBoostReco = async function (tourId, tourName) {
     if (typeof AI === 'undefined' || !tourId || !AI.recordRecommendationFeedback) return;
     AI.recordRecommendationFeedback(String(tourId), 5);
-    showToast('Thanks — this device will weight that tour higher.', 'success');
+    showToast('Thanks — opening related content.', 'success');
+    await sigtsOpenDashboardRec('tour_reco', String(tourId), String(tourName || ''));
 };
 
 window.saveAiTourInterestsFromProfile = async function () {
@@ -4930,9 +6102,24 @@ window.applyAnimalsCatalogFilter = function applyAnimalsCatalogFilter() {
     const term = String(input?.value || '').trim().toLowerCase();
     const grid = document.getElementById('animals-catalog-grid');
     if (!grid) return;
-    grid.querySelectorAll('.animal-card').forEach((card) => {
+    const activeGroup = getValidatedAnimalsGuideGroup();
+    grid.querySelectorAll('.wildlife-species-card, .staying-safe-animal-card, .animal-card').forEach((card) => {
         const blob = String(card.getAttribute('data-species-q') || '').toLowerCase();
-        card.style.display = !term || blob.includes(term) ? '' : 'none';
+        const cardGroup = String(card.getAttribute('data-guide-group') || '');
+        const groupOk = activeGroup === 'all' || cardGroup === activeGroup;
+        const searchOk = !term || blob.includes(term);
+        card.style.display = groupOk && searchOk ? '' : 'none';
+    });
+    grid.querySelectorAll('.wildlife-section, .animals-guide-group').forEach((section) => {
+        const sectionId = section.getAttribute('data-guide-section') || '';
+        const groupOk = activeGroup === 'all' || sectionId === activeGroup;
+        if (!groupOk) {
+            section.style.display = 'none';
+            return;
+        }
+        const cards = section.querySelectorAll('.wildlife-species-card, .staying-safe-animal-card');
+        const anyVisible = [...cards].some((c) => c.style.display !== 'none');
+        section.style.display = anyVisible ? '' : 'none';
     });
 };
 
@@ -5707,6 +6894,12 @@ async function handleForgotPassword() {
         const message = result.message || 'If the email exists, a reset link has been sent.';
         showToast(message, 'success');
         setAuthFeedback(message, 'success');
+        if (result.devResetUrl) {
+            const open = await showConfirmDialog(
+                'Email is not configured on this server. Open the password reset page in a new tab now?'
+            );
+            if (open) window.open(result.devResetUrl, '_blank', 'noopener,noreferrer');
+        }
         return;
     }
 
@@ -5779,45 +6972,85 @@ async function resetApp() {
     }
 }
 
-async function addSighting() {
+
+async function showSightingReportModal(options = {}) {
+    const tourSessionId = options.tourSessionId || null;
     const [animals, locations] = await Promise.all([API.getAnimals(), API.getLocations()]);
-    if (!animals.length || !locations.length) {
-        alert('No animals or locations available. Run seed data first.');
+    if (!animals.length) {
+        showToast('No species in catalogue. Run seed or sync offline content.', 'warning');
         return;
     }
-
-    const animalName = prompt(`Animal name (${animals.slice(0, 6).map((a) => a.name).join(', ')})`);
-    if (!animalName) return;
-    const locationName = prompt(`Location name (${locations.slice(0, 6).map((l) => l.name).join(', ')})`);
-    if (!locationName) return;
-    const count = Number(prompt('Number observed', '1') || '1');
-
-    const animal = animals.find((a) => String(a.name).toLowerCase().includes(animalName.toLowerCase()));
-    const location = locations.find((l) => String(l.name).toLowerCase().includes(locationName.toLowerCase()));
-
-    if (!animal || !location) {
-        alert('Could not match animal/location. Please try with listed names.');
+    if (!locations.length) {
+        showToast('No park locations available.', 'warning');
         return;
     }
-
-    const result = await API.reportSighting({
-        animal_id: animal.animal_id || animal.id,
-        location_id: location.location_id || location.id,
-        number_observed: Math.max(1, Number.isFinite(count) ? count : 1),
-        behavior: 'Observed during field session',
-        notes: 'Submitted from quick report'
+    const current = Geofence?.currentLocation || AppState?.currentLocation;
+    const nearest =
+        current && Number.isFinite(current.lat) && Number.isFinite(current.lng)
+            ? findNearestParkPoi(current.lat, current.lng, locations)
+            : null;
+    const defaultLoc = nearest?.poi?.location_id || nearest?.poi?.id || locations[0]?.location_id || locations[0]?.id;
+    const animalOpts = animals
+        .map((a) => {
+            const id = a.animal_id || a.id;
+            return `<option value="${escapeHtml(String(id))}">${escapeHtml(a.name || 'Species')}</option>`;
+        })
+        .join('');
+    const locOpts = locations
+        .map((l) => {
+            const id = l.location_id || l.id;
+            const sel = String(id) === String(defaultLoc) ? ' selected' : '';
+            return `<option value="${escapeHtml(String(id))}"${sel}>${escapeHtml(l.name || 'Location')}</option>`;
+        })
+        .join('');
+    const overlay = showRichContentModal({
+        title: 'Report a sighting',
+        bodyHtml: `<form id="sigtsSightingForm" class="sigts-sighting-form">
+            <label class="auth-field"><span class="auth-field-label">Species</span><select id="sigtsSightingAnimal" class="auth-select" required>${animalOpts}</select></label>
+            <label class="auth-field"><span class="auth-field-label">Location</span><select id="sigtsSightingLocation" class="auth-select" required>${locOpts}</select></label>
+            <label class="auth-field"><span class="auth-field-label">Number observed</span><input id="sigtsSightingCount" class="auth-input" type="number" min="1" max="99" value="1" required /></label>
+            <label class="auth-field"><span class="auth-field-label">Notes (optional)</span><textarea id="sigtsSightingNotes" class="auth-input" rows="3" maxlength="500" placeholder="Behaviour, distance, group composition…"></textarea></label>
+        </form>`,
+        footerHtml: `<button type="button" class="login-btn" id="sigtsSightingSubmit">${icon('camera', 'icon-sm')} Submit sighting</button>
+            <button type="button" class="small-btn ghost-btn" onclick="document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();">${icon('x', 'icon-sm')} Cancel</button>`
     });
-
-    if (result?.sighting_id || result?.success) {
-        if (result?.rare_alert) {
-            alert(`Rare sighting alert: ${result.rare_alert.animal_name || 'Wildlife'} (${String(result.rare_alert.risk_level || 'high').toUpperCase()})`);
-        } else {
-            alert('Sighting reported successfully.');
+    overlay?.querySelector('#sigtsSightingSubmit')?.addEventListener('click', async () => {
+        const animalId = document.getElementById('sigtsSightingAnimal')?.value;
+        const locationId = document.getElementById('sigtsSightingLocation')?.value;
+        const count = Number(document.getElementById('sigtsSightingCount')?.value || 1);
+        const notes = String(document.getElementById('sigtsSightingNotes')?.value || '').trim();
+        if (!animalId || !locationId) {
+            showToast('Choose species and location.', 'warning');
+            return;
         }
-        if (window.currentView === 'sightings') renderView('sightings');
-    } else {
-        alert('Failed to report sighting.');
-    }}
+        const result = await API.reportSighting({
+            animal_id: animalId,
+            location_id: locationId,
+            number_observed: Math.max(1, Number.isFinite(count) ? count : 1),
+            behavior: 'Field observation',
+            notes: notes || 'Submitted from SIGTS',
+            tour_session_id: tourSessionId
+        });
+        document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();
+        if (result?.sighting_id || result?.success) {
+            if (result?.rare_alert) {
+                showToast(
+                    `Rare sighting flagged: ${result.rare_alert.animal_name || 'Wildlife'} (${String(result.rare_alert.risk_level || 'high').toUpperCase()})`,
+                    'warning'
+                );
+            } else {
+                showToast('Sighting reported successfully.', 'success');
+            }
+            if (window.currentView === 'sightings') await renderView('sightings');
+        } else {
+            showToast(result?.error || 'Failed to report sighting.', 'danger');
+        }
+    });
+}
+
+async function addSighting() {
+    await showSightingReportModal();
+}
 
 async function startTour(tourId) {
     if (!Auth.hasRole('guide')) {
@@ -5838,8 +7071,8 @@ async function endActiveTour() {
     const m = getGuideOpsManager();
     const result = await m.endTour(m.activeTour?.tour_session_id);
     document.getElementById('activeTourPanel').style.display = 'none';
-    alert('Tour ended');
-    const askFeedback = confirm('Would you like to submit completion feedback now?');
+    showToast('Tour ended.', 'success');
+    const askFeedback = await showConfirmDialog('Would you like to submit completion feedback now?');
     if (askFeedback) {
         renderView('profile');
     }
@@ -5850,32 +7083,8 @@ async function quickSighting() {
         showToast('Only tour guides can log sightings from this shortcut.', 'warning');
         return;
     }
-    const [animals, locations] = await Promise.all([API.getAnimals(), API.getLocations()]);
-    const animalText = prompt(`Animal seen? (${animals.slice(0, 5).map((a) => a.name).join(', ')})`);
-    if (!animalText) return;
-    const count = Number(prompt('How many observed?', '1') || '1');
-    const animal = animals.find((a) => String(a.name).toLowerCase().includes(animalText.toLowerCase())) || animals[0];
-    const nearest = locations[0];
-    if (!animal || !nearest) {
-        alert('Missing seeded animal/location data.');
-        return;    }
-    const manager = getGuideOpsManager();
-    const result = await API.reportSighting({
-        animal_id: animal.animal_id || animal.id,
-        location_id: nearest.location_id || nearest.id,
-        number_observed: Math.max(1, Number.isFinite(count) ? count : 1),
-        behavior: 'Quick guide report',
-        notes: 'Quick sighting from guide dashboard',
-        tour_session_id: manager.activeTour?.tour_session_id || null
-    });
-    if (result?.sighting_id || result?.success) {
-        if (result?.rare_alert) {
-            alert(`Rare sighting alert sent: ${result.rare_alert.animal_name || 'Wildlife'} (${String(result.rare_alert.risk_level || 'high').toUpperCase()})`);
-        } else {
-            alert('Sighting recorded!');
-        }
-    }
-    else alert('Sighting submit failed.');
+    const m = getGuideOpsManager();
+    await showSightingReportModal({ tourSessionId: m.activeTour?.tour_session_id || null });
 }
 
 window.addSightingCommentPrompt = async function (sightingId) {
@@ -5931,8 +7140,17 @@ window.openTourPreparation = async function (tourId) {
         showToast(prep?.error || 'Failed to load tour preparation.', 'danger');
         return;
     }
-    const checklist = (prep.checklist || []).map((c) => `${c.done ? '✓' : '□'} ${c.label}`).join('\n');
-    alert(`Tour preparation for ${prep.route?.name || 'route'}\nGuests: ${prep.guest_count || 0}\n\nChecklist:\n${checklist}`);
+    const checklistHtml = (prep.checklist || []).length
+        ? `<ol class="tourist-wildlife-rules">${(prep.checklist || [])
+              .map((c) => `<li>${c.done ? '✅' : '⬜'} <strong>${escapeHtml(c.label || c.key || 'Item')}</strong></li>`)
+              .join('')}</ol>`
+        : '<p class="ui-modal-muted">No checklist items returned.</p>';
+    showRichContentModal({
+        title: 'Tour preparation',
+        subtitle: prep.route?.name || 'Assigned route',
+        bodyHtml: `<p><strong>Guests:</strong> ${escapeHtml(String(prep.guest_count || 0))}</p>${checklistHtml}`,
+        footerHtml: `<button type="button" class="login-btn" onclick="startTour('${escJsAttr(tourId)}')">${icon('clock', 'icon-sm')} Start tour</button>`
+    });
 };
 
 window.openGuestProfile = async function (touristId) {
@@ -5944,7 +7162,18 @@ window.openGuestProfile = async function (touristId) {
     }
     const p = profile.profile || {};
     const historyCount = Array.isArray(profile.history) ? profile.history.length : 0;
-    alert(`Guest: ${(p.first_name || '')} ${(p.last_name || '')}\nNationality: ${p.nationality || 'N/A'}\nInterests: ${JSON.stringify(p.interests || [])}\nPast tours found: ${historyCount}`);
+    const historyHtml =
+        historyCount && Array.isArray(profile.history)
+            ? `<ul>${profile.history
+                  .slice(0, 6)
+                  .map((h) => `<li>${escapeHtml(h.route_name || h.tour_session_id || 'Tour')} — ${escapeHtml(String(h.status || ''))}</li>`)
+                  .join('')}</ul>`
+            : '<p class="ui-modal-muted">No prior tours on record.</p>';
+    showRichContentModal({
+        title: `${escapeHtml(p.first_name || '')} ${escapeHtml(p.last_name || '')}`.trim() || 'Guest profile',
+        subtitle: escapeHtml(p.nationality || 'Nationality not listed'),
+        bodyHtml: `<p><strong>Interests:</strong> ${escapeHtml(JSON.stringify(p.interests || []))}</p><h4>Past tours</h4>${historyHtml}`
+    });
 };
 
 window.viewActiveTourCompletionReport = async function () {
@@ -5960,7 +7189,16 @@ window.viewActiveTourCompletionReport = async function () {
         showToast(report?.error || 'Failed to load completion report.', 'danger');
         return;
     }
-    alert(`Completion report\nRoute: ${report.route_name || 'N/A'}\nDuration: ${report.duration_minutes || 0} min\nDistance: ${report.distance_km || 0} km\nSightings: ${report.sightings?.total_sightings || 0}\nAvg rating: ${report.feedback_summary?.average_guest_rating || 0}`);
+    showRichContentModal({
+        title: 'Tour completion report',
+        subtitle: escapeHtml(report.route_name || 'Route'),
+        bodyHtml: `<div class="seasonal-list">
+            <div class="seasonal-item"><strong>Duration</strong> ${escapeHtml(String(report.duration_minutes || 0))} min</div>
+            <div class="seasonal-item"><strong>Distance</strong> ${escapeHtml(String(report.distance_km || 0))} km</div>
+            <div class="seasonal-item"><strong>Sightings logged</strong> ${escapeHtml(String(report.sightings?.total_sightings || 0))}</div>
+            <div class="seasonal-item"><strong>Avg guest rating</strong> ${escapeHtml(String(report.feedback_summary?.average_guest_rating || 0))}</div>
+        </div>`
+    });
 };
 
 function renderAuthMergedScreen(activePanel = 'login') {
@@ -5991,7 +7229,7 @@ function renderAuthMergedScreen(activePanel = 'login') {
                 </div>
                 ${isLogin ? `
                 <form class="auth-form" onsubmit="event.preventDefault(); handleLogin();">
-                    <label class="auth-field"><span class="auth-field-label">Email or Username</span><span class="auth-input-shell">${icon('mail', 'auth-input-icon')}<input type="text" id="loginUsername" class="auth-input auth-input-with-icon" placeholder="Enter your email or username"></span></label>
+                    <label class="auth-field"><span class="auth-field-label">Email, username, or name</span><span class="auth-input-shell">${icon('mail', 'auth-input-icon')}<input type="text" id="loginUsername" class="auth-input auth-input-with-icon" placeholder="Email, username, or your full name" autocomplete="username"></span></label>
                     ${renderAuthPasswordField('loginPassword', 'Password', 'Enter your password', 'current-password')}
                     <label class="auth-check"><input type="checkbox" id="rememberMe" checked><span>Remember me</span></label>
                     <button type="submit" class="auth-primary-btn">${icon('user', 'icon-sm')} Sign In</button>
@@ -6024,6 +7262,67 @@ function renderLoginScreen() {
 function renderRegisterScreen() {
     return renderAuthMergedScreen('register');
 }
+
+function renderResetPasswordScreen(resetToken = '') {
+    const tokenVal = escapeHtml(resetToken || '');
+    return `<div class="auth-portal auth-mode-login">
+        <main class="auth-portal-main">
+            <section class="auth-card">
+                <h1 class="auth-side-title" style="margin-bottom:8px;">${icon('key', 'icon-md')} Reset password</h1>
+                <p class="animals-page-blurb">Choose a new password (at least 6 characters).</p>
+                <form class="auth-form" onsubmit="event.preventDefault(); handleResetPasswordSubmit();">
+                    <input type="hidden" id="resetPasswordToken" value="${tokenVal}" />
+                    ${renderAuthPasswordField('resetPasswordNew', 'New password', 'Enter new password', 'new-password')}
+                    ${renderAuthPasswordField('resetPasswordConfirm', 'Confirm password', 'Repeat new password', 'new-password')}
+                    <button type="submit" class="auth-primary-btn">${icon('key', 'icon-sm')} Update password</button>
+                    <button type="button" class="auth-link-btn" onclick="navigateTo('login')">${icon('user', 'icon-sm')} Back to sign in</button>
+                    <div id="authFeedback" class="auth-feedback" hidden></div>
+                </form>
+            </section>
+        </main>
+    </div>`;
+}
+
+async function handleResetPasswordSubmit() {
+    setAuthFeedback('');
+    const token = document.getElementById('resetPasswordToken')?.value
+        || new URLSearchParams(window.location.search).get('token')
+        || '';
+    const password = document.getElementById('resetPasswordNew')?.value || '';
+    const confirm = document.getElementById('resetPasswordConfirm')?.value || '';
+    if (!token.trim()) {
+        const message = 'Reset link is missing or invalid. Request a new link from the sign-in page.';
+        showToast(message, 'danger');
+        setAuthFeedback(message, 'error');
+        return;
+    }
+    if (password.length < 6) {
+        const message = 'Password must be at least 6 characters.';
+        showToast(message, 'warning');
+        setAuthFeedback(message, 'error');
+        return;
+    }
+    if (password !== confirm) {
+        const message = 'Passwords do not match.';
+        showToast(message, 'warning');
+        setAuthFeedback(message, 'error');
+        return;
+    }
+    const result = await Auth.resetPassword(token.trim(), password);
+    if (result?.success) {
+        const message = result.message || 'Password updated. You can sign in now.';
+        showToast(message, 'success');
+        setAuthFeedback(message, 'success');
+        window.history.replaceState({}, '', `${window.location.origin}/#login`);
+        navigateTo('login');
+        return;
+    }
+    const message = result?.error || 'Could not reset password. The link may have expired.';
+    showToast(message, 'danger');
+    setAuthFeedback(message, 'error');
+}
+
+window.handleResetPasswordSubmit = handleResetPasswordSubmit;
 
 let __sigtsAIViewportHooksBound = false;
 function syncAIComposerViewportOffset() {
@@ -6130,6 +7429,12 @@ async function renderView(view, options = {}) {
     }
     if (safeView === 'register') {
         app.innerHTML = renderRegisterScreen();
+        syncNavDrawerBodyLock();
+        return;
+    }
+    if (safeView === 'reset_password') {
+        const resetToken = new URLSearchParams(window.location.search).get('token') || '';
+        app.innerHTML = renderResetPasswordScreen(resetToken);
         syncNavDrawerBodyLock();
         return;
     }

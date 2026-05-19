@@ -44,6 +44,10 @@ const BWINDI_SQL_SEED_FILES = [
     { file: '004_bwindi_biodiversity_catalog.sql', label: 'Bwindi biodiversity tour-guide catalogue' },
     { file: '005_bwindi_animal_field_guides.sql', label: 'Bwindi species field-guide copy + catalogue imagery refresh' },
     { file: '006_bwindi_animals_deep_enrichment.sql', label: 'Bwindi deep ecology copy + verified Commons imagery' },
+    { file: '007_staying_safe_tourist_wildlife.sql', label: 'Staying-safe wildlife tips + tourist biodiversity highlights' },
+    { file: '008_staying_safe_full_guide.sql', label: 'Full staying-safe guide (FAQs, tips, park guide)' },
+    { file: '009_bwindi_guide_routes_culture.sql', label: 'Sector routes, cultural stories, map enrichment' },
+    { file: '010_staying_safe_source_align.sql', label: 'Staying-safe source alignment (publish filter)' },
 ];
 
 /**

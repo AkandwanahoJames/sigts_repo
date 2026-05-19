@@ -2,6 +2,7 @@
 const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
 const { logger } = require('../utils/logger');
+const { resolvePublicAppBaseUrl } = require('../utils/appUrl');
 
 function smtpPassword() {
     return process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '';
@@ -11,8 +12,22 @@ function smtpFromAddress() {
     return process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@bwindi.local';
 }
 
+function isPlaceholderSecret(value) {
+    if (!value) return true;
+    const lower = String(value).toLowerCase();
+    return [
+        'your-',
+        'change-in-production',
+        'changeme',
+        'replace-me',
+        'placeholder',
+        'your_secure_password'
+    ].some((frag) => lower.includes(frag));
+}
+
 function isEmailConfigured() {
-    return Boolean(process.env.SMTP_USER && smtpPassword());
+    const pass = smtpPassword();
+    return Boolean(process.env.SMTP_USER && pass && !isPlaceholderSecret(pass));
 }
 
 let transporter = null;
@@ -42,8 +57,13 @@ async function sendMail(mailOptions) {
         return false;
     }
     const from = mailOptions.from || `"Bwindi SIGTS" <${smtpFromAddress()}>`;
-    await transport.sendMail({ ...mailOptions, from });
-    return true;
+    try {
+        await transport.sendMail({ ...mailOptions, from });
+        return true;
+    } catch (error) {
+        logger.warn(`Email not sent (${mailOptions.subject} → ${mailOptions.to}): ${error.message}`);
+        return false;
+    }
 }
 
 /**
@@ -59,10 +79,7 @@ async function sendVerificationEmail(email, userId, clientOrigin) {
         verificationSecret,
         { expiresIn: '24h' }
     );
-    const base = (clientOrigin || process.env.CLIENT_URL || 'http://localhost:3000')
-        .split(',')[0]
-        .trim()
-        .replace(/\/$/, '');
+    const base = clientOrigin || resolvePublicAppBaseUrl();
     const verificationUrl = `${base}/verify-email?token=${verificationToken}`;
 
     const sent = await sendMail({
@@ -90,7 +107,7 @@ async function sendVerificationEmail(email, userId, clientOrigin) {
  * Send password reset email
  */
 async function sendPasswordResetEmail(email, token, username) {
-    const base = (process.env.CLIENT_URL || 'http://localhost:3000').split(',')[0].trim().replace(/\/$/, '');
+    const base = resolvePublicAppBaseUrl();
     const resetUrl = `${base}/reset-password?token=${token}`;
 
     const sent = await sendMail({
