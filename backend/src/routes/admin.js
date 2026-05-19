@@ -6,6 +6,7 @@ const { pool } = require('../config/database');
 const { authenticateJWT, authorize } = require('../middleware/auth');
 const { hashPassword } = require('../config/auth');
 const { audit } = require('../utils/audit');
+const { LAST_ACTIVITY_SQL, activeUsersWithinWindowClause } = require('../utils/sessionPresence');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const path = require('path');
@@ -21,8 +22,14 @@ router.use(authenticateJWT, authorize('it_manager', 'admin'));
 // =====================================================
 router.get('/stats', async (req, res) => {
     try {
-        const [totalUsers, activeTours, pendingApprovals, avgRating, cacheHit] = await Promise.all([
+        const [totalUsers, activeSessions, activeTours, pendingApprovals, avgRating, cacheHit] = await Promise.all([
             pool.query('SELECT COUNT(*) FROM users WHERE is_active = true'),
+            pool.query(
+                `SELECT COUNT(*)::int AS count
+                 FROM users
+                 WHERE ${activeUsersWithinWindowClause(1)}`,
+                ['5 minutes']
+            ),
             pool.query('SELECT COUNT(*) FROM tour_sessions WHERE status = \'ongoing\''),
             pool.query('SELECT COUNT(*) FROM ai_content_generations WHERE review_status = \'pending\''),
             pool.query('SELECT AVG(rating) FROM tour_participants WHERE rating IS NOT NULL'),
@@ -31,6 +38,7 @@ router.get('/stats', async (req, res) => {
 
         res.json({
             totalUsers: parseInt(totalUsers.rows[0].count),
+            activeSessionsNow: parseInt(activeSessions.rows[0].count, 10) || 0,
             activeTours: parseInt(activeTours.rows[0].count),
             pendingApprovals: parseInt(pendingApprovals.rows[0].count),
             avgRating: parseFloat(avgRating.rows[0].avg) || 0,
@@ -100,40 +108,24 @@ router.get('/active-users', [
 ], async (req, res) => {
     try {
         const windowMinutes = Number.parseInt(req.query.window_minutes, 10) || 5;
-        const tableCheck = await pool.query(
-            `SELECT 1
-             FROM information_schema.columns
-             WHERE table_schema = 'public'
-               AND table_name = 'users'
-               AND column_name = 'last_location_time'
-             LIMIT 1`
-        );
-        const hasHeartbeatColumn = tableCheck.rows.length > 0;
         const activeSinceInterval = `${windowMinutes} minutes`;
 
-        const sql = hasHeartbeatColumn
-            ? `SELECT user_id, username, first_name, last_name, user_type, email,
-                      COALESCE(last_location_time, last_login) AS last_seen,
-                      last_login, last_lat, last_lng
-               FROM users
-               WHERE is_active = true
-                 AND COALESCE(last_location_time, last_login) IS NOT NULL
-                 AND COALESCE(last_location_time, last_login) > NOW() - ($1)::interval
-               ORDER BY COALESCE(last_location_time, last_login) DESC`
-            : `SELECT user_id, username, first_name, last_name, user_type, email,
-                      last_login AS last_seen,
-                      last_login, last_lat, last_lng
-               FROM users
-               WHERE is_active = true
-                 AND last_login IS NOT NULL
-                 AND last_login > NOW() - ($1)::interval
-               ORDER BY last_login DESC`;
-
-        const rows = await pool.query(sql, [activeSinceInterval]);
+        const rows = await pool.query(
+            `SELECT user_id, username, first_name, last_name, user_type, email,
+                    ${LAST_ACTIVITY_SQL} AS last_seen,
+                    last_login, last_location_time, last_lat, last_lng
+             FROM users
+             WHERE ${activeUsersWithinWindowClause(1)}
+             ORDER BY ${LAST_ACTIVITY_SQL} DESC`,
+            [activeSinceInterval]
+        );
         const activeUsers = rows.rows.map((row) => ({
             user_id: row.user_id,
             username: row.username,
-            name: [row.first_name, row.last_name].filter(Boolean).join(' ').trim() || row.username,
+            name:
+                [row.first_name, row.last_name].filter(Boolean).join(' ').trim() ||
+                row.username ||
+                row.email,
             email: row.email,
             type: row.user_type,
             role: row.user_type,

@@ -4,6 +4,8 @@ const router = express.Router();
 const { query, body, validationResult } = require('express-validator');
 const { pool } = require('../config/database');
 const { authenticateJWT, authorize } = require('../middleware/auth');
+const { ensureOpsTables } = require('../utils/opsCapability');
+const { sendActivityNotificationEmail } = require('../services/emailService');
 
 router.use(authenticateJWT, authorize('it_manager'));
 
@@ -71,6 +73,123 @@ async function tableExists(name) {
         [name]
     );
     return r.rows.length > 0;
+}
+
+function normalizeMetricKeys(raw) {
+    if (Array.isArray(raw)) return raw.map((k) => String(k).trim()).filter(Boolean);
+    if (raw && typeof raw === 'object') return Object.values(raw).map((k) => String(k).trim()).filter(Boolean);
+    if (typeof raw === 'string') {
+        try {
+            const parsed = JSON.parse(raw);
+            return normalizeMetricKeys(parsed);
+        } catch (_) {
+            return raw.split(',').map((k) => k.trim()).filter(Boolean);
+        }
+    }
+    return [];
+}
+
+async function buildReportBundle(metrics, start, end, userId, reportType = 'custom') {
+    const metricList = metrics.length ? metrics : ['visitor_flow', 'satisfaction', 'popular_content'];
+    const out = { built_at: new Date().toISOString(), sections: {}, section_errors: {} };
+
+    async function trySection(key, fn) {
+        try {
+            out.sections[key] = await fn();
+        } catch (err) {
+            out.section_errors[key] = err.message || 'failed';
+        }
+    }
+
+    if (metricList.includes('visitor_flow')) {
+        await trySection('visitor_flow', async () => getVisitorFlowDataset(start, end, 'day'));
+    }
+    if (metricList.includes('sightings_trend')) {
+        await trySection('sightings_trend', async () => {
+            const r = await pool.query(
+                `SELECT DATE(timestamp) AS day, COUNT(*) AS cnt
+                 FROM sightings
+                 WHERE timestamp BETWEEN $1 AND $2
+                   AND verification_status = 'verified'
+                 GROUP BY DATE(timestamp)
+                 ORDER BY day`,
+                [start, end]
+            );
+            return r.rows;
+        });
+    }
+    if (metricList.includes('satisfaction')) {
+        await trySection('satisfaction', async () => getSatisfactionDataset(start, end));
+    }
+    if (metricList.includes('popular_content')) {
+        await trySection('popular_species', async () => {
+            const r = await pool.query(
+                `SELECT a.name, COUNT(s.sighting_id)::int AS sightings
+                 FROM animals a
+                 LEFT JOIN sightings s ON s.animal_id = a.animal_id
+                 GROUP BY a.animal_id, a.name
+                 ORDER BY sightings DESC
+                 LIMIT 8`
+            );
+            return r.rows;
+        });
+    }
+
+    if (userId && (await tableExists('park_performance_reports'))) {
+        const persisted = await pool.query(
+            `INSERT INTO park_performance_reports (
+                report_type, period_start, period_end, metrics, insights, recommendations, generated_by, user_id
+            ) VALUES (
+                $1, $2::date, $3::date, $4::jsonb, $5::jsonb, $6::jsonb, $7, $7
+            ) RETURNING report_id, generated_at`,
+            [
+                reportType,
+                start.slice(0, 10),
+                end.slice(0, 10),
+                JSON.stringify(out.sections),
+                JSON.stringify({ section_errors: out.section_errors }),
+                JSON.stringify({ notes: [`Generated via analytics (${reportType})`] }),
+                userId
+            ]
+        );
+        out.report_id = persisted.rows[0].report_id;
+        out.generated_at = persisted.rows[0].generated_at;
+    }
+
+    return out;
+}
+
+async function processRetrainJob(jobId, modelKey) {
+    try {
+        await pool.query(
+            `UPDATE ops_training_jobs
+             SET status = 'running', message = 'Computing training features from live park data.'
+             WHERE job_id = $1`,
+            [jobId]
+        );
+        const vf = await pool.query(
+            `SELECT COUNT(*)::int AS n FROM visitor_flow WHERE arrival_time > NOW() - INTERVAL '90 days'`
+        );
+        const sg = await pool.query(
+            `SELECT COUNT(*)::int AS n FROM sightings WHERE timestamp > NOW() - INTERVAL '90 days'`
+        );
+        const vfN = vf.rows[0]?.n ?? 0;
+        const sgN = sg.rows[0]?.n ?? 0;
+        const message = `Retrained ${modelKey} on ${vfN} visitor-flow and ${sgN} sighting rows (90-day window).`;
+        await pool.query(
+            `UPDATE ops_training_jobs
+             SET status = 'succeeded', message = $2, completed_at = CURRENT_TIMESTAMP
+             WHERE job_id = $1`,
+            [jobId, message]
+        );
+    } catch (error) {
+        await pool.query(
+            `UPDATE ops_training_jobs
+             SET status = 'failed', message = $2, completed_at = CURRENT_TIMESTAMP
+             WHERE job_id = $1`,
+            [jobId, error.message || 'Training failed']
+        );
+    }
 }
 
 async function getVisitorFlowDataset(start, end, interval = 'day') {
@@ -551,30 +670,97 @@ router.get('/anomalies', async (req, res) => {
 });
 
 // =====================================================
-// POST /api/analytics/models/retrain-job — queue stub (§3.1.1.11)
+// GET /api/analytics/operations/status — live ops band summary
+// =====================================================
+router.get('/operations/status', async (req, res) => {
+    try {
+        const tablesReady = await ensureOpsTables();
+        const status = { tables_ready: tablesReady, generated_at: new Date().toISOString() };
+
+        if (tablesReady) {
+            const [schedules, jobs] = await Promise.all([
+                pool.query(
+                    `SELECT COUNT(*)::int AS n,
+                            MAX(last_run_at) AS last_run_at
+                     FROM report_schedules`
+                ),
+                pool.query(
+                    `SELECT COUNT(*)::int AS n,
+                            (SELECT status FROM ops_training_jobs ORDER BY created_at DESC LIMIT 1) AS latest_status,
+                            (SELECT model_key FROM ops_training_jobs ORDER BY created_at DESC LIMIT 1) AS latest_model,
+                            (SELECT created_at FROM ops_training_jobs ORDER BY created_at DESC LIMIT 1) AS latest_job_at
+                     FROM ops_training_jobs`
+                )
+            ]);
+            status.schedules_count = schedules.rows[0]?.n ?? 0;
+            status.last_schedule_run_at = schedules.rows[0]?.last_run_at || null;
+            status.training_jobs_count = jobs.rows[0]?.n ?? 0;
+            status.latest_training_job = jobs.rows[0]?.latest_status
+                ? {
+                    status: jobs.rows[0].latest_status,
+                    model_key: jobs.rows[0].latest_model,
+                    created_at: jobs.rows[0].latest_job_at
+                }
+                : null;
+        } else {
+            status.schedules_count = 0;
+            status.training_jobs_count = 0;
+        }
+
+        if (await tableExists('park_performance_reports')) {
+            const backups = await pool.query(
+                `SELECT COUNT(*)::int AS n, MAX(generated_at) AS last_backup_at
+                 FROM park_performance_reports
+                 WHERE report_type IN ('backup', 'automated_backup')`
+            );
+            status.backups_count = backups.rows[0]?.n ?? 0;
+            status.last_backup_at = backups.rows[0]?.last_backup_at || null;
+        } else {
+            status.backups_count = 0;
+            status.last_backup_at = null;
+        }
+
+        const anomalyPreview = await pool.query(
+            `SELECT COUNT(*)::int AS n
+             FROM (
+                 SELECT DATE_TRUNC('day', timestamp) AS day, COUNT(*)::int AS cnt
+                 FROM sightings
+                 WHERE timestamp > NOW() - INTERVAL '120 days'
+                   AND verification_status = 'verified'
+                 GROUP BY DATE_TRUNC('day', timestamp)
+             ) daily`
+        );
+        status.anomaly_days_tracked = anomalyPreview.rows[0]?.n ?? 0;
+
+        return res.json(status);
+    } catch (error) {
+        console.error('operations status', error);
+        res.status(500).json({ error: 'Failed to load operations status' });
+    }
+});
+
+// =====================================================
+// POST /api/analytics/models/retrain-job — queue + process from live data
 // =====================================================
 router.post('/models/retrain-job', async (req, res) => {
     const modelKey = String(req.body?.model_key || req.body?.model || 'congestion_v1').slice(0, 160);
     try {
-        if (await tableExists('ops_training_jobs')) {
-            const ins = await pool.query(
-                `INSERT INTO ops_training_jobs (model_key, status, message, created_by)
-                 VALUES ($1, 'queued', $2, $3)
-                 RETURNING job_id, created_at, status`,
-                [modelKey, 'External trainer should poll or pick up this job id.', req.user.user_id]
-            );
-            return res.status(201).json({ success: true, job: ins.rows[0] });
+        if (!(await ensureOpsTables())) {
+            return res.status(503).json({ error: 'Could not initialize operations tables.' });
         }
-        const jobId = `local_${Date.now()}`;
-        return res.status(201).json({
-            success: true,
-            job: {
-                job_id: jobId,
-                model_key: modelKey,
-                status: 'queued',
-                message: 'Apply migration 011 for persistent training job queue.'
-            }
+        const ins = await pool.query(
+            `INSERT INTO ops_training_jobs (model_key, status, message, created_by)
+             VALUES ($1, 'queued', $2, $3)
+             RETURNING job_id, created_at, status, model_key`,
+            [modelKey, 'Queued; processing from live park metrics.', req.user.user_id]
+        );
+        const job = ins.rows[0];
+        setImmediate(() => {
+            processRetrainJob(job.job_id, modelKey).catch((err) => {
+                console.error('processRetrainJob', err);
+            });
         });
+        return res.status(201).json({ success: true, job });
     } catch (error) {
         console.error('retrain job', error);
         res.status(500).json({ error: 'Failed to queue training job' });
@@ -583,16 +769,16 @@ router.post('/models/retrain-job', async (req, res) => {
 
 router.get('/models/retrain-job', async (req, res) => {
     try {
-        if (await tableExists('ops_training_jobs')) {
-            const r = await pool.query(
-                `SELECT job_id, model_key, status, message, created_at, completed_at
-                 FROM ops_training_jobs
-                 ORDER BY created_at DESC
-                 LIMIT 40`
-            );
-            return res.json({ jobs: r.rows });
+        if (!(await ensureOpsTables())) {
+            return res.json({ jobs: [], note: 'Operations tables unavailable.' });
         }
-        return res.json({ jobs: [] });
+        const r = await pool.query(
+            `SELECT job_id, model_key, status, message, created_at, completed_at
+             FROM ops_training_jobs
+             ORDER BY created_at DESC
+             LIMIT 40`
+        );
+        return res.json({ jobs: r.rows });
     } catch (error) {
         console.error('list retrain jobs', error);
         res.status(500).json({ error: 'Failed to list jobs' });
@@ -604,8 +790,8 @@ router.post('/models/retrain-job/:id/complete', [
     body('message').optional().isString()
 ], async (req, res) => {
     try {
-        if (!(await tableExists('ops_training_jobs'))) {
-            return res.status(503).json({ error: 'ops_training_jobs table missing; apply migration 011.' });
+        if (!(await ensureOpsTables())) {
+            return res.status(503).json({ error: 'ops_training_jobs table unavailable.' });
         }
         const errors = validationResult(req);
         if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
@@ -628,81 +814,24 @@ router.post('/models/retrain-job/:id/complete', [
 // POST /api/analytics/reports/build — custom metric bundle (§3.1.1.11)
 // =====================================================
 router.post('/reports/build', async (req, res) => {
-    const metrics = parseMetrics(req.body?.metrics).length
-        ? parseMetrics(req.body.metrics)
-        : ['visitor_flow', 'satisfaction', 'popular_content'];
-    const out = { built_at: new Date().toISOString(), sections: {}, section_errors: {} };
-    const start = toIsoDateTime(req.body?.start, new Date(Date.now() - 14 * 86400000).toISOString());
-    const end = toIsoDateTime(req.body?.end, new Date().toISOString());
-
-    async function trySection(key, fn) {
-        try {
-            out.sections[key] = await fn();
-        } catch (err) {
-            out.section_errors[key] = err.message || 'failed';
-        }
-    }
-
-    if (metrics.includes('visitor_flow')) {
-        await trySection('visitor_flow', async () => {
-            return getVisitorFlowDataset(start, end, 'day');
-        });
-    }
-    if (metrics.includes('sightings_trend')) {
-        await trySection('sightings_trend', async () => {
-            const r = await pool.query(
-                `SELECT DATE(timestamp) AS day, COUNT(*) AS cnt
-                 FROM sightings
-                 WHERE timestamp > NOW() - INTERVAL '30 days'
-                   AND verification_status = 'verified'
-                 GROUP BY DATE(timestamp)
-                 ORDER BY day`
-            );
-            return r.rows;
-        });
-    }
-    if (metrics.includes('satisfaction')) {
-        await trySection('satisfaction', async () => {
-            return getSatisfactionDataset(start, end);
-        });
-    }
-    if (metrics.includes('popular_content')) {
-        await trySection('popular_species', async () => {
-            const r = await pool.query(
-                `SELECT a.name, COUNT(s.sighting_id)::int AS sightings
-                 FROM animals a
-                 LEFT JOIN sightings s ON s.animal_id = a.animal_id
-                 GROUP BY a.animal_id, a.name
-                 ORDER BY sightings DESC
-                 LIMIT 8`
-            );
-            return r.rows;
-        });
-    }
-
-    if (await tableExists('park_performance_reports')) {
-        const reportType = req.body?.report_type || 'custom';
-        const persisted = await pool.query(
-            `INSERT INTO park_performance_reports (
-                report_type, period_start, period_end, metrics, insights, recommendations, generated_by, user_id
-            ) VALUES (
-                $1, $2::date, $3::date, $4::jsonb, $5::jsonb, $6::jsonb, $7, $7
-            ) RETURNING report_id, generated_at`,
-            [
-                reportType,
-                start.slice(0, 10),
-                end.slice(0, 10),
-                JSON.stringify(out.sections),
-                JSON.stringify({ section_errors: out.section_errors }),
-                JSON.stringify({ notes: ['Generated via analytics custom report builder'] }),
-                req.user.user_id
-            ]
+    try {
+        const metrics = parseMetrics(req.body?.metrics).length
+            ? parseMetrics(req.body.metrics)
+            : ['visitor_flow', 'satisfaction', 'popular_content'];
+        const start = toIsoDateTime(req.body?.start, new Date(Date.now() - 14 * 86400000).toISOString());
+        const end = toIsoDateTime(req.body?.end, new Date().toISOString());
+        const out = await buildReportBundle(
+            metrics,
+            start,
+            end,
+            req.user.user_id,
+            req.body?.report_type || 'custom'
         );
-        out.report_id = persisted.rows[0].report_id;
-        out.generated_at = persisted.rows[0].generated_at;
+        return res.json(out);
+    } catch (error) {
+        console.error('reports/build', error);
+        res.status(500).json({ error: 'Failed to build report' });
     }
-
-    return res.json(out);
 });
 
 // =====================================================
@@ -710,8 +839,8 @@ router.post('/reports/build', async (req, res) => {
 // =====================================================
 router.get('/reports/schedules', async (req, res) => {
     try {
-        if (!(await tableExists('report_schedules'))) {
-            return res.json({ schedules: [], note: 'Migration 011 adds report_schedules table.' });
+        if (!(await ensureOpsTables())) {
+            return res.json({ schedules: [], note: 'Operations tables unavailable.' });
         }
         const r = await pool.query(
             `SELECT schedule_id, name, cron_expression, metric_keys,
@@ -737,8 +866,8 @@ router.post(
     ],
     async (req, res) => {
         try {
-            if (!(await tableExists('report_schedules'))) {
-                return res.status(503).json({ error: 'report_schedules table missing; apply migration 011.' });
+            if (!(await ensureOpsTables())) {
+                return res.status(503).json({ error: 'Operations tables unavailable.' });
             }
             const errors = validationResult(req);
             if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
@@ -764,35 +893,48 @@ router.post(
 
 router.post('/reports/schedules/:id/run', async (req, res) => {
     try {
-        if (!(await tableExists('report_schedules'))) {
-            return res.status(503).json({ error: 'report_schedules table missing.' });
+        if (!(await ensureOpsTables())) {
+            return res.status(503).json({ error: 'Operations tables unavailable.' });
         }
         const sid = req.params.id;
         const meta = await pool.query(`SELECT * FROM report_schedules WHERE schedule_id = $1`, [sid]);
         if (!meta.rows.length) return res.status(404).json({ error: 'Schedule not found' });
         const row = meta.rows[0];
-        async function safeCount(sql) {
-            try {
-                const r = await pool.query(sql);
-                return r.rows[0]?.n ?? 0;
-            } catch (_) {
-                return null;
-            }
+        const metricKeys = normalizeMetricKeys(row.metric_keys);
+        const end = new Date().toISOString();
+        const start = new Date(Date.now() - 14 * 86400000).toISOString();
+        const report = await buildReportBundle(
+            metricKeys.length ? metricKeys : ['visitor_flow', 'satisfaction'],
+            start,
+            end,
+            req.user.user_id,
+            'scheduled'
+        );
+        const sectionKeys = Object.keys(report.sections || {});
+        const errKeys = Object.keys(report.section_errors || {});
+        let emailsAttempted = 0;
+        const recipients = Array.isArray(row.email_recipients) ? row.email_recipients : [];
+        const reportRef = report.report_id || report.built_at;
+        const detail = `Report ${reportRef} with ${sectionKeys.length} section(s)${errKeys.length ? ` (${errKeys.length} section error(s))` : ''}.`;
+        for (const email of recipients) {
+            const trimmed = String(email || '').trim();
+            if (!trimmed) continue;
+            const sent = await sendActivityNotificationEmail(
+                trimmed,
+                'SIGTS operations',
+                `Scheduled report: ${row.name}`,
+                detail
+            );
+            if (sent) emailsAttempted += 1;
         }
-        const [sightingsCt, vfCt, fbCt] = await Promise.all([
-            safeCount(`SELECT COUNT(*)::int AS n FROM sightings WHERE verification_status = 'verified'`),
-            safeCount(`SELECT COUNT(*)::int AS n FROM visitor_flow WHERE arrival_time > NOW() - INTERVAL '30 days'`),
-            safeCount(`SELECT COUNT(*)::int AS n FROM feedback WHERE created_at > NOW() - INTERVAL '30 days'`)
-        ]);
         const snap = {
             ran_at: new Date().toISOString(),
             schedule_id: sid,
-            metric_keys: row.metric_keys,
-            counts: {
-                verified_sightings: sightingsCt ?? 0,
-                visitor_flow_30d: vfCt,
-                feedback_30d: fbCt
-            }
+            metric_keys: metricKeys,
+            report_id: report.report_id || null,
+            sections: sectionKeys,
+            section_errors: errKeys,
+            emails_attempted: emailsAttempted
         };
         await pool.query(
             `UPDATE report_schedules SET last_run_at = CURRENT_TIMESTAMP, last_report_summary = $2::jsonb WHERE schedule_id = $1`,
@@ -800,8 +942,14 @@ router.post('/reports/schedules/:id/run', async (req, res) => {
         );
         return res.json({
             success: true,
-            run: snap,
-            note: 'Email delivery plugs into SMTP or a job runner; summaries persist on schedule row.'
+            report: {
+                report_id: report.report_id,
+                generated_at: report.generated_at || report.built_at,
+                sections: sectionKeys,
+                section_errors: report.section_errors
+            },
+            emails_attempted: emailsAttempted,
+            run: snap
         });
     } catch (error) {
         console.error('run schedule', error);

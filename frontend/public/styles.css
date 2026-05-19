@@ -284,9 +284,9 @@ svg {
 }
 
 .nav-item-vertical.active {
-    background: #F5F3EA;
-    color: #0F3D25;
-    box-shadow: 0 6px 14px rgba(15, 61, 37, 0.08);
+    background: rgba(165, 236, 96, 0.16);
+    color: #fff;
+    box-shadow: inset 4px 0 0 #d4f574;
 }
 
 .nav-icon-vertical {
@@ -2876,6 +2876,21 @@ body.ai-chat-view .ai-simy-send-btn {
 .wildlife-search__input:focus {
     outline: none;
     border-color: var(--wildlife-green);
+}
+
+.wildlife-search__status {
+    margin: 10px 0 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--text-muted, #5a6b62);
+}
+
+.wildlife-search-empty {
+    margin: 16px 0 0;
+    padding: 12px 16px;
+    border-radius: 12px;
+    background: rgba(31, 107, 74, 0.08);
+    color: var(--primary-800, #145a3c);
 }
 
 .wildlife-search__hint {
@@ -6653,6 +6668,81 @@ body {
     background: #fff7f7;
 }
 
+.park-access-lockout {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 28px 24px 32px;
+    border-radius: 20px;
+    border: 2px solid rgba(185, 28, 28, 0.4);
+    background: linear-gradient(165deg, #fff8f8 0%, #fff 55%);
+    box-shadow: 0 12px 40px rgba(120, 20, 20, 0.08);
+    text-align: center;
+}
+
+.park-access-lockout-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 72px;
+    height: 72px;
+    margin: 0 auto 16px;
+    border-radius: 50%;
+    background: rgba(185, 28, 28, 0.12);
+    color: #b91c1c;
+}
+
+.park-access-lockout-title {
+    margin: 0 0 12px;
+    font-size: 1.45rem;
+    color: #7f1d1d;
+}
+
+.park-access-lockout-lead {
+    margin: 0 0 16px;
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--text-700, #3d4a44);
+    text-align: left;
+}
+
+.park-access-lockout-list {
+    margin: 0 0 18px;
+    padding-left: 1.25rem;
+    text-align: left;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #5c2a2a;
+}
+
+.park-access-lockout-status {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.park-access-lockout-sim {
+    margin-top: 8px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(185, 28, 28, 0.2);
+    text-align: left;
+}
+
+body.sigts-park-locked .main-container > .park-access-panel {
+    display: none;
+}
+
+body.sigts-park-locked .nav-item-vertical:not(.nav-item-vertical--logout) {
+    opacity: 0.55;
+    pointer-events: none;
+}
+
+body.sigts-park-locked .sigts-mobile-tab {
+    opacity: 0.55;
+    pointer-events: none;
+}
+
 .park-access-head {
     display: flex;
     align-items: center;
@@ -6798,6 +6888,322 @@ body {
 .ui-modal-overlay,
 .ui-modal-overlay-rich {
     z-index: 3200;
+}
+
+/* Tourist Home — editorial layout (SIGTS green + lime accent, matches sidebar Home) */
+.sigts-dash-editorial {
+    margin: 0 -4px 20px;
+    border-radius: 18px;
+    overflow: hidden;
+    background: var(--green-950);
+    box-shadow: var(--shadow-md);
+    color: #fff;
+}
+
+/* theme-modern sets h1–h4 to --text-900; keep hero + recs headings white */
+.sigts-dash-editorial h1,
+.sigts-dash-editorial h2,
+.sigts-dash-editorial h3,
+.sigts-dash-editorial h4 {
+    color: #fff;
+}
+
+.sigts-dash-hero {
+    position: relative;
+    padding: clamp(16px, 3vw, 24px);
+    color: #fff;
+    background-color: var(--green-900);
+    background-image:
+        linear-gradient(180deg, rgba(12, 38, 28, 0.55) 0%, rgba(12, 38, 28, 0.92) 100%),
+        var(--dash-hero-image, url('/images/bwindi-forest-hike.png'));
+    background-size: cover;
+    background-position: center;
+    transition: background-image 0.6s ease;
+}
+
+.sigts-dash-hero-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: clamp(12px, 3vh, 28px);
+}
+
+.sigts-dash-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+}
+
+.sigts-dash-brand-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #d4f574;
+    box-shadow: 0 0 0 3px rgba(212, 245, 116, 0.28);
+}
+
+.sigts-dash-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+}
+
+.sigts-dash-rail-btn {
+    border: 0;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.45);
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 2px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sigts-dash-rail-btn.is-active {
+    color: #fff;
+}
+
+.sigts-dash-rail-btn.is-active::after {
+    content: '';
+    width: 36px;
+    height: 2px;
+    background: #d4f574;
+}
+
+.sigts-dash-eyebrow {
+    margin: 0 0 8px;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.72);
+}
+
+.sigts-dash-headline {
+    margin: 0 0 12px;
+    font-size: clamp(1.85rem, 6vw, 3.2rem);
+    font-weight: 800;
+    line-height: 0.98;
+    letter-spacing: -0.03em;
+}
+
+.sigts-dash-swipe {
+    border: 0;
+    background: transparent;
+    color: #fff;
+    font-weight: 800;
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    padding: 0;
+}
+
+.sigts-dash-swipe:hover {
+    color: #d4f574;
+}
+
+.sigts-dash-search-row {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+    margin-top: 14px;
+    padding: 6px 8px 6px 12px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.sigts-dash-search-prefix {
+    display: grid;
+    place-items: center;
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.sigts-dash-search-field {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    color: #fff;
+    font-size: 15px;
+    outline: none;
+}
+
+.sigts-dash-search-field::placeholder {
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.sigts-dash-search-submit {
+    border: 0;
+    border-radius: 10px;
+    padding: 0 14px;
+    min-height: 42px;
+    background: #d4f574;
+    color: var(--green-950);
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.sigts-dash-chips-scroll {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    margin-top: 12px;
+    padding-bottom: 4px;
+}
+
+.sigts-dash-chip {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.sigts-dash-chip:hover {
+    background: rgba(165, 236, 96, 0.16);
+    box-shadow: inset 3px 0 0 #d4f574;
+}
+
+.sigts-dash-search-hint {
+    margin-top: 8px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.78);
+}
+
+.sigts-dash-search-results {
+    margin-top: 10px;
+}
+
+.sigts-dash-search-results .seasonal-item {
+    background: rgba(255, 255, 255, 0.1) !important;
+    border-color: rgba(255, 255, 255, 0.22) !important;
+    color: #fff !important;
+}
+
+.sigts-dash-search-results .seasonal-item strong,
+.sigts-dash-search-results .ui-modal-muted {
+    color: rgba(255, 255, 255, 0.82) !important;
+}
+
+.sigts-dash-editorial .icon,
+.sigts-dash-editorial svg {
+    color: currentColor;
+}
+
+.sigts-dash-hero-rule {
+    height: 3px;
+    margin-top: 16px;
+    background: linear-gradient(90deg, #d4f574, rgba(212, 245, 116, 0.2));
+}
+
+.sigts-dash-recs {
+    padding: clamp(20px, 4vw, 28px);
+    background: var(--green-950);
+    color: #fff;
+}
+
+.sigts-dash-recs-eyebrow {
+    text-align: center;
+    margin: 0 0 8px;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.sigts-dash-recs-title {
+    text-align: center;
+    margin: 0 0 20px;
+    font-size: clamp(1.2rem, 3vw, 1.65rem);
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.sigts-dash-recs-title span {
+    display: block;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.7);
+    margin-top: 6px;
+    font-size: 0.92em;
+}
+
+.sigts-dash-rank-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.sigts-dash-rank-card {
+    position: relative;
+    min-height: 220px;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 14px;
+    background:
+        linear-gradient(180deg, rgba(0, 0, 0, 0.08) 15%, rgba(0, 0, 0, 0.82) 100%),
+        var(--rank-bg) center / cover no-repeat;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sigts-dash-rank-card:hover {
+    box-shadow: inset 4px 0 0 #d4f574;
+}
+
+.sigts-dash-rank-badge {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    font-weight: 800;
+    font-size: 0.9rem;
+}
+
+.sigts-dash-rank-card h3 {
+    margin: 0 0 4px;
+    font-size: 0.95rem;
+}
+
+.sigts-dash-rank-card p {
+    margin: 0;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.82);
+}
+
+@media (max-width: 900px) {
+    .sigts-dash-rank-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 560px) {
+    .sigts-dash-rank-grid {
+        grid-template-columns: 1fr;
+    }
+    .sigts-dash-rank-card {
+        min-height: 180px;
+    }
+    .sigts-dash-rail {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
 }
 
 .sigts-discovery-panel {

@@ -134,6 +134,34 @@ async function sendPasswordResetEmail(email, token, username) {
 }
 
 /**
+ * Welcome email sent immediately after successful self-service registration.
+ */
+async function sendRegistrationWelcomeEmail(email, username, clientOrigin) {
+    const safeUsername = username || 'there';
+    const base = clientOrigin || resolvePublicAppBaseUrl();
+    const signInUrl = `${base}/#login`;
+    const sent = await sendMail({
+        to: email,
+        subject: 'Your Bwindi SIGTS account is ready',
+        html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h1 style="color: #2E7D32;">Welcome to Bwindi SIGTS</h1>
+                <p>Hello ${safeUsername},</p>
+                <p>Your visitor account has been created successfully. You can now sign in with the username and password you chose during registration.</p>
+                <p><a href="${signInUrl}" style="background-color: #2E7D32; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Sign in to SIGTS</a></p>
+                <p>If you did not create this account, please contact park IT support immediately.</p>
+                <hr>
+                <p style="color: #666; font-size: 12px;">Bwindi Impenetrable National Park — Smart Information Guide Tour System</p>
+            </div>
+        `
+    });
+    if (sent) {
+        logger.info(`Registration welcome email sent to ${email}`);
+    }
+    return sent;
+}
+
+/**
  * Send a generic activity notification email
  */
 async function sendActivityNotificationEmail(email, username, activityTitle, activityDetails = '') {
@@ -163,6 +191,7 @@ async function sendActivityNotificationEmail(email, username, activityTitle, act
 module.exports = {
     sendVerificationEmail,
     sendPasswordResetEmail,
+    sendRegistrationWelcomeEmail,
     sendActivityNotificationEmail,
     isEmailConfigured
 };

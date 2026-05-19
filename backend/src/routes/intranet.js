@@ -6,6 +6,7 @@ const { pool } = require('../config/database');
 const { authenticateJWT, authorize } = require('../middleware/auth');
 const { execFile } = require('child_process');
 const path = require('path');
+const { LAST_ACTIVITY_SQL, activeUsersWithinWindowClause } = require('../utils/sessionPresence');
 
 router.use(authenticateJWT);
 
@@ -14,6 +15,10 @@ const ACCESS_POLICY_MODE = String(process.env.ACCESS_POLICY_MODE || process.env.
     ? 'production'
     : 'demo';
 const INTRANET_SUBNET = process.env.INTRANET_SUBNET || '192.168.100.0/24';
+/** When true (default in demo), panels off-site on cellular still get full app access unless sim headers force restrictions. */
+const DEMO_PRESENTATION =
+    ACCESS_POLICY_MODE === 'demo' &&
+    String(process.env.SIGTS_DEMO_PRESENTATION || 'true').toLowerCase() !== 'false';
 
 function normalizeIp(rawIp) {
     return String(rawIp || '').replace('::ffff:', '').trim();
@@ -69,15 +74,31 @@ function buildAccessContext(req) {
             insideBoundary = false;
             source = 'simulation';
             reasons.push('boundary forced outside for demo');
+        } else if (
+            DEMO_PRESENTATION &&
+            simBoundary === 'auto' &&
+            simNetwork === 'auto'
+        ) {
+            isIntranet = true;
+            insideBoundary = true;
+            source = 'demo-presentation';
+            reasons.length = 0;
+            reasons.push(
+                'demo presentation mode — full access off-site (cellular OK); use Park Access simulation to preview restrictions'
+            );
         }
     }
 
     const networkOk = requiresIntranet ? isIntranet : true;
     const boundaryKnown = insideBoundary !== null;
     const boundaryOk = boundaryKnown ? insideBoundary : true;
-    const accessGranted = Boolean(networkOk && boundaryOk);
+    // Inside the park, offline use is allowed (cached content). Only boundary blocks access.
+    const accessGranted = requiresIntranet ? boundaryOk : true;
 
-    if (!networkOk) reasons.push('outside trusted intranet subnet');
+    if (!networkOk && boundaryOk) {
+        reasons.push('park intranet unavailable — offline mode within boundary is allowed');
+    }
+    if (!networkOk && !boundaryOk) reasons.push('outside trusted intranet subnet');
     if (!boundaryOk) reasons.push('outside park boundary');
     if (!boundaryKnown) reasons.push('gps unavailable');
     if (!reasons.length) reasons.push('policy checks passed');
@@ -113,26 +134,33 @@ router.get('/status', async (req, res) => {
 // Get list of peers on intranet
 router.get('/peers', async (req, res) => {
     try {
-        // Get active users in last 5 minutes
-        const result = await pool.query(`
-            SELECT user_id, username, user_type, 
-                   last_lat, last_lng, last_location_time
-            FROM users 
-            WHERE last_location_time > NOW() - INTERVAL '5 minutes'
-            AND is_active = true
-        `);
-        
-        const peers = result.rows.map(row => ({
+        const windowMinutes = Math.min(120, Math.max(1, Number.parseInt(req.query.window_minutes, 10) || 5));
+        const activeSinceInterval = `${windowMinutes} minutes`;
+        const result = await pool.query(
+            `SELECT user_id, username, first_name, last_name, user_type, email,
+                    last_lat, last_lng,
+                    ${LAST_ACTIVITY_SQL} AS last_seen
+             FROM users
+             WHERE ${activeUsersWithinWindowClause(1)}
+             ORDER BY ${LAST_ACTIVITY_SQL} DESC`,
+            [activeSinceInterval]
+        );
+
+        const peers = result.rows.map((row) => ({
             id: row.user_id,
-            name: row.username,
+            name: [row.first_name, row.last_name].filter(Boolean).join(' ').trim() || row.username,
             type: row.user_type,
-            location: row.last_lat ? { lat: row.last_lat, lng: row.last_lng } : null,
-            lastSeen: row.last_location_time
+            location:
+                row.last_lat != null && row.last_lng != null
+                    ? { lat: Number(row.last_lat), lng: Number(row.last_lng) }
+                    : null,
+            lastSeen: row.last_seen
         }));
-        
-        res.json({ count: peers.length, peers });
+
+        res.json({ window_minutes: windowMinutes, count: peers.length, peers });
     } catch (error) {
-        res.json({ count: 0, peers: [] });
+        console.error('Get intranet peers error:', error);
+        res.status(500).json({ count: 0, peers: [], error: 'Failed to fetch live peers' });
     }
 });
 

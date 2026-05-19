@@ -3,11 +3,41 @@
  * Optional public/runtime-config.js (generated) may override __SIGTS_CONFIG__.
  */
 (function () {
+    window.sigtsShowBootFailure = function sigtsShowBootFailure(message, detail) {
+        var app = document.getElementById('app');
+        if (!app) return;
+        var detailHtml = detail
+            ? '<br><small style="opacity:0.85">' + String(detail).replace(/</g, '&lt;') + '</small>'
+            : '';
+        app.innerHTML =
+            '<div class="loading-container" style="padding:24px;max-width:420px">' +
+            '<p style="line-height:1.5;color:#1a1a1a"><strong>SIGTS could not start</strong><br>' +
+            String(message || 'A script failed to load or run.') +
+            detailHtml +
+            '<br><br><button type="button" class="login-btn" onclick="location.reload()">Reload</button> ' +
+            '<button type="button" class="login-btn ghost-btn" style="margin-left:8px" onclick="localStorage.clear();sessionStorage.clear();location.reload()">Clear cache &amp; reload</button></p></div>';
+    };
+
+    window.addEventListener(
+        'error',
+        function (event) {
+            var target = event.target;
+            if (!target || target.tagName !== 'SCRIPT' || !target.src) return;
+            window.__SIGTS_SCRIPT_ERROR = target.src;
+            if (typeof window.sigtsShowBootFailure === 'function') {
+                window.sigtsShowBootFailure(
+                    'Failed to load a required script.',
+                    target.src + (event.message ? ' — ' + event.message : '')
+                );
+            }
+        },
+        true
+    );
     if (!window.__SIGTS_CONFIG__) {
         window.__SIGTS_CONFIG__ = {
             NODE_ENV: 'development',
             API_URL: null,
-            API_PORT: 8000,
+            API_PORT: 8001,
             MAP_TILES_URL: '/tiles',
             PARK_NAME: 'Bwindi Impenetrable National Park',
             DEFAULT_LANGUAGE: 'en'

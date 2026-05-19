@@ -4,7 +4,7 @@
 const { logger } = require('../utils/logger');
 const {
     sendVerificationEmail,
-    sendActivityNotificationEmail,
+    sendRegistrationWelcomeEmail,
     isEmailConfigured
 } = require('./emailService');
 
@@ -78,13 +78,7 @@ async function notifyUserRegistered({ email, username, phone, userId }) {
 
     if (email) {
         try {
-            channels.email = await sendActivityNotificationEmail(
-                email,
-                username,
-                'Welcome to Bwindi SIGTS — account created',
-                'Your account has been registered successfully. You can sign in with your username and password. '
-                    + 'If you did not create this account, contact park support immediately.'
-            );
+            channels.email = await sendRegistrationWelcomeEmail(email, username, clientAppOrigin());
         } catch (err) {
             logger.error('Registration welcome email failed:', err.message);
         }

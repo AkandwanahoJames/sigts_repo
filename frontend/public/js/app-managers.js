@@ -24,6 +24,7 @@ class AuthManager {
                 this.user = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || 'null');
                 this.startSessionTimer();
                 this.bindActivityMonitor();
+                this.startPresenceHeartbeat();
             } catch(e) {
                 this.token = null;
                 localStorage.removeItem('token');
@@ -92,13 +93,51 @@ class AuthManager {
             };
         }
 
-        if (result.error) {
-            const detail = result.detail ? ` (${result.detail})` : '';
+        const registeredOk =
+            result.success === true
+            || result.code === 'REGISTRATION_SUCCESS'
+            || (result.ok === true && (result.status === 201 || result.status === 200));
+
+        if (registeredOk) {
+            const emailSent = Boolean(result.notifications?.email || result.emailSent);
+            const verificationSent = Boolean(
+                result.notifications?.verificationEmail || result.verificationEmailSent
+            );
+            let message = result.message || 'Your account was created successfully. You can sign in now.';
+            if (emailSent) {
+                message += ` A confirmation email was sent to ${email}.`;
+            } else if (!verificationSent) {
+                message += ' (Welcome email could not be sent — check server mail settings.)';
+            }
+            return {
+                success: true,
+                message,
+                user: result.user || null,
+                emailSent,
+                verificationEmailSent: verificationSent
+            };
+        }
+
+        if (result.conflict?.error && result.available === false) {
             return {
                 success: false,
-                error: `${result.error}${detail}`,
+                error: result.conflict.error,
+                field: result.conflict.field || null,
+                code: result.conflict.code || null
+            };
+        }
+
+        if (result.error) {
+            const detail = result.detail ? ` (${result.detail})` : '';
+            const suggestLogin = ['USERNAME_TAKEN', 'EMAIL_TAKEN', 'CREDENTIALS_TAKEN'].includes(result.code);
+            return {
+                success: false,
+                error: suggestLogin
+                    ? `${result.error} If you just finished registering, try signing in instead.`
+                    : `${result.error}${detail}`,
                 field: result.field || null,
-                code: result.code || null
+                code: result.code || null,
+                suggestLogin
             };
         }
 
@@ -112,14 +151,17 @@ class AuthManager {
             return { success: false, error: result.message || 'Registration failed' };
         }
 
-        if (result.success !== true && result.status && result.status >= 400) {
-            return { success: false, error: result.message || result.error || 'Registration failed', field: result.field };
+        if (result.status && result.status >= 400) {
+            return {
+                success: false,
+                error: result.message || result.error || 'Registration failed',
+                field: result.field
+            };
         }
 
         return {
-            success: true,
-            message: result.message || 'Registration successful',
-            user: result.user || null
+            success: false,
+            error: result.message || result.error || 'Registration failed'
         };
     }
 
@@ -418,6 +460,8 @@ class AuthManager {
         
         this.startSessionTimer();
         this.bindActivityMonitor();
+        this.startPresenceHeartbeat();
+        this._pingPresenceNow();
         AppState.currentUser = this.user;
         AppState.authToken = this.token;
         this.failedAttempts = 0;
@@ -443,6 +487,50 @@ class AuthManager {
         if (now < this.activityThrottleUntil) return;
         this.activityThrottleUntil = now + 1000;
         this.startSessionTimer();
+        this._schedulePresencePing();
+    }
+
+    _pingPresenceNow() {
+        if (!this.token || !this.user || String(this.token).startsWith('demo.')) return;
+        if (this._presencePingInFlight) return;
+        this._presencePingInFlight = true;
+        if (typeof API?.pingPresence !== 'function') {
+            this._presencePingInFlight = false;
+            return;
+        }
+        API.pingPresence()
+            .then((res) => {
+                if (res && res.success !== false && !res.error) {
+                    this._lastPresencePingAt = Date.now();
+                }
+            })
+            .catch(() => {})
+            .finally(() => {
+                this._presencePingInFlight = false;
+            });
+    }
+
+    _schedulePresencePing() {
+        if (!this.token || !this.user || String(this.token).startsWith('demo.')) return;
+        const now = Date.now();
+        if (this._lastPresencePingAt && now - this._lastPresencePingAt < 12000) return;
+        this._pingPresenceNow();
+    }
+
+    startPresenceHeartbeat() {
+        this.stopPresenceHeartbeat();
+        if (!this.token || !this.user || String(this.token).startsWith('demo.')) return;
+        this._pingPresenceNow();
+        this.presenceHeartbeatTimer = window.setInterval(() => {
+            this._pingPresenceNow();
+        }, 20000);
+    }
+
+    stopPresenceHeartbeat() {
+        if (this.presenceHeartbeatTimer) {
+            clearInterval(this.presenceHeartbeatTimer);
+            this.presenceHeartbeatTimer = null;
+        }
     }
 
     bindActivityMonitor() {
@@ -464,6 +552,7 @@ class AuthManager {
     }
 
     async logout() {
+        this.stopPresenceHeartbeat();
         this.token = null;
         this.user = null;
         API.setToken(null);
@@ -1532,6 +1621,9 @@ function sigtsLocalTourHelpCompose(trimmed, mergedThread, appContext, locationNa
 /** 3.1.1.6 — local persistence for profiling, popularity, feedback, offline query log */
 const SIGTS_AI_PROFILE_KEY = 'sigts_ai_user_profile_v1';
 const SIGTS_AI_POPULARITY_KEY = 'sigts_ai_popularity_v1';
+const SIGTS_POPULARITY_WINDOW_DAYS = 30;
+const SIGTS_POPULARITY_DEBOUNCE_MS = 2500;
+const SIGTS_POPULARITY_MAX_KEYS = 240;
 const SIGTS_AI_RECO_FEEDBACK_KEY = 'sigts_ai_reco_feedback_v1';
 const SIGTS_AI_CHAT_FEEDBACK_KEY = 'sigts_ai_chat_feedback_v1';
 const SIGTS_AI_QUERY_LOG_KEY = 'sigts_ai_query_log_v1';
@@ -1570,6 +1662,60 @@ function sigtsAiWriteJson(key, val) {
 class AIRecommendationEngine {
     constructor() {
         this.queryHistory = [];
+        this._lastPopularityRecord = null;
+    }
+
+    _normalizeContentKey(contentType, contentId) {
+        const type = String(contentType || 'view').trim().toLowerCase();
+        let id = String(contentId || 'unknown').trim();
+        if (type === 'tab' && id === 'animals') id = 'wildlife';
+        return `${type}:${id}`;
+    }
+
+    _popDayKey(ts = Date.now()) {
+        return new Date(ts).toISOString().slice(0, 10);
+    }
+
+    _popRecentCount(entry, windowDays = SIGTS_POPULARITY_WINDOW_DAYS) {
+        if (!entry || typeof entry !== 'object') return 0;
+        if (entry.daily && typeof entry.daily === 'object') {
+            const minDay = this._popDayKey(Date.now() - windowDays * 86400000);
+            return Object.entries(entry.daily).reduce(
+                (sum, [day, n]) => (day >= minDay ? sum + (Number(n) || 0) : sum),
+                0
+            );
+        }
+        const lastAt = Number(entry.lastAt) || 0;
+        if (lastAt < Date.now() - windowDays * 86400000) return 0;
+        return Number(entry.count) || 0;
+    }
+
+    _pruneDailyBuckets(daily) {
+        const minDay = this._popDayKey(Date.now() - 90 * 86400000);
+        const next = {};
+        Object.entries(daily || {}).forEach(([day, n]) => {
+            const c = Number(n) || 0;
+            if (day >= minDay && c > 0) next[day] = c;
+        });
+        return next;
+    }
+
+    _prunePopularityDoc(pop) {
+        const keys = Object.keys(pop || {});
+        if (keys.length <= SIGTS_POPULARITY_MAX_KEYS) return pop;
+        const ranked = keys
+            .map((k) => ({
+                k,
+                score: this._popRecentCount(pop[k]),
+                lastAt: Number(pop[k]?.lastAt) || 0
+            }))
+            .sort((a, b) => b.score - a.score || b.lastAt - a.lastAt);
+        const keep = new Set(ranked.slice(0, SIGTS_POPULARITY_MAX_KEYS).map((r) => r.k));
+        const next = {};
+        keys.forEach((k) => {
+            if (keep.has(k)) next[k] = pop[k];
+        });
+        return next;
     }
 
     async buildAppContextForTourHelp() {
@@ -1642,7 +1788,16 @@ class AIRecommendationEngine {
     }
 
     recordContentView(contentType, contentId, tags = []) {
-        const key = `${String(contentType || 'view')}:${String(contentId || 'unknown')}`;
+        const key = this._normalizeContentKey(contentType, contentId);
+        const now = Date.now();
+        if (
+            this._lastPopularityRecord?.key === key &&
+            now - (Number(this._lastPopularityRecord.at) || 0) < SIGTS_POPULARITY_DEBOUNCE_MS
+        ) {
+            return;
+        }
+        this._lastPopularityRecord = { key, at: now };
+
         const doc = this._loadProfileDoc();
         doc.viewCounts[key] = (Number(doc.viewCounts[key]) || 0) + 1;
         const tagList = Array.isArray(tags) ? tags : [];
@@ -1653,10 +1808,20 @@ class AIRecommendationEngine {
         });
         this._saveProfileDoc(doc);
 
-        const pop = sigtsAiReadJson(SIGTS_AI_POPULARITY_KEY, {});
-        const pKey = key;
-        const prev = pop[pKey] && typeof pop[pKey] === 'object' ? pop[pKey] : { count: 0 };
-        pop[pKey] = { count: (Number(prev.count) || 0) + 1, lastAt: Date.now(), type: contentType, id: String(contentId || '') };
+        let pop = sigtsAiReadJson(SIGTS_AI_POPULARITY_KEY, {});
+        const prev = pop[key] && typeof pop[key] === 'object' ? pop[key] : { count: 0 };
+        const daily = this._pruneDailyBuckets(prev.daily);
+        const dayKey = this._popDayKey(now);
+        daily[dayKey] = (Number(daily[dayKey]) || 0) + 1;
+        const parts = key.split(':');
+        pop[key] = {
+            count: (Number(prev.count) || 0) + 1,
+            lastAt: now,
+            daily,
+            type: parts[0] || contentType,
+            id: parts.slice(1).join(':') || String(contentId || '')
+        };
+        pop = this._prunePopularityDoc(pop);
         sigtsAiWriteJson(SIGTS_AI_POPULARITY_KEY, pop);
     }
 
@@ -1887,9 +2052,9 @@ class AIRecommendationEngine {
         const profile = await this.getUserProfile();
         const pop = sigtsAiReadJson(SIGTS_AI_POPULARITY_KEY, {});
         const popScore = (type, id) => {
-            const k = `${type}:${id}`;
+            const k = this._normalizeContentKey(type, id);
             const row = pop[k];
-            return row && typeof row === 'object' ? Number(row.count) || 0 : 0;
+            return this._popRecentCount(row);
         };
 
         let animals = [];
@@ -1938,17 +2103,25 @@ class AIRecommendationEngine {
 
     async getTrendingContent(limit = 6) {
         const pop = sigtsAiReadJson(SIGTS_AI_POPULARITY_KEY, {});
+        const excludedTabs = new Set(['login', 'register', 'reset_password']);
         const rows = Object.entries(pop)
             .map(([k, v]) => {
                 const parts = k.split(':');
                 const type = parts[0] || 'view';
                 const id = parts.slice(1).join(':') || '';
-                const c = v && typeof v === 'object' ? Number(v.count) || 0 : 0;
+                const recentCount = this._popRecentCount(v);
                 const lastAt = v && typeof v === 'object' ? Number(v.lastAt) || 0 : 0;
-                return { key: k, type, id, count: c, lastAt, trendScore: c + (lastAt > Date.now() - 86400000 * 7 ? 0.5 : 0) };
+                const count = v && typeof v === 'object' ? Number(v.count) || 0 : 0;
+                return { key: k, type, id, count, recentCount, lastAt };
             })
-            .filter((r) => r.count > 0)
-            .sort((a, b) => b.trendScore - a.trendScore)
+            .filter((r) => r.recentCount > 0)
+            .filter((r) => !(r.type === 'tab' && excludedTabs.has(r.id)))
+            .sort(
+                (a, b) =>
+                    b.recentCount - a.recentCount ||
+                    b.lastAt - a.lastAt ||
+                    String(a.id).localeCompare(String(b.id))
+            )
             .slice(0, limit);
         let animals = [];
         let stories = [];
@@ -1970,7 +2143,13 @@ class AIRecommendationEngine {
             dashboard: 'Home',
             ai_chat: 'Tour help',
             sightings: 'Sightings',
-            saved: 'Saved'
+            saved: 'Saved',
+            profile: 'Profile',
+            it_dashboard: 'IT Admin',
+            it_predictive_analytics: 'Predictive Analytics',
+            it_tour_assignments: 'Tour assignments',
+            guide_dashboard: 'Guide dashboard',
+            intranet: 'Staff intranet'
         };
         return rows.map((r) => {
             let name = r.id;
@@ -1979,14 +2158,23 @@ class AIRecommendationEngine {
             } else if (r.type === 'cultural' || r.type === 'story') {
                 name = storyById.get(r.id)?.title_en || `Story ${r.id.slice(0, 8)}`;
             } else if (r.type === 'tab') {
-                name = tabLabels[r.id] || `Tab: ${r.id}`;
+                name =
+                    tabLabels[r.id] ||
+                    String(r.id)
+                        .replace(/_/g, ' ')
+                        .replace(/\b\w/g, (c) => c.toUpperCase());
             }
+            const n = r.recentCount;
+            const reason =
+                n === 1
+                    ? `1 view in the last ${SIGTS_POPULARITY_WINDOW_DAYS} days on this device`
+                    : `${n} views in the last ${SIGTS_POPULARITY_WINDOW_DAYS} days on this device`;
             return {
                 id: r.id,
                 type: r.type,
                 name,
-                trendScore: r.trendScore,
-                reason: `${r.count} recent views on this device`
+                trendScore: r.recentCount,
+                reason
             };
         });
     }
@@ -2012,8 +2200,11 @@ class AIRecommendationEngine {
                     tokens.forEach((t) => {
                         if (an.includes(t)) s += 0.12;
                     });
-                    const popRow = sigtsAiReadJson(SIGTS_AI_POPULARITY_KEY, {})[`animal:${a.animal_id || a.id}`];
-                    const pc = popRow && Number(popRow.count) ? Number(popRow.count) : 0;
+                    const popRow =
+                        sigtsAiReadJson(SIGTS_AI_POPULARITY_KEY, {})[
+                            this._normalizeContentKey('animal', a.animal_id || a.id)
+                        ];
+                    const pc = this._popRecentCount(popRow);
                     s += Math.min(0.2, pc * 0.02);
                     return { id: String(a.animal_id || a.id), name: a.name, type: 'animal', similarity: Math.min(0.99, s) };
                 })
@@ -2320,7 +2511,9 @@ class ITManagerAPI {
             Intranet.getHRStats(),
             API.request('/admin/users?limit=1&offset=0'),
             Intranet.getInventory(),
-            API.getSightingStats(null, 3650)
+            API.getSightingStats(null, 3650),
+            API.getAdminActiveUsers(5),
+            API.getAdminSystemHealth()
         ]);
         const valueOf = (i, fallback) => (settled[i].status === 'fulfilled' && settled[i].value != null ? settled[i].value : fallback);
 
@@ -2329,17 +2522,27 @@ class ITManagerAPI {
         const usersSnapshot = valueOf(2, {});
         const inventory = valueOf(3, []);
         const sightingStats = valueOf(4, {});
+        const activeNow = valueOf(5, { count: 0, users: [] });
+        const systemHealth = valueOf(6, {});
         const liveTotalUsers = Number(usersSnapshot?.total || 0);
+        const activeSessions =
+            Number(activeNow?.count) ||
+            Number(adminStats?.activeSessionsNow) ||
+            (Array.isArray(activeNow?.users) ? activeNow.users.length : 0);
 
         const totalSightings = Number(
             sightingStats?.totalSightings ??
             sightingStats?.total ??
             0
         );
+        const globalPendingSync = Number(systemHealth?.checks?.pending_sync_items);
+        const localPendingSync = OfflineSync.getPendingCount();
 
         return {
-            activeUsers: Number(adminStats?.totalUsers || liveTotalUsers || 0),
-            syncQueueSize: OfflineSync.getPendingCount(),
+            activeUsers: activeSessions,
+            totalRegisteredUsers: Number(adminStats?.totalUsers || liveTotalUsers || 0),
+            syncQueueSize: Number.isFinite(globalPendingSync) ? globalPendingSync : localPendingSync,
+            localSyncQueueSize: localPendingSync,
             storageUsed: Content.getOfflineStorageSize(),
             totalSightings,
             averageRating: Number(adminStats?.avgRating || 0),
@@ -2450,11 +2653,11 @@ class ITManagerAPI {
         };
     }
 
-    async getLiveOperations() {
+    async getLiveOperations(windowMinutes = 5) {
         const settled = await Promise.allSettled([
-            API.getAdminActiveUsers(30),
+            API.getAdminActiveUsers(windowMinutes),
             Intranet.getIntranetStatus(),
-            API.request('/sync/status')
+            API.getAdminSystemHealth()
         ]);
         const valueOf = (i) => (settled[i].status === 'fulfilled' ? settled[i].value : null);
         settled.forEach((r, i) => {
@@ -2462,10 +2665,18 @@ class ITManagerAPI {
                 console.warn(`[ITAPI] live ops call ${i} failed:`, r.reason);
             }
         });
+        const health = valueOf(2) || {};
         return {
-            peers: (valueOf(0)?.users || []),
+            peers: valueOf(0)?.users || [],
+            activeCount: Number(valueOf(0)?.count) || (valueOf(0)?.users || []).length,
+            windowMinutes,
             intranetStatus: valueOf(1) || {},
-            syncStatus: valueOf(2) || {}
+            syncStatus: {
+                pending_items: Number(health?.checks?.pending_sync_items || 0),
+                total_items: Number(health?.checks?.total_sync_items || 0),
+                location_updates_last_15m: Number(health?.checks?.location_updates_last_15m || 0)
+            },
+            systemHealth: health
         };
     }
 

@@ -23,6 +23,7 @@ const {
     mapUniqueViolation
 } = require('../utils/userIdentity');
 const { resolvePublicAppBaseUrl } = require('../utils/appUrl');
+const { touchUserSessionActivity } = require('../utils/sessionPresence');
 const crypto = require('crypto');
 
 function clientContext(req) {
@@ -203,17 +204,18 @@ router.post('/register', [
 
     const client = await pool.connect();
     try {
-        const conflicts = await findRegistrationConflicts(client, usernameRaw, emailRaw);
-        const conflictResp = registrationConflictResponse(conflicts);
-        if (conflictResp) {
-            return res.status(conflictResp.status).json(conflictResp.body);
-        }
-
         const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
         const phoneNorm = String(phone || '').trim();
         const role = userType || 'tourist';
 
         await client.query('BEGIN');
+
+        const conflicts = await findRegistrationConflicts(client, usernameRaw, emailRaw);
+        const conflictResp = registrationConflictResponse(conflicts);
+        if (conflictResp) {
+            await client.query('ROLLBACK');
+            return res.status(conflictResp.status).json(conflictResp.body);
+        }
 
         const result = await client.query(
             `INSERT INTO users (user_id, username, password_hash, email, first_name, last_name, phone, user_type, is_active)
@@ -226,8 +228,8 @@ router.post('/register', [
 
         if (user.user_type === 'tourist') {
             await client.query(
-                `INSERT INTO tourists (user_id, interests) VALUES ($1, $2)`,
-                [user.user_id, '[]']
+                `INSERT INTO tourists (user_id, interests) VALUES ($1, '[]'::jsonb)`,
+                [user.user_id]
             );
         } else if (user.user_type === 'guide') {
             await client.query(
@@ -258,15 +260,19 @@ router.post('/register', [
         }
 
         const noticeParts = [];
-        if (notifications.email || notifications.verificationEmail) noticeParts.push('email');
+        if (notifications.email) noticeParts.push(`a welcome message to ${user.email}`);
+        if (notifications.verificationEmail) noticeParts.push('a verification link');
         if (notifications.sms) noticeParts.push('SMS');
         const noticeHint = noticeParts.length
-            ? ` Confirmation sent via ${noticeParts.join(' and ')}.`
+            ? ` We sent ${noticeParts.join(' and ')}.`
             : ' You can sign in now.';
 
         return res.status(201).json({
             success: true,
-            message: `Registration successful.${noticeHint}`,
+            code: 'REGISTRATION_SUCCESS',
+            message: `Your account was created successfully.${noticeHint}`,
+            emailSent: Boolean(notifications.email),
+            verificationEmailSent: Boolean(notifications.verificationEmail),
             notifications,
             user: {
                 id: user.user_id,
@@ -477,19 +483,7 @@ router.post('/login', [
             clientContext(req)
         );
 
-        if (coordinates) {
-            await pool.query(
-                `UPDATE users
-                 SET last_lat = $1, last_lng = $2, last_login = CURRENT_TIMESTAMP
-                 WHERE user_id = $3`,
-                [coordinates.lat, coordinates.lng, user.user_id]
-            );
-        } else {
-            await pool.query(
-                `UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE user_id = $1`,
-                [user.user_id]
-            );
-        }
+        await touchUserSessionActivity(user.user_id, coordinates);
 
         res.json({
             success: true,
@@ -683,6 +677,7 @@ router.post('/refresh', [
 
         const user = userResult.rows[0];
         const accessToken = createAccessToken(user.user_id, user.user_type);
+        await touchUserSessionActivity(user.user_id, getRequestCoordinates(req));
 
         return res.json({
             success: true,
@@ -824,10 +819,7 @@ router.post('/mfa/complete', [
             clientContext(req)
         );
 
-        await pool.query(
-            `UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE user_id = $1`,
-            [user.user_id]
-        );
+        await touchUserSessionActivity(user.user_id, getRequestCoordinates(req));
 
         return res.json({
             success: true,
@@ -972,10 +964,7 @@ router.post('/mfa/sms/complete', [
             user.user_type,
             clientContext(req)
         );
-        await pool.query(
-            `UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE user_id = $1`,
-            [user.user_id]
-        );
+        await touchUserSessionActivity(user.user_id, getRequestCoordinates(req));
         return res.json({
             success: true,
             token: accessToken,
@@ -1046,6 +1035,8 @@ router.post('/guest', [
             clientContext(req)
         );
 
+        await touchUserSessionActivity(user.user_id, coordinates);
+
         return res.status(201).json({
             success: true,
             token: accessToken,
@@ -1062,6 +1053,29 @@ router.post('/guest', [
     } catch (error) {
         logger.error('Guest access creation failed:', error.message);
         return res.status(500).json({ error: 'Failed to create guest session' });
+    }
+});
+
+// =====================================================
+// POST /api/auth/presence
+// Lightweight session heartbeat for IT realtime active-user views.
+// =====================================================
+router.post('/presence', authenticateJWT, async (req, res) => {
+    try {
+        const headerLat = Number(req.headers['x-user-lat'] ?? req.body?.lat);
+        const headerLng = Number(req.headers['x-user-lng'] ?? req.body?.lng);
+        const hasCoords = Number.isFinite(headerLat) && Number.isFinite(headerLng);
+        const ok = await touchUserSessionActivity(
+            req.user.user_id,
+            hasCoords ? { lat: headerLat, lng: headerLng } : null
+        );
+        if (!ok) {
+            return res.status(500).json({ error: 'Presence update failed' });
+        }
+        return res.json({ success: true, timestamp: new Date().toISOString() });
+    } catch (error) {
+        logger.error('Presence heartbeat failed:', error.message);
+        return res.status(500).json({ error: 'Presence update failed' });
     }
 });
 

@@ -274,6 +274,25 @@ class APIService {
             }
         }
 
+        if (
+            !publicAuth &&
+            typeof window.isParkAccessBlocked === 'function' &&
+            window.isParkAccessBlocked()
+        ) {
+            const pathOnly = String(endpoint || '').split('?')[0];
+            const allowedWhileLocked =
+                /^\/intranet\/status-lite$/i.test(pathOnly) ||
+                /^\/auth\//i.test(pathOnly);
+            if (!allowedWhileLocked) {
+                return {
+                    error: 'SIGTS is only available inside the Bwindi park boundary.',
+                    code: 'PARK_ACCESS_DENIED',
+                    status: 403,
+                    parkAccessDenied: true
+                };
+            }
+        }
+
         const opts = { ...options };
         delete opts.timeoutMs;
         const isFormData = opts.body instanceof FormData;
@@ -320,11 +339,14 @@ class APIService {
                     }
                 }
                 if (payload && typeof payload === 'object') {
-                    return { ...payload, status: response.status };
+                    return { ...payload, status: response.status, ok: false };
                 }
                 return { error: `HTTP ${response.status}`, status: response.status, raw };
             }
 
+            if (payload && typeof payload === 'object') {
+                return { ...payload, status: response.status, ok: true };
+            }
             return payload;
         } catch (error) {
             if (error?.name === 'AbortError') {
@@ -375,6 +397,13 @@ class APIService {
         } catch (_) {
             headers['x-sigts-sim-boundary'] = 'auto';
             headers['x-sigts-sim-network'] = 'auto';
+        }
+
+        if (typeof window.isParkAccessBlocked === 'function' && window.isParkAccessBlocked()) {
+            const pathOnly = String(endpoint || '').split('?')[0];
+            if (!/^\/intranet\/status-lite$/i.test(pathOnly) && !/^\/auth\//i.test(pathOnly)) {
+                throw new Error('PARK_ACCESS_DENIED');
+            }
         }
 
         const opts = { ...options };
@@ -1041,6 +1070,38 @@ class APIService {
         return result || { count: 0, users: [] };
     }
 
+    async pingPresence() {
+        const coords = this.getLiveCoordinates();
+        const body = coords ? JSON.stringify({ lat: coords.lat, lng: coords.lng }) : undefined;
+        const token = this.getToken();
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        if (coords) {
+            headers['x-user-lat'] = String(coords.lat);
+            headers['x-user-lng'] = String(coords.lng);
+        }
+        try {
+            const response = await fetch(`${getSigtsApiBaseUrl()}/auth/presence`, {
+                method: 'POST',
+                headers,
+                body: body || '{}'
+            });
+            const raw = await response.text();
+            let payload = null;
+            try {
+                payload = raw ? JSON.parse(raw) : null;
+            } catch {
+                payload = { error: raw };
+            }
+            if (!response.ok) {
+                return { ...(payload && typeof payload === 'object' ? payload : {}), error: payload?.error || `HTTP ${response.status}`, status: response.status };
+            }
+            return payload;
+        } catch (error) {
+            return { error: error?.message || 'Network error', network: true };
+        }
+    }
+
     async getAdminAuditLogs(limit = 100) {
         const result = await this.request(`/admin/audit-logs?limit=${encodeURIComponent(limit)}`);
         if (Array.isArray(result?.logs)) return result.logs;
@@ -1255,6 +1316,10 @@ class APIService {
             method: 'POST',
             body: JSON.stringify({ to_user_id: toUserId, body })
         });
+    }
+
+    async getAnalyticsOperationsStatus() {
+        return this.request('/analytics/operations/status');
     }
 
     async getAnalyticsAnomalies(z = 2.5) {

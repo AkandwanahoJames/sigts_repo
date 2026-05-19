@@ -2,6 +2,7 @@
 const jwt = require('jsonwebtoken');
 const { pool } = require('../config/database');
 const { logger } = require('../utils/logger');
+const { touchUserSessionActivity } = require('../utils/sessionPresence');
 const { REQUIREMENTS } = require('../config/requirements');
 
 const SESSION_IDLE_MINUTES = Number.isFinite(REQUIREMENTS.security.sessionIdleTimeoutMinutes)
@@ -132,24 +133,14 @@ async function authenticateJWT(req, res, next) {
             }
         }
 
-        // Lightweight auth heartbeat for "currently logged-in users" visibility.
-        // We intentionally don't block request flow on heartbeat update errors.
+        // Lightweight auth heartbeat for IT realtime active-user views.
         const headerLat = Number(req.headers['x-user-lat']);
         const headerLng = Number(req.headers['x-user-lng']);
         const hasCoords = Number.isFinite(headerLat) && Number.isFinite(headerLng);
-        const heartbeatSql = hasCoords
-            ? `UPDATE users
-               SET last_location_time = CURRENT_TIMESTAMP,
-                   last_lat = $1,
-                   last_lng = $2
-               WHERE user_id = $3`
-            : `UPDATE users
-               SET last_location_time = CURRENT_TIMESTAMP
-               WHERE user_id = $1`;
-        const heartbeatParams = hasCoords
-            ? [headerLat, headerLng, result.rows[0].user_id]
-            : [result.rows[0].user_id];
-        pool.query(heartbeatSql, heartbeatParams).catch((heartbeatError) => {
+        touchUserSessionActivity(
+            result.rows[0].user_id,
+            hasCoords ? { lat: headerLat, lng: headerLng } : null
+        ).catch((heartbeatError) => {
             logger.debug('Auth heartbeat update skipped:', heartbeatError.message);
         });
 

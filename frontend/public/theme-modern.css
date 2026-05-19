@@ -2310,6 +2310,39 @@ body.auth-page {
     align-items: center;
 }
 
+.pa-toolbar--ops {
+    flex-wrap: wrap;
+    gap: 10px 12px;
+}
+
+.pa-ops-status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    flex: 1 1 220px;
+    min-width: 200px;
+    font-size: 12px;
+    color: rgba(72, 112, 112, 0.95);
+}
+
+.pa-ops-stat {
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(46, 125, 50, 0.1);
+    border: 1px solid rgba(46, 125, 50, 0.2);
+}
+
+.pa-ops-stat--warn {
+    background: rgba(198, 40, 40, 0.08);
+    border-color: rgba(198, 40, 40, 0.25);
+}
+
+.pa-ops-btn.is-busy,
+.pa-ops-btn:disabled {
+    opacity: 0.55;
+    pointer-events: none;
+}
+
 .pa-toolbar-title {
     font-weight: 700;
     color: var(--palette-navy);

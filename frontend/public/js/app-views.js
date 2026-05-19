@@ -455,12 +455,16 @@ function getLandingViewForUser(user) {
 
 function navigateTo(view, options = {}) {
     const targetView = normalizeView(view);
-    try {
-        if (typeof AI !== 'undefined' && AI.recordContentView) {
-            AI.recordContentView('tab', targetView, [targetView]);
+    if (
+        Auth.isAuthenticated() &&
+        !PUBLIC_VIEWS.has(targetView) &&
+        isParkAccessBlocked(Auth.getCurrentUser())
+    ) {
+        if (options.suppressAccessToast !== true) {
+            const s = getParkAccessState();
+            showToast(getAccessStatusText(s), 'warning');
         }
-    } catch (_) {
-        /**/
+        return renderView(targetView, { updateHash: options.updateHash !== false, suppressAccessToast: true });
     }
     const shouldUpdateHash = options.updateHash !== false;
 
@@ -495,7 +499,7 @@ function renderKpiStrip(items = []) {
     return `<div class="kpi-strip">${items.map((item) => `
         <div class="kpi-card">
             <div class="kpi-label">${escapeHtml(item.label || 'Metric')}</div>
-            <div class="kpi-value">${escapeHtml(String(item.value ?? 0))}</div>
+            <div class="kpi-value"${item.kpiId ? ` id="${escapeHtml(item.kpiId)}"` : ''}>${escapeHtml(String(item.value ?? 0))}</div>
             ${item.hint ? `<div class="kpi-hint">${escapeHtml(item.hint)}</div>` : ''}
         </div>
     `).join('')}</div>`;
@@ -856,40 +860,115 @@ let guideDashboardRefreshTimer = null;
 let assignmentDashboardRefreshTimer = null;
 let parkAccessSimulation = (() => {
     try {
-        const saved = JSON.parse(localStorage.getItem('parkAccessSimulation') || '{}');
+        const raw = localStorage.getItem('parkAccessSimulation');
+        if (raw) {
+            const saved = JSON.parse(raw);
         return {
-            boundary: ['auto', 'inside', 'outside'].includes(saved.boundary) ? saved.boundary : 'auto',
-            network: ['auto', 'online', 'offline'].includes(saved.network) ? saved.network : 'auto'
+                boundary: ['auto', 'inside', 'outside'].includes(saved.boundary) ? saved.boundary : 'inside',
+                network: ['auto', 'online', 'offline'].includes(saved.network) ? saved.network : 'online'
         };
+        }
     } catch (_) {
-        return { boundary: 'auto', network: 'auto' };
+        /**/
     }
+    // First-run demo default: panel presentations off-site on cellular data.
+    return { boundary: 'inside', network: 'online' };
 })();
 
 function saveParkAccessSimulation() {
     localStorage.setItem('parkAccessSimulation', JSON.stringify(parkAccessSimulation));
 }
 
+/** One-time upgrade for devices stuck on auto/auto from earlier builds. */
+function ensureDemoPresentationDefaults() {
+    try {
+        const flag = 'sigts_demo_presentation_defaults_v1';
+        if (localStorage.getItem(flag)) return;
+        const raw = localStorage.getItem('parkAccessSimulation');
+        if (!raw) {
+            parkAccessSimulation = { boundary: 'inside', network: 'online' };
+            saveParkAccessSimulation();
+        } else {
+            const saved = JSON.parse(raw);
+            if (saved.boundary === 'auto' && saved.network === 'auto') {
+                parkAccessSimulation = { boundary: 'inside', network: 'online' };
+                saveParkAccessSimulation();
+            }
+        }
+        localStorage.setItem(flag, '1');
+    } catch (_) {
+        /**/
+    }
+}
+
+window.ensureDemoPresentationDefaults = ensureDemoPresentationDefaults;
+
+function roleRequiresParkAccessPolicy(user) {
+    const role = getEffectiveRole(user || Auth.getCurrentUser() || {});
+    return role === 'tourist' || role === 'guide';
+}
+
 function getParkAccessState() {
     const live = Geofence?.currentLocation || AppState?.currentLocation || null;
     const liveInside = live ? !!Geofence?.isInsidePark?.(live.lat, live.lng) : null;
-    const boundaryMode = parkAccessSimulation.boundary || 'auto';
-    const networkMode = parkAccessSimulation.network || 'auto';
+    const boundaryMode = parkAccessSimulation.boundary || 'inside';
+    const networkMode = parkAccessSimulation.network || 'online';
     const role = getEffectiveRole(Auth.getCurrentUser() || {});
     const accessContext = AppState?.accessContext || {};
     const intranetState = accessContext.isIntranet;
     const requiresIntranet = role === 'tourist' || role === 'guide';
+    const policyMode = accessContext.mode || 'demo';
     const backendInside = typeof accessContext.insideBoundary === 'boolean' ? accessContext.insideBoundary : null;
-    const insidePark = boundaryMode === 'auto'
-        ? (backendInside === null ? (liveInside === null ? true : liveInside) : backendInside)
-        : boundaryMode === 'inside';
-    let online = networkMode === 'auto'
-        ? (typeof intranetState === 'boolean' ? intranetState : navigator.onLine)
-        : networkMode === 'online';
-    if (networkMode === 'auto' && requiresIntranet && intranetState === false) {
+
+    const insidePark =
+        boundaryMode === 'inside'
+            ? true
+            : boundaryMode === 'outside'
+              ? false
+              : backendInside === null
+                ? liveInside === null
+                    ? policyMode === 'demo'
+                    : liveInside
+                : backendInside;
+
+    let online =
+        networkMode === 'online'
+            ? true
+            : networkMode === 'offline'
+              ? false
+              : typeof intranetState === 'boolean'
+                ? intranetState
+                : navigator.onLine;
+
+    if (policyMode === 'demo' && networkMode === 'auto' && boundaryMode === 'auto' && navigator.onLine) {
+        online = true;
+    }
+
+    if (!insidePark) {
         online = false;
     }
-    const status = (!online || !insidePark) ? 'restricted' : 'active';
+
+    if (insidePark) {
+        return {
+            status: 'active',
+            online,
+            insidePark: true,
+            location: live,
+            liveInside,
+            boundaryMode,
+            networkMode,
+            requiresIntranet,
+            policyMode,
+            decisionSource: accessContext.source || (policyMode === 'demo' ? 'demo-presentation' : 'live'),
+            decisionReason:
+                accessContext.reason ||
+                (!online
+                    ? 'Inside park — offline mode (cached park content remains available)'
+                    : 'Inside park — connected to park network')
+        };
+    }
+
+    const status = requiresIntranet ? 'restricted' : 'active';
     return {
         status,
         online,
@@ -899,17 +978,56 @@ function getParkAccessState() {
         boundaryMode,
         networkMode,
         requiresIntranet,
-        policyMode: accessContext.mode || 'demo',
+        policyMode,
         decisionSource: accessContext.source || 'live',
         decisionReason: accessContext.reason || ''
     };
 }
 
 function getAccessStatusText(state) {
-    if (!state.online && !state.insidePark) return 'Out of park boundary and network unavailable';
-    if (!state.online) return 'Network unavailable for this park';
-    if (!state.insidePark) return 'Outside approved park boundary';
-    return 'Inside boundary and network available';
+    if (!state.insidePark) {
+        return 'Outside park boundary — off intranet and SIGTS is unavailable';
+    }
+    if (!state.online && state.insidePark) {
+        return 'Inside park — offline mode (cached content available; park network issues)';
+    }
+    if (!state.online) return 'Offline';
+    return 'Inside park — on park network';
+}
+
+function isParkAccessBlocked(user) {
+    if (!roleRequiresParkAccessPolicy(user)) return false;
+    return !getParkAccessState().insidePark;
+}
+
+window.isParkAccessBlocked = isParkAccessBlocked;
+
+function renderParkAccessLockoutScreen(state) {
+    const reasons = [
+        'You are outside the approved Bwindi Impenetrable National Park boundary and out of reach of the park intranet.',
+        'Visitor phones on cellular or external Wi‑Fi cannot use SIGTS until you are physically inside the forest.'
+    ];
+    const simControls =
+        state.policyMode === 'demo'
+            ? `<div class="park-access-lockout-sim">
+                <p class="animals-page-blurb"><strong>Demo:</strong> <strong>Force Outside</strong> simulates this lock-out. <strong>Force Offline</strong> while <em>inside</em> the park only tests offline mode — the app stays usable with cached content.</p>
+                <div class="info-chip-row" style="flex-wrap:wrap;gap:8px;">
+                    <button type="button" class="login-btn" onclick="resetParkAccessSimulation()">${icon('target', 'icon-sm')} Restore presentation access</button>
+                    <button type="button" class="small-btn" onclick="setParkBoundaryMode('inside')">Force inside</button>
+                </div>
+               </div>`
+            : '';
+    return `<div class="park-access-lockout" role="alert">
+        <div class="park-access-lockout-icon" aria-hidden="true">${icon('shield', 'icon-xl')}</div>
+        <h2 class="park-access-lockout-title">SIGTS is not available here</h2>
+        <p class="park-access-lockout-lead">SIGTS is bound to the park: you must be <strong>inside Bwindi</strong> on the <strong>park intranet</strong>. Away from the boundary you are off-network and cannot use visitor features.</p>
+        <ul class="park-access-lockout-list">${reasons.map((r) => `<li>${escapeHtml(r)}</li>`).join('')}</ul>
+        <div class="park-access-lockout-status">
+            <span class="park-chip ${state.insidePark ? 'ok' : 'warn'}">Boundary: ${state.insidePark ? 'Inside' : 'Outside'}</span>
+            <span class="park-chip ${state.online ? 'ok' : 'warn'}">Network: ${state.online ? 'On intranet' : 'Off intranet'}</span>
+        </div>
+        ${simControls}
+    </div>`;
 }
 
 function renderParkAccessPanel() {
@@ -951,9 +1069,9 @@ function renderParkAccessPanel() {
                 <button type="button" class="small-btn ${state.networkMode === 'auto' ? 'btn-primary' : ''}" onclick="setParkNetworkMode('auto')">Network Auto</button>
                 <button type="button" class="small-btn ${state.networkMode === 'online' ? 'btn-primary' : ''}" onclick="setParkNetworkMode('online')">Force Online</button>
                 <button type="button" class="small-btn ${state.networkMode === 'offline' ? 'btn-primary' : ''}" onclick="setParkNetworkMode('offline')">Force Offline</button>
-                <button type="button" class="small-btn" onclick="resetParkAccessSimulation()">Reset Simulation</button>
+                <button type="button" class="small-btn" onclick="resetParkAccessSimulation()">Reset presentation access</button>
             </div>
-            <div class="park-access-note">Use these controls to validate boundary and network restriction behavior.</div>
+            <div class="park-access-note">Off-site panel default: <strong>inside park + online</strong> (cellular data works). Use <strong>Force Outside</strong> to preview lock-out. <strong>Force Offline</strong> while inside tests offline mode without blocking the app.</div>
         </details>` : '<div class="park-access-note">Simulation controls are disabled in production mode.</div>'}
     </section>`;
 }
@@ -965,16 +1083,47 @@ function getGuideOpsManager() {
     return window.__guideOpsManager;
 }
 
-function renderLiveUserRows(peers = []) {
+function formatSigtsRelativeTime(isoOrDate) {
+    if (!isoOrDate) return 'just now';
+    const t = new Date(isoOrDate).getTime();
+    if (!Number.isFinite(t)) return 'recently';
+    const sec = Math.max(0, Math.round((Date.now() - t) / 1000));
+    if (sec < 60) return `${sec}s ago`;
+    const min = Math.round(sec / 60);
+    if (min < 60) return `${min}m ago`;
+    const hr = Math.round(min / 60);
+    return `${hr}h ago`;
+}
+
+function renderLiveUserRows(peers = [], windowMinutes = 5) {
     if (!Array.isArray(peers) || !peers.length) {
-        return '<div class="user-item">No active users detected in the latest 5-minute window.</div>';
+        return `<div class="user-item">No active users in the last ${windowMinutes}-minute window. Users appear here after authenticated activity (API calls or presence heartbeat).</div>`;
     }
-    return peers.slice(0, 20).map((peer) => {
+    return peers
+        .slice(0, 20)
+        .map((peer) => {
         const where = peer.location
             ? ` @ ${Number(peer.location.lat).toFixed(4)}, ${Number(peer.location.lng).toFixed(4)}`
-            : ' @ location unavailable';
-        return `<div class="user-item">${escapeHtml(peer.name || 'User')} (${escapeHtml(peer.type || 'user')})${where}</div>`;
-    }).join('');
+                : '';
+            const seen = formatSigtsRelativeTime(peer.last_seen || peer.lastSeen);
+            const label = peer.name || peer.username || 'User';
+            const handle = peer.username && peer.username !== label ? ` (@${peer.username})` : '';
+            return `<div class="user-item"><strong>${escapeHtml(label)}</strong>${handle ? `<span class="ui-modal-muted">${escapeHtml(handle)}</span>` : ''} <span class="status-badge neutral">${escapeHtml(peer.type || peer.role || 'user')}</span><br><small>Last active ${escapeHtml(seen)}${where ? ` · ${escapeHtml(where.trim())}` : ' · location unavailable'}</small></div>`;
+        })
+        .join('');
+}
+
+function renderLivePeersSnapshotRows(peers = [], windowMinutes = 5) {
+    if (!Array.isArray(peers) || !peers.length) {
+        return `<div class="seasonal-item">• No live peers in the last ${windowMinutes} minutes.</div>`;
+    }
+    return peers
+        .slice(0, 8)
+        .map((p) => {
+            const seen = formatSigtsRelativeTime(p.last_seen || p.lastSeen);
+            return `<div class="seasonal-item">• ${escapeHtml(p.name || 'Peer')} (${escapeHtml(p.type || 'user')}) — ${escapeHtml(seen)}${p.location ? ` @ ${Number(p.location.lat).toFixed(4)}, ${Number(p.location.lng).toFixed(4)}` : ''}</div>`;
+        })
+        .join('');
 }
 
 /** IT dashboard: directory rows with per-account deactivation (server-backed). */
@@ -996,16 +1145,43 @@ function renderItAccountDirectory(users, currentUserId) {
 
 async function refreshAdminRealtimeUsers() {
     if (window.currentView !== 'it_dashboard') return;
-    const listNode = document.getElementById('adminLiveUsersList');
-    if (!listNode) return;
-    const liveOps = await ITAPI.getLiveOperations();
+    const liveOps = await ITAPI.getLiveOperations(5);
     const peers = Array.isArray(liveOps?.peers) ? liveOps.peers : [];
-    listNode.innerHTML = renderLiveUserRows(peers);
+    const activeCount = Number(liveOps?.activeCount) || peers.length;
+    const windowMinutes = Number(liveOps?.windowMinutes) || 5;
+
+    const listNode = document.getElementById('adminLiveUsersList');
+    if (listNode) {
+        listNode.innerHTML = renderLiveUserRows(peers, windowMinutes);
+    }
+
+    const peersNode = document.getElementById('adminLivePeersSnapshot');
+    if (peersNode) {
+        peersNode.innerHTML = renderLivePeersSnapshotRows(peers, windowMinutes);
+    }
+
     const stampNode = document.getElementById('adminLiveUsersStamp');
     if (stampNode) {
         const usersSnapshot = await API.request('/admin/users?limit=1&offset=0');
         const totalUsers = Number(usersSnapshot?.total || 0);
-        stampNode.textContent = `Updated ${new Date().toLocaleTimeString()} • ${peers.length} active now / ${totalUsers} total`;
+        stampNode.textContent = `Live · ${new Date().toLocaleTimeString()} · ${activeCount} active (${windowMinutes}m) / ${totalUsers} registered`;
+    }
+
+    const kpiActive = document.getElementById('itKpiActiveUsers');
+    if (kpiActive) kpiActive.textContent = String(activeCount);
+
+    const recActive = document.getElementById('itRecActiveUsersMatch');
+    if (recActive) recActive.textContent = `${activeCount} online`;
+
+    const syncPending = document.getElementById('itSyncPendingValue');
+    const kpiPending = document.getElementById('itKpiPendingSync');
+    const pendingVal = String(Number(liveOps?.syncStatus?.pending_items || 0));
+    if (syncPending) syncPending.textContent = pendingVal;
+    if (kpiPending) kpiPending.textContent = pendingVal;
+
+    const locPulse = document.getElementById('itLocationPulseValue');
+    if (locPulse) {
+        locPulse.textContent = String(Number(liveOps?.syncStatus?.location_updates_last_15m || 0));
     }
 }
 
@@ -1021,7 +1197,7 @@ function startAdminRealtimeUsersRefresh() {
     refreshAdminRealtimeUsers();
     adminRealtimeUsersTimer = setInterval(() => {
         refreshAdminRealtimeUsers();
-    }, 15000);
+    }, 8000);
 }
 
 function stopGuideDashboardRefresh() {
@@ -1140,6 +1316,9 @@ function renderMainLayout(content) {
 let __sigtsRenderNonce = 0;
 const __sigtsViewHtmlCache = new Map(); // key -> { html, at }
 const __sigtsViewInFlight = new Map(); // key -> Promise<string>
+const SIGTS_ANIMALS_GUIDE_GROUP_KEY = 'sigts_animals_guide_group';
+const SIGTS_WILDLIFE_SEARCH_KEY = 'sigts_wildlife_search';
+const ANIMALS_GUIDE_GROUP_ORDER = ['great_apes', 'megafauna', 'primates', 'antelope'];
 
 function getViewCacheKey(view) {
     const role = getEffectiveRole(Auth.getCurrentUser() || {});
@@ -1188,6 +1367,61 @@ function readPredictiveAnalyticsFilters() {
     const animalId = sessionStorage.getItem('sigts.pa.animal') || '';
     return { days, congestionDate, animalId };
 }
+
+function getPaDateRangeIso() {
+    const filters = readPredictiveAnalyticsFilters();
+    const end = new Date();
+    const start = new Date(end.getTime() - filters.days * 86400000);
+    return { start: start.toISOString(), end: end.toISOString(), days: filters.days };
+}
+
+function paOpsSetBusy(busy) {
+    window.__paOpsBusy = !!busy;
+    document.querySelectorAll('.pa-ops-btn').forEach((btn) => {
+        btn.disabled = !!busy;
+        btn.classList.toggle('is-busy', !!busy);
+    });
+}
+
+async function paOpsRun(fn) {
+    if (window.__paOpsBusy) return;
+    paOpsSetBusy(true);
+    try {
+        await fn();
+    } finally {
+        paOpsSetBusy(false);
+        if (typeof window.refreshPaOperationsStatus === 'function') {
+            window.refreshPaOperationsStatus();
+        }
+    }
+}
+
+window.refreshPaOperationsStatus = async function () {
+    const el = document.getElementById('pa-ops-status');
+    if (!el) return;
+    el.setAttribute('aria-busy', 'true');
+    const s = await API.getAnalyticsOperationsStatus();
+    el.removeAttribute('aria-busy');
+    if (s?.status >= 400 || s?.error) {
+        el.innerHTML = `<span class="pa-ops-stat pa-ops-stat--warn">${escapeHtml(s?.error || 'Operations status unavailable')}</span>`;
+        return;
+    }
+    const stats = [
+        `${s.schedules_count ?? 0} schedule(s)`,
+        `${s.training_jobs_count ?? 0} training job(s)`,
+        `${s.backups_count ?? 0} backup(s)`
+    ];
+    if (s.latest_training_job?.status) {
+        stats.push(`latest job: ${s.latest_training_job.status}`);
+    }
+    if (s.last_schedule_run_at) {
+        stats.push(`last schedule: ${new Date(s.last_schedule_run_at).toLocaleString()}`);
+    }
+    if (s.last_backup_at) {
+        stats.push(`last backup: ${new Date(s.last_backup_at).toLocaleString()}`);
+    }
+    el.innerHTML = stats.map((t) => `<span class="pa-ops-stat">${escapeHtml(t)}</span>`).join('');
+};
 
 window.applyPredictiveAnalyticsFilters = function () {
     if (!requireITManagerAccess('predictive analytics')) return;
@@ -1500,68 +1734,6 @@ function speciesAIPromptFromRecord(animal = {}) {
     const sci = String(animal.scientific_name || animal.scientific || '').trim();
     const name = animal.name || 'this species';
     return `Field brief for Bwindi: ${name}${sci ? ` (${sci})` : ''}. Usual trail zones, habitat, visitor rules, seasonality, status, one rumor to correct. Rangers’ safety line comes first.`;
-}
-
-/** One catalogue tile (Wildlife tab + dashboard spotlight). */
-function renderAnimalSpeciesCardHtml(animal) {
-    const rawId = animal.animal_id || animal.id || '';
-    const id = escapeHtml(String(rawId));
-    const thumb = firstSpeciesImage(animal);
-    const teaserSource = animal.description ? String(animal.description) : 'Tap for field notes from the catalogue.';
-    const teaser = escapeHtml(truncateSnippet(teaserSource, 280));
-    const sci = escapeHtml(String(animal.scientific_name || animal.scientific || 'Scientific name unavailable'));
-    const status = String(animal.conservation_status || animal.status || 'least_concern').toLowerCase().replace(/\s+/g, '_');
-    const statusLabel = escapeHtml(String(animal.conservation_status || animal.status || 'least_concern').replace(/_/g, ' '));
-    const thumbHtml = thumb
-        ? `<div class="animal-card-thumb"><img src="${escapeHtml(thumb)}" alt="${escapeHtml(animal.name || 'Species')}" loading="lazy" decoding="async" /></div>`
-        : `<div class="animal-card-thumb animal-card-thumb--fallback">${icon(getAnimalIconName(animal.name), 'icon-xl')}</div>`;
-    const aiPrompt = speciesAIPromptFromRecord(animal);
-    const searchBlob = `${String(animal.name || '')} ${String(animal.scientific_name || animal.scientific || '')}`.toLowerCase().replace(/"/g, '');
-    return `<article class="animal-card animal-card--interactive" tabindex="0" data-species-q="${escapeHtml(searchBlob)}" aria-label="${escapeHtml(animal.name)} details" onclick="openAnimalSpeciesDetail('${id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAnimalSpeciesDetail('${id}');}">
-            ${thumbHtml}
-            <div class="animal-info">
-                <div class="animal-name">${escapeHtml(animal.name)}</div>
-                <div class="animal-scientific">${sci}</div>
-                <p class="animal-teaser">${teaser}</p>
-                <span class="animal-status status-${escapeHtml(status.replace(/_/g, '-'))}">${statusLabel}</span>
-                <div class="animal-card-actions">
-                    <button type="button" class="small-btn" onclick="event.stopPropagation(); navigateToAIWithPrompt(${JSON.stringify(aiPrompt)});">${icon('feather', 'icon-sm')} Let's Chat</button>
-                    <button type="button" class="small-btn ghost-btn" onclick="event.stopPropagation(); submitContentHelpfulness('animal', '${id}', ${JSON.stringify(animal.name || '')});">${icon('target', 'icon-sm')} Helpful?</button>
-                </div>
-            </div>
-        </article>`;
-}
-
-function pickDashboardSpotlightAnimals(animals, limit = 24) {
-    if (!Array.isArray(animals) || !animals.length) return [];
-    const rank = (name) => {
-        const n = String(name || '').toLowerCase();
-        if (n.includes('gorilla')) return 0;
-        if (n.includes('chimp')) return 1;
-        if (n.includes('elephant')) return 2;
-        if (n.includes('turaco')) return 3;
-        if (n.includes('colobus')) return 4;
-        if (n.includes('crimson') || n.includes('broadbill') || n.includes('golden cat') || n.includes('leopard')) return 5;
-        return 20;
-    };
-    return [...animals]
-        .filter((a) => a && a.name && (a.animal_id || a.id))
-        .sort((a, b) => {
-            const d = rank(a.name) - rank(b.name);
-            if (d !== 0) return d;
-            const ia = speciesHasDbImage(a) ? 1 : 0;
-            const ib = speciesHasDbImage(b) ? 1 : 0;
-            if (ib !== ia) return ib - ia;
-            return String(a.name).localeCompare(String(b.name));
-        })
-        .slice(0, limit);
-}
-
-function renderDashboardSpeciesSpotlight(animals) {
-    const picks = pickDashboardSpotlightAnimals(animals, 24);
-    if (!picks.length) return '';
-    const cards = picks.map((a) => renderAnimalSpeciesCardHtml(a)).join('');
-    return `<div class="section-card dashboard-species-spotlight"><div class="section-header"><h3>${icon('paw', 'icon-sm')} Species to explore</h3></div><p class="animals-page-blurb">A sample from the Bwindi catalogue on this device. Tap a card for ranger-style notes, or browse the full list.</p><div class="info-chip-row" style="margin-bottom:12px;"><button type="button" class="small-btn" onclick="navigateTo('wildlife')">${icon('grid', 'icon-sm')} Open wildlife catalogue</button></div><div class="animals-list animals-list--responsive">${cards}</div></div>`;
 }
 
 function culturalAIPromptFromRecord(story = {}) {
@@ -2275,37 +2447,30 @@ function buildTourFocusThumbnailMap(animals) {
 }
 
 /** §3.1.1.3 — cross-catalog search plus saved bookmarks (device-local). */
-function renderTourismBookmarksRow() {
-    const rows =
-        typeof Content?.readBookmarks === 'function'
-            ? Content.readBookmarks()
-            : Array.isArray(Content?.bookmarks)
-              ? Content.bookmarks
-              : [];
-    const items = [...rows].sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || ''))).slice(0, 10);
-    if (!items.length) {
-        return `<div class="section-card sigts-dashboard-saved"><div class="section-header"><h3>${icon('bookmark', 'icon-sm')} Saved content</h3></div>        <p class="animals-page-blurb">Tap the bookmark icon on species, places, or stories — shortcuts land here and on the <strong>Saved</strong> tab.</p></div>`;
-    }
-    const escAttr = (s) => String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    const chips = items
-        .map((b) => {
-            const rawId = String(b.id || '').trim();
-            const safeId = escAttr(rawId);
-            const lab = escapeHtml(String(b.title || b.id || 'Saved item'));
-            if (b.type === 'animal')
-                return `<button type="button" class="small-btn" onclick="openAnimalSpeciesDetail('${safeId}')">${icon('paw', 'icon-sm')} ${lab}</button>`;
-            if (b.type === 'location')
-                return `<button type="button" class="small-btn" onclick="openParkLocationDetail('${safeId}')">${icon('map', 'icon-sm')} ${lab}</button>`;
-            if (b.type === 'cultural')
-                return `<button type="button" class="small-btn" onclick="openCulturalStoryDetail('${safeId}')">${icon('book', 'icon-sm')} ${lab}</button>`;
-            return `<button type="button" class="small-btn ghost-btn" disabled title="Open from original screen">${escapeHtml(String(b.type))}: ${lab}</button>`;
-        })
-        .join('');
-    return `<div class="section-card sigts-dashboard-saved"><div class="section-header"><h3>${icon('bookmark', 'icon-sm')} Saved picks</h3></div><div class="info-chip-row" style="flex-wrap:wrap">${chips}</div></div>`;
+const SIGTS_DASH_HERO_SLIDES = [
+    { headline: 'EXPLORE BWINDI', image: '/images/bwindi-forest-hike.png' },
+    { headline: 'MEET THE GORILLAS', image: '/images/gorilla-card.png' },
+    { headline: 'FOREST TRAILS', image: '/images/forest-walk-card.png' },
+    { headline: 'LIVE PARK MAP', image: '/images/map-mist-card.png' }
+];
+
+const SIGTS_DASH_RANKED = [
+    { rank: 1, title: 'Mountain gorilla trek', place: 'Buhoma · Rushaga', image: '/images/gorilla-card.png', view: 'wildlife' },
+    { rank: 2, title: 'Forest birding', place: 'Ruhija highlands', image: '/images/bird-card.png', view: 'wildlife' },
+    { rank: 3, title: 'Park map & gates', place: 'Navigate safely', image: '/images/map-mist-card.png', view: 'map' },
+    { rank: 4, title: 'Cultural stories', place: 'Community heritage', image: '/images/culture-card.png', view: 'culture' }
+];
+
+function dashRankSuffix(n) {
+    if (n === 1) return 'st';
+    if (n === 2) return 'nd';
+    if (n === 3) return 'rd';
+    return 'th';
 }
 
-/** Travel-style discovery header: hero search + horizontal category chips (tourist Home). */
+/** Tourist Home — editorial hero + ranked highlights (SIGTS green / lime accent). */
 function renderDiscoveryHomePanel() {
+    const slide = SIGTS_DASH_HERO_SLIDES[0];
     const chipDefs = [
         ['wildlife', 'paw', 'Wildlife'],
         ['map', 'map', 'Map'],
@@ -2317,25 +2482,73 @@ function renderDiscoveryHomePanel() {
     const chips = chipDefs
         .map(
             ([vid, ic, lab]) =>
-                `<button type="button" class="sigts-disc-chip" onclick="navigateTo('${vid}')">${icon(ic, 'icon-md')}<span>${escapeHtml(lab)}</span></button>`
+                `<button type="button" class="sigts-dash-chip" onclick="navigateTo('${vid}')">${icon(ic, 'icon-md')}<span>${escapeHtml(lab)}</span></button>`
         )
         .join('');
-    return `<section class="sigts-discovery-panel" aria-labelledby="sigts-discovery-heading">
-        <div class="sigts-discovery-intro">
-            <span class="sigts-discovery-eyebrow">Bwindi visitor guide</span>
-            <h2 id="sigts-discovery-heading" class="sigts-discovery-heading">Explore the park</h2>
-            <p class="sigts-discovery-tagline">Search wildlife, gates, trails, and cultural stories. Cache content from Profile for offline treks.</p>
+    const railHtml = SIGTS_DASH_HERO_SLIDES.map(
+        (s, i) =>
+            `<button type="button" class="sigts-dash-rail-btn${i === 0 ? ' is-active' : ''}" data-dash-hero-rail="${i}" aria-label="Slide ${i + 1}"><span>${String(i + 1).padStart(2, '0')}</span></button>`
+    ).join('');
+    const rankedHtml = SIGTS_DASH_RANKED.map(
+        (r) =>
+            `<article class="sigts-dash-rank-card" style="--rank-bg:url('${r.image}')" role="button" tabindex="0" onclick="navigateTo('${r.view}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();navigateTo('${r.view}');}"><span class="sigts-dash-rank-badge">${r.rank}${dashRankSuffix(r.rank)} place</span><h3>${escapeHtml(r.title)}</h3><p>${escapeHtml(r.place)}</p></article>`
+    ).join('');
+
+    return `<section class="sigts-dash-editorial" aria-labelledby="sigts-dash-hero-title">
+        <div class="sigts-dash-hero" data-dash-slide-index="0" style="--dash-hero-image:url('${slide.image}')">
+            <div class="sigts-dash-hero-top">
+                <span class="sigts-dash-brand"><span class="sigts-dash-brand-dot" aria-hidden="true"></span> SIGTS</span>
+                <nav class="sigts-dash-rail" aria-label="Highlights">${railHtml}</nav>
+            </div>
+            <div class="sigts-dash-hero-body">
+                <p class="sigts-dash-eyebrow">Bwindi Impenetrable National Park</p>
+                <h1 id="sigts-dash-hero-title" class="sigts-dash-headline" data-dash-hero-title>${escapeHtml(slide.headline)}</h1>
+                <button type="button" class="sigts-dash-swipe" data-dash-hero-next aria-label="Next highlight">SWIPE &gt;&gt;</button>
+            </div>
+            <div class="sigts-dash-search-row">
+                <span class="sigts-dash-search-prefix" aria-hidden="true">${icon('search', 'icon-md')}</span>
+                <input id="sigtsUnifiedSearchInput" type="search" enterkeyhint="search" class="sigts-dash-search-field" autocomplete="off" maxlength="220" placeholder="Try gorilla, Buhoma, permits…" onkeydown="if(event.key==='Enter'){event.preventDefault();runSigtsUnifiedSearch();}" />
+                <button type="button" class="sigts-dash-search-submit" onclick="runSigtsUnifiedSearch()">${icon('search', 'icon-sm')}</button>
+            </div>
+            <div class="sigts-dash-chips-scroll" role="group" aria-label="Quick sections">${chips}</div>
+            <div id="sigtsUnifiedSearchHighlight" class="sigts-dash-search-hint" role="status" aria-live="polite" hidden></div>
+            <div id="sigtsUnifiedSearchResults" class="sigts-dash-search-results seasonal-list" hidden></div>
+            <div class="sigts-dash-hero-rule" aria-hidden="true"></div>
         </div>
-        <div class="sigts-discovery-search-row">
-            <span class="sigts-discovery-search-prefix" aria-hidden="true">${icon('search', 'icon-md')}</span>
-            <input id="sigtsUnifiedSearchInput" type="search" enterkeyhint="search" class="sigts-discovery-search-field" autocomplete="off" maxlength="220" placeholder="Try gorilla, Buhoma, permits…" onkeydown="if(event.key==='Enter'){event.preventDefault();runSigtsUnifiedSearch();}" />
-            <button type="button" class="sigts-discovery-search-submit" onclick="runSigtsUnifiedSearch()">${icon('search', 'icon-sm')}</button>
+        <div class="sigts-dash-recs">
+            <p class="sigts-dash-recs-eyebrow">Visitor favourites</p>
+            <h2 class="sigts-dash-recs-title">Not sure where to start?<br><span>Top park experiences ranked for you.</span></h2>
+            <div class="sigts-dash-rank-grid">${rankedHtml}</div>
         </div>
-        <div class="sigts-discovery-chips-scroll" role="group" aria-label="Quick sections">${chips}</div>
-        <div id="sigtsUnifiedSearchHighlight" class="sigts-discovery-search-hint" role="status" aria-live="polite" hidden></div>
-        <div id="sigtsUnifiedSearchResults" class="sigts-discovery-results seasonal-list" hidden></div>
     </section>`;
 }
+
+function initDashboardEditorialHero() {
+    const root = document.querySelector('.sigts-dash-hero');
+    if (!root || root.dataset.dashHeroBound === '1') return;
+    root.dataset.dashHeroBound = '1';
+    let idx = 0;
+    const apply = (next) => {
+        idx = (next + SIGTS_DASH_HERO_SLIDES.length) % SIGTS_DASH_HERO_SLIDES.length;
+        const slide = SIGTS_DASH_HERO_SLIDES[idx];
+        root.dataset.dashSlideIndex = String(idx);
+        root.style.setProperty('--dash-hero-image', `url('${slide.image}')`);
+        const title = root.querySelector('[data-dash-hero-title]');
+        if (title) title.textContent = slide.headline;
+        root.querySelectorAll('[data-dash-hero-rail]').forEach((btn, i) => btn.classList.toggle('is-active', i === idx));
+    };
+    root.querySelector('[data-dash-hero-next]')?.addEventListener('click', () => apply(idx + 1));
+    root.querySelectorAll('[data-dash-hero-rail]').forEach((btn) => {
+        btn.addEventListener('click', () => apply(Number(btn.getAttribute('data-dash-hero-rail')) || 0));
+    });
+    let timer = window.setInterval(() => apply(idx + 1), 9000);
+    root.addEventListener('mouseenter', () => window.clearInterval(timer));
+    root.addEventListener('mouseleave', () => {
+        timer = window.setInterval(() => apply(idx + 1), 9000);
+    });
+    apply(idx);
+}
+window.initDashboardEditorialHero = initDashboardEditorialHero;
 
 async function renderSavedContent() {
     const rows =
@@ -2415,8 +2628,8 @@ async function renderDashboardContent() {
         animalCount: animals.length
     });
     const aiStrip = renderDashboardAiModuleStrip(recommendations, personalized, trending, profile);
-    const tourismStrip = `${renderDiscoveryHomePanel()}${renderTourismBookmarksRow()}`;
-    return `${tourismStrip}${shell}${aiStrip}${renderDashboardSpeciesSpotlight(animals)}`;
+    const tourismStrip = renderDiscoveryHomePanel();
+    return `${tourismStrip}${shell}${aiStrip}`;
 }
 
 function renderDashboardQuickGrid(animalCount = 0) {
@@ -2562,9 +2775,9 @@ function renderDashboardShell({
             const act = dashboardRecActionAttrs(item);
             const iconOnlyAvatar =
                 item.avatarType === 'icon'
-                    ? `<div class="rec-avatar metric-avatar metric-avatar-${escapeHtml(item.metricColor || 'default')}" aria-hidden="true"><span class="metric-avatar-icon">${icon(item.iconName || 'info', 'icon-md')}</span></div>`
-                    : `<div class="rec-avatar ${item.avatarClass || getRecommendationPhotoClass(item, index)}" aria-hidden="true">${item.iconName ? `<span class="rec-symbol">${icon(item.iconName, 'icon-md')}</span>` : ''}</div>`;
-            return `<div class="${recClass}"${act.card}>${iconOnlyAvatar}<div class="rec-info"><div class="rec-title">${escapeHtml(item.title)}</div>${item.match ? `<div class="rec-match">${escapeHtml(item.match)}</div>` : ''}<div class="rec-reason">${escapeHtml(item.reason)}</div></div><button type="button" class="rec-go" aria-label="Open ${escapeHtml(item.title)}"${act.btn}>${icon(item.goIcon || 'chevronRight', 'icon-sm')}</button></div>`;
+            ? `<div class="rec-avatar metric-avatar metric-avatar-${escapeHtml(item.metricColor || 'default')}" aria-hidden="true"><span class="metric-avatar-icon">${icon(item.iconName || 'info', 'icon-md')}</span></div>`
+            : `<div class="rec-avatar ${item.avatarClass || getRecommendationPhotoClass(item, index)}" aria-hidden="true">${item.iconName ? `<span class="rec-symbol">${icon(item.iconName, 'icon-md')}</span>` : ''}</div>`;
+            return `<div class="${recClass}"${act.card}>${iconOnlyAvatar}<div class="rec-info"><div class="rec-title">${escapeHtml(item.title)}</div>${item.match ? `<div class="rec-match"${item.matchId ? ` id="${escapeHtml(item.matchId)}"` : ''}>${escapeHtml(item.match)}</div>` : ''}<div class="rec-reason">${escapeHtml(item.reason)}</div></div><button type="button" class="rec-go" aria-label="Open ${escapeHtml(item.title)}"${act.btn}>${icon(item.goIcon || 'chevronRight', 'icon-sm')}</button></div>`;
         })
         .join('') || '<div class="empty-state">No items available.</div>'}</div></div><div class="dashboard-quote-card"><blockquote>${escapeHtml(quote)}</blockquote></div></div><div class="section-card seasonal-card"><div class="section-header"><h3>${icon('leaf', 'icon-sm')} Seasonal: ${seasonalTitle}</h3></div><div class="seasonal-list">${seasonalItems.map((a) => `<div class="seasonal-item">• ${escapeHtml(a)}</div>`).join('') || '<div class="seasonal-item">• No seasonal updates available</div>'}</div>${seasonalFootnote ? `<p class="animals-page-blurb" style="padding:0 18px 12px;margin:0;">${escapeHtml(seasonalFootnote)}</p>` : ''}<div class="seasonal-bottom"><div class="seasonal-image-strip photo-leaf" aria-hidden="true"></div><button type="button" class="seasonal-action-btn" onclick="${seasonalFn}">${escapeHtml(seasonalActionLabel || 'View Suggestions')}</button></div></div>`;
 }
@@ -2595,11 +2808,8 @@ function renderDashboardAiModuleStrip(recommendations, personalized, trending, p
             return `<button type="button" class="seasonal-item sigts-feed-row" onclick="sigtsOpenFeedItem('${ttype}','${id}')">${escapeHtml(t.name)} — ${escapeHtml(t.reason || '')}</button>`;
         })
         .join('');
-    return `<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('paw', 'icon-sm')} Personalized content</h3>${pref}</div><div class="seasonal-list">${pLines || '<div class="seasonal-item">Browse Wildlife and Culture to train this list.</div>'}</div></div><div class="section-card"><div class="section-header"><h3>${icon('chart', 'icon-sm')} Popularity (this device)</h3></div><div class="seasonal-list">${tLines || '<div class="seasonal-item">Opens and catalogue views fill trending.</div>'}</div><div class="info-chip-row" style="padding:12px 16px 16px;flex-wrap:wrap;gap:8px;">${boosted}<button type="button" class="small-btn ghost-btn" onclick="navigateTo('ai_chat')">${icon('note', 'icon-sm')} Ask a question (NLP)</button></div></div></div>`;
+    return `<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('paw', 'icon-sm')} Personalized content</h3>${pref}</div><div class="seasonal-list">${pLines || '<div class="seasonal-item">Browse Wildlife and Culture to train this list.</div>'}</div></div><div class="section-card"><div class="section-header"><h3>${icon('chart', 'icon-sm')} Popularity (this device)</h3></div><div class="seasonal-list">${tLines || '<div class="seasonal-item">Section opens and catalogue views in the last 30 days appear here.</div>'}</div><div class="info-chip-row" style="padding:12px 16px 16px;flex-wrap:wrap;gap:8px;">${boosted}<button type="button" class="small-btn ghost-btn" onclick="navigateTo('ai_chat')">${icon('note', 'icon-sm')} Ask a question (NLP)</button></div></div></div>`;
 }
-
-const SIGTS_ANIMALS_GUIDE_GROUP_KEY = 'sigts_animals_guide_group';
-const ANIMALS_GUIDE_GROUP_ORDER = ['great_apes', 'megafauna', 'primates', 'antelope'];
 
 function readStayingSafeGuideCache() {
     try {
@@ -2651,6 +2861,24 @@ function mergeGuideSpeciesWithCatalogue(guidePayload, catalogueAnimals) {
     });
 }
 
+function wildlifeSpeciesSearchBlob(row) {
+    const group = String(row.group || '');
+    const groupLabel = String(row.group_label || '');
+    return [
+        row.name,
+        row.scientific_name,
+        group,
+        groupLabel,
+        group.replace(/_/g, ' '),
+        row.safety_tip,
+        row.description
+    ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .replace(/"/g, '');
+}
+
 function renderWildlifeSpeciesCardHtml(row) {
     const rawId = row.animal_id || row.id || '';
     const id = escapeHtml(String(rawId));
@@ -2662,9 +2890,7 @@ function renderWildlifeSpeciesCardHtml(row) {
     const safetyTip = escapeHtml(String(row.safety_tip || ''));
     const teaserSource = row.description ? String(row.description) : 'Open the full species profile for ranger field notes.';
     const teaser = escapeHtml(truncateSnippet(teaserSource, 140));
-    const searchBlob = `${String(row.name || '')} ${String(row.scientific_name || '')} ${String(row.group || '')}`
-        .toLowerCase()
-        .replace(/"/g, '');
+    const searchBlob = wildlifeSpeciesSearchBlob(row);
     const thumbHtml = thumb
         ? `<img class="wildlife-species-card__img" src="${escapeHtml(thumb)}" alt="${escapeHtml(row.name || 'Species')}" loading="lazy" decoding="async" />`
         : `<div class="wildlife-species-card__img wildlife-species-card__img--fallback" aria-hidden="true">${icon(getAnimalIconName(row.name), 'icon-xl')}</div>`;
@@ -2769,29 +2995,6 @@ async function renderWildlifeContent() {
         })
         .join('');
 
-    const rules =
-        Array.isArray(guidePayload?.gorilla_golden_rules) && guidePayload.gorilla_golden_rules.length
-            ? `<div class="wildlife-missions">
-                <h4 class="wildlife-missions__title">${icon('paw', 'icon-sm')} Golden rules — gorilla trekking</h4>
-                <ol class="wildlife-missions__list">${guidePayload.gorilla_golden_rules
-                    .map(
-                        (rule, idx) =>
-                            `<li><span class="wildlife-missions__num">${idx + 1}</span><div><strong>${escapeHtml(rule.title || '')}</strong><p>${escapeHtml(rule.detail || '')}</p></div></li>`
-                    )
-                    .join('')}</ol>
-               </div>`
-            : '';
-
-    const reminders =
-        Array.isArray(guidePayload?.trail_reminders) && guidePayload.trail_reminders.length
-            ? `<div class="wildlife-reminders">${guidePayload.trail_reminders
-                  .map(
-                      (item) =>
-                          `<div class="wildlife-reminder-card"><strong>${escapeHtml(item.title || '')}</strong><p>${escapeHtml(item.detail || '')}</p></div>`
-                  )
-                  .join('')}</div>`
-            : '';
-
     const hero = `<header class="wildlife-hero">
         <div class="wildlife-hero__copy">
             <span class="wildlife-hero__eyebrow">Bwindi Impenetrable National Park</span>
@@ -2817,10 +3020,11 @@ async function renderWildlifeContent() {
     const searchToolbar = `<div class="wildlife-search section-card">
         <label class="wildlife-search__label" for="animals-catalog-search">${icon('search', 'icon-sm')} Find a species</label>
         <div class="wildlife-search__row">
-            <input id="animals-catalog-search" type="search" class="wildlife-search__input" placeholder="Search by name or group…" maxlength="220" autocomplete="off" />
+            <input id="animals-catalog-search" type="search" class="wildlife-search__input" placeholder="Search by name or group…" maxlength="220" autocomplete="off" enterkeyhint="search" aria-controls="animals-catalog-grid" aria-describedby="wildlife-search-status" />
             <button type="button" class="wildlife-btn wildlife-btn--primary" onclick="applyAnimalsCatalogFilter()">Search</button>
-            <button type="button" class="wildlife-btn wildlife-btn--ghost" onclick="document.getElementById('animals-catalog-search').value='';applyAnimalsCatalogFilter();">Clear</button>
+            <button type="button" class="wildlife-btn wildlife-btn--ghost" onclick="clearWildlifeCatalogSearch()">Clear</button>
         </div>
+        <p id="wildlife-search-status" class="wildlife-search__status" data-wildlife-search-status role="status" aria-live="polite"></p>
         ${activeGroup !== 'all' ? `<p class="wildlife-search__hint">Showing <strong>${escapeHtml(activeGroup.replace(/_/g, ' '))}</strong> — tap <strong>All species</strong> to reset.</p>` : ''}
     </div>`;
 
@@ -2833,7 +3037,7 @@ async function renderWildlifeContent() {
                </aside>`
             : '';
 
-    return `<div class="wildlife-screen">${hero}${rules}${reminders}${searchToolbar}<div id="animals-catalog-grid" class="wildlife-catalog">${groupSections}</div>${catalogueNote}</div>`;
+    return `<div class="wildlife-screen">${hero}${searchToolbar}<div id="animals-catalog-grid" class="wildlife-catalog">${groupSections}</div>${catalogueNote}</div>`;
 }
 
 async function renderAnimalsContent() {
@@ -4166,98 +4370,13 @@ function renderStayingSafeGuideSectionHtml(guide) {
         ${tipsHtml}
         ${sourceLink}
         <div class="info-chip-row" style="padding:0 18px 16px;">
+            <button type="button" class="small-btn" onclick="navigateTo('wildlife')">${icon('paw', 'icon-sm')} Wildlife catalogue</button>
             <button type="button" class="small-btn" onclick="navigateTo('map')">${icon('map', 'icon-sm')} Trek routes on map</button>
             <button type="button" class="small-btn ghost-btn" onclick="submitContentHelpfulness('info', '', 'Staying safe guide')">${icon('target', 'icon-sm')} Helpful?</button>
         </div>
     </div>`;
 }
 
-/** Photo cards for staying-safe tourist biodiversity (Info tab). */
-function renderTouristBiodiversitySectionHtml(payload) {
-    if (!payload || !Array.isArray(payload.species) || !payload.species.length) {
-        return '';
-    }
-    const sourceUrl = String(payload.source_url || '').trim();
-    const intro = escapeHtml(
-        String(
-            payload.intro ||
-                'Wildlife you are likely to meet in Bwindi, with ranger-backed safety notes from the official travel guide.'
-        )
-    );
-    const rules =
-        Array.isArray(payload.gorilla_golden_rules) && payload.gorilla_golden_rules.length
-            ? `<ol class="tourist-wildlife-rules">${payload.gorilla_golden_rules
-                  .map(
-                      (rule) =>
-                          `<li><strong>${escapeHtml(rule.title || 'Rule')}</strong> — ${escapeHtml(rule.detail || '')}</li>`
-                  )
-                  .join('')}</ol>`
-            : '';
-
-    const reminders =
-        Array.isArray(payload.trail_reminders) && payload.trail_reminders.length
-            ? `<div class="tourist-wildlife-reminders">${payload.trail_reminders
-                  .map(
-                      (item) =>
-                          `<div class="seasonal-item" style="margin:8px 0;"><strong>${escapeHtml(item.title || '')}</strong> — ${escapeHtml(item.detail || '')}</div>`
-                  )
-                  .join('')}</div>`
-            : '';
-
-    const cards = payload.species
-        .map((row) => {
-            const animal = {
-                animal_id: row.animal_id,
-                name: row.name,
-                scientific_name: row.scientific_name,
-                description: row.description,
-                conservation_status: row.conservation_status,
-                image_urls: row.image_urls
-            };
-            const thumb = firstSpeciesImage(animal);
-            const id = escapeHtml(String(row.animal_id || ''));
-            const status = String(row.conservation_status || 'least_concern')
-                .toLowerCase()
-                .replace(/\s+/g, '_');
-            const statusLabel = escapeHtml(String(row.conservation_status || 'least_concern').replace(/_/g, ' '));
-            const thumbHtml = thumb
-                ? `<img class="tourist-wildlife-card__img" src="${escapeHtml(thumb)}" alt="${escapeHtml(row.name || 'Species')}" loading="lazy" decoding="async" />`
-                : `<div class="tourist-wildlife-card__img tourist-wildlife-card__img--fallback">${icon(getAnimalIconName(row.name), 'icon-xl')}</div>`;
-            const detailBtn = id
-                ? `<button type="button" class="small-btn ghost-btn" onclick="openAnimalSpeciesDetail('${id}')">${icon('book', 'icon-sm')} Species profile</button>`
-                : '';
-            return `<article class="tourist-wildlife-card">
-                ${thumbHtml}
-                <div class="tourist-wildlife-card__body">
-                    <div class="tourist-wildlife-card__head">
-                        <h4 class="tourist-wildlife-card__name">${escapeHtml(row.name || 'Species')}</h4>
-                        <span class="animal-status status-${escapeHtml(status.replace(/_/g, '-'))}">${statusLabel}</span>
-                    </div>
-                    <p class="tourist-wildlife-card__sci">${escapeHtml(String(row.scientific_name || ''))}</p>
-                    <p class="tourist-wildlife-card__safety"><strong>${icon('shield', 'icon-sm')} On the trail:</strong> ${escapeHtml(row.safety_tip || '')}</p>
-                    <div class="tourist-wildlife-card__actions">${detailBtn}</div>
-                </div>
-            </article>`;
-        })
-        .join('');
-
-    const sourceLink = sourceUrl
-        ? `<p class="tourist-wildlife-source">Guide reference: <a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Bwindi Impenetrable NP — Staying Safe</a></p>`
-        : '';
-
-    return `<div class="section-card tourist-wildlife-section">
-        <div class="section-header"><h3>${icon('paw', 'icon-sm')} Wildlife to know &amp; stay safe</h3></div>
-        <p class="animals-page-blurb tourist-wildlife-intro">${intro}</p>
-        ${rules ? `<div class="tourist-wildlife-rules-wrap"><h4 class="tourist-wildlife-subhead">${icon('shield', 'icon-sm')} Golden rules — gorilla trekking</h4>${rules}</div>` : ''}
-        ${reminders}
-        <div class="info-wildlife-grid">${cards}</div>
-        ${sourceLink}
-        <div class="info-chip-row" style="padding:0 18px 16px;">
-            <button type="button" class="small-btn" onclick="navigateTo('wildlife')">${icon('paw', 'icon-sm')} Guide species (Wildlife tab)</button>
-            <button type="button" class="small-btn ghost-btn" onclick="submitContentHelpfulness('info', '', 'Wildlife to know & stay safe')">${icon('target', 'icon-sm')} Helpful?</button>
-        </div>
-    </div>`;
-}
 
 async function renderInfoContent() {
     const planPrompt = JSON.stringify(
@@ -4272,7 +4391,6 @@ async function renderInfoContent() {
     let faqs = [];
     let tips = [];
     let guide = [];
-    let touristBiodiversity = null;
     let stayingSafeGuide = null;
     try {
         weather = await API.getParkWeatherForecast();
@@ -4292,12 +4410,11 @@ async function renderInfoContent() {
     }
 
     try {
-        [catalogMeta, faqs, tips, guide, touristBiodiversity, stayingSafeGuide] = await Promise.all([
+        [catalogMeta, faqs, tips, guide, stayingSafeGuide] = await Promise.all([
             API.getContentCatalogMeta().catch(() => null),
             API.getFaqs().catch(() => []),
             API.getSafetyTips().catch(() => []),
             API.getParkGuide().catch(() => []),
-            API.getTouristBiodiversity().catch(() => null),
             API.getStayingSafeGuide().catch(() => null)
         ]);
     } catch (_) {
@@ -4397,10 +4514,9 @@ async function renderInfoContent() {
         Park guide: ${escapeHtml(formatSigtsInstant(metaTimes.park_guide))}
        </div></div>`;
 
-    const wildlifeHtml = renderTouristBiodiversitySectionHtml(touristBiodiversity);
     const stayingSafeGuideHtml = renderStayingSafeGuideSectionHtml(stayingSafeGuide);
 
-    return `${weatherHtml}${stayingSafeGuideHtml}${wildlifeHtml}<div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Park snapshot</h3></div><div class="park-info-copy">Roughly <strong>331 km²</strong> of steep montane rainforest on the Albertine Rift shoulder, known for mountain gorillas, rich birdlife, elephants, diverse primates, and dense montane vegetation. SIGTS stitches maps, ranger copy, offline packs, and this app’s Tour help tab so groups can cross-check ecology, etiquette, culture, and safety on the trail.</div><div class="info-chip-row"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${conservationPrompt});">${icon('book', 'icon-sm')} Tour help: conservation gist</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${birdPrompt});">${icon('bird', 'icon-sm')} Tour help: birds</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${planPrompt});">${icon('map', 'icon-sm')} Tour help: week pacing</button></div><button type="button" class="small-btn ghost-btn" style="margin-top:10px;" onclick="submitContentHelpfulness('info', '', 'Park snapshot')">${icon('target', 'icon-sm')} Helpful?</button></div>
+    return `${weatherHtml}${stayingSafeGuideHtml}<div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Park snapshot</h3></div><div class="park-info-copy">Roughly <strong>331 km²</strong> of steep montane rainforest on the Albertine Rift shoulder, known for mountain gorillas, rich birdlife, elephants, diverse primates, and dense montane vegetation. SIGTS stitches maps, ranger copy, offline packs, and this app’s Tour help tab so groups can cross-check ecology, etiquette, culture, and safety on the trail.</div><div class="info-chip-row"><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${conservationPrompt});">${icon('book', 'icon-sm')} Tour help: conservation gist</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${birdPrompt});">${icon('bird', 'icon-sm')} Tour help: birds</button><button type="button" class="small-btn" onclick="navigateToAIWithPrompt(${planPrompt});">${icon('map', 'icon-sm')} Tour help: week pacing</button></div><button type="button" class="small-btn ghost-btn" style="margin-top:10px;" onclick="submitContentHelpfulness('info', '', 'Park snapshot')">${icon('target', 'icon-sm')} Helpful?</button></div>
 ${guideHtml}
 ${safetyHtml}
 ${faqsHtml}
@@ -4587,12 +4703,12 @@ async function renderITManagerDashboard() {
     const animals = await Content.getAnimals();
     const avgStars = Number(metrics.averageRating || 0);
     const itKpis = [
-        { label: 'Active Users', value: metrics.activeUsers || 0, hint: 'Current sessions' },
-        { label: 'Pending Sync', value: metrics.syncQueueSize || 0, hint: 'Waiting uploads' },
+        { label: 'Active Users', value: metrics.activeUsers || 0, hint: 'Sessions in last 5 min', kpiId: 'itKpiActiveUsers' },
+        { label: 'Pending Sync', value: metrics.syncQueueSize || 0, hint: 'Global sync queue', kpiId: 'itKpiPendingSync' },
         { label: 'Sightings', value: metrics.totalSightings || 0, hint: 'Recorded entries' },
         { label: 'Avg Rating', value: avgStars.toFixed(1), hint: '/ 5' }
     ];
-    const liveUsersHtml = renderLiveUserRows(liveOps.peers || []);
+    const liveUsersHtml = renderLiveUserRows(liveOps.peers || [], Number(liveOps.windowMinutes) || 5);
     let accountDirHtml = '';
     try {
         const dir = await API.request('/admin/users?limit=100&offset=0');
@@ -4609,7 +4725,8 @@ async function renderITManagerDashboard() {
             {
                 title: 'Active Users',
                 match: `${metrics.activeUsers || 0} online`,
-                reason: 'Current authenticated sessions in the system.',
+                matchId: 'itRecActiveUsersMatch',
+                reason: 'Sessions with API or presence activity in the last 5 minutes.',
                 iconName: 'users',
                 goIcon: 'users',
                 avatarType: 'icon',
@@ -4648,7 +4765,7 @@ async function renderITManagerDashboard() {
         seasonalActionLabel: 'Open predictive analytics',
         seasonalAction: 'it_analytics',
         animalCount: animals.length
-    })}<div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Current Users (Realtime)</h3><span id="adminLiveUsersStamp" class="status-badge neutral">Updated just now • ${(liveOps.peers || []).length} active now / ${Number(metrics.activeUsers || 0)} total</span></div><div id="adminLiveUsersList">${liveUsersHtml}</div></div>${accountDirHtml}${predictiveCtaHtml}<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('building', 'icon-sm')} Intranet Connectivity</h3></div><div class="analytics-list"><div class="analytics-row"><span>Intranet</span><div class="analytics-bar"><div style="width:${liveOps.intranetStatus?.isIntranet ? 100 : 35}%;"></div></div><strong>${liveOps.intranetStatus?.isIntranet ? 'Connected' : 'External'}</strong></div><div class="analytics-row"><span>Device IP</span><span></span><strong>${escapeHtml(liveOps.intranetStatus?.ip || 'Unknown')}</strong></div><div class="analytics-row"><span>Pending Sync</span><span></span><strong>${liveOps.syncStatus?.pending || liveOps.syncStatus?.pending_items || 0}</strong></div></div></div><div class="section-card"><div class="section-header"><h3>${icon('user', 'icon-sm')} Live Peers / Guests</h3></div><div class="seasonal-list">${(liveOps.peers || []).length ? liveOps.peers.slice(0, 8).map((p) => `<div class="seasonal-item">• ${escapeHtml(p.name || 'Peer')} (${escapeHtml(p.type || 'user')})${p.location ? ` @ ${Number(p.location.lat).toFixed(4)}, ${Number(p.location.lng).toFixed(4)}` : ''}</div>`).join('') : '<div class="seasonal-item">• No live peers detected in last 5 minutes.</div>'}</div></div></div>${rareAlertsHtml}${safeZoneHtml}<div class="admin-actions"><button class="admin-action-btn" onclick="handleMFASetup()">${icon('shield', 'icon-sm')} Configure MFA</button><button class="admin-action-btn" onclick="clearAllCache()">Clear Cache</button><button class="admin-action-btn" onclick="exportData()">Export Data</button><button class="admin-action-btn danger" onclick="resetApp()">Reset App</button></div></div>`;}
+    })}<div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Current Users (Realtime)</h3><span id="adminLiveUsersStamp" class="status-badge neutral">Live · ${new Date().toLocaleTimeString()} · ${Number(liveOps.activeCount ?? (liveOps.peers || []).length)} active (5m) / ${Number(metrics.totalRegisteredUsers ?? 0)} registered</span></div><div id="adminLiveUsersList">${liveUsersHtml}</div></div>${accountDirHtml}${predictiveCtaHtml}<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('building', 'icon-sm')} Intranet Connectivity</h3></div><div class="analytics-list"><div class="analytics-row"><span>Intranet</span><div class="analytics-bar"><div style="width:${liveOps.intranetStatus?.isIntranet ? 100 : 35}%;"></div></div><strong>${liveOps.intranetStatus?.isIntranet ? 'Connected' : 'External'}</strong></div><div class="analytics-row"><span>Device IP</span><span></span><strong>${escapeHtml(liveOps.intranetStatus?.ip || 'Unknown')}</strong></div><div class="analytics-row"><span>Pending Sync (all users)</span><span></span><strong id="itSyncPendingValue">${liveOps.syncStatus?.pending_items ?? liveOps.syncStatus?.pending ?? 0}</strong></div><div class="analytics-row"><span>Location updates (15m)</span><span></span><strong id="itLocationPulseValue">${liveOps.syncStatus?.location_updates_last_15m ?? 0}</strong></div></div></div><div class="section-card"><div class="section-header"><h3>${icon('user', 'icon-sm')} Live Peers / Guests</h3></div><div id="adminLivePeersSnapshot" class="seasonal-list">${renderLivePeersSnapshotRows(liveOps.peers || [], Number(liveOps.windowMinutes) || 5)}</div></div></div>${rareAlertsHtml}${safeZoneHtml}<div class="admin-actions"><button class="admin-action-btn" onclick="handleMFASetup()">${icon('shield', 'icon-sm')} Configure MFA</button><button class="admin-action-btn" onclick="clearAllCache()">Clear Cache</button><button class="admin-action-btn" onclick="exportData()">Export Data</button><button class="admin-action-btn danger" onclick="resetApp()">Reset App</button></div></div>`;}
 
 // =====================================================
 // PREDICTIVE ANALYTICS (§3.1.1.11) — IT Manager workspace
@@ -4855,7 +4972,7 @@ async function renderITPredictiveAnalyticsDashboard() {
         .map((t) => `<div class="pa-callout">${escapeHtml(String(t))}</div>`)
         .join('');
 
-    const itOpsShortcutsHtml = `<div class="pa-toolbar pa-toolbar--sticky"><span class="pa-toolbar-title">${icon('chart', 'icon-sm')} Operations</span><div class="pa-toolbar-actions">${[
+    const itOpsShortcutsHtml = `<div class="pa-toolbar pa-toolbar--sticky pa-toolbar--ops"><span class="pa-toolbar-title">${icon('chart', 'icon-sm')} Operations</span><div id="pa-ops-status" class="pa-ops-status" aria-live="polite">Loading live operations status…</div><div class="pa-toolbar-actions">${[
         ['itOpsPeekAnalyticsAnomalies()', 'Anomalies'],
         ['itOpsQueueModelRetrain()', 'Queue retrain'],
         ['itOpsCreateReportSchedulePrompt()', 'Schedule report'],
@@ -4863,11 +4980,12 @@ async function renderITPredictiveAnalyticsDashboard() {
         ['itOpsExportAnalyticsPrompt()', 'Data export'],
         ['itOpsPeekTrainingJobs()', 'Training jobs'],
         ['navigateTo(\'it_tour_assignments\')', 'Assignments'],
-        ['itOpsPeekBackupsList()', 'Backups']
+        ['itOpsListBackups()', 'Backups'],
+        ['itOpsCreateBackupNow()', 'Create backup']
     ]
         .map(
             ([fn, lab]) =>
-                `<button type="button" class="small-btn" onclick="${fn}">${escapeHtml(lab)}</button>`
+                `<button type="button" class="small-btn pa-ops-btn" onclick="${fn}">${escapeHtml(lab)}</button>`
         )
         .join('')}</div></div>`;
 
@@ -5592,6 +5710,7 @@ window.initGuideMessagingPanel = async function () {
 
 window.itOpsPeekAnalyticsAnomalies = async function () {
     if (!requireITManagerAccess('predictive analytics operations')) return;
+    await paOpsRun(async () => {
     const d = await API.getAnalyticsAnomalies(2.5);
     if (d?.status >= 400) {
         showToast(d?.error || 'Anomalies request failed.', 'danger');
@@ -5606,18 +5725,31 @@ window.itOpsPeekAnalyticsAnomalies = async function () {
         bodyHtml: content,
         footerHtml: `<button type="button" class="small-btn ghost-btn" onclick="document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();">${icon('x', 'icon-sm')} Close</button>`
     });
+    });
 };
 
 window.itOpsQueueModelRetrain = async function () {
     if (!requireITManagerAccess('predictive analytics operations')) return;
-    const r = await API.queuePredictiveTrainingJob('congestion_v1');
-    if (r?.error || r?.status >= 400) showToast(r?.error || 'Queue retrain failed', 'danger');
-    else showToast(r?.job?.job_id ? `Job ${r.job.job_id} queued.` : 'Retrain queued.', 'success');
+    await paOpsRun(async () => {
+        const r = await API.queuePredictiveTrainingJob('congestion_v1');
+        if (r?.error || r?.status >= 400) {
+            showToast(r?.error || 'Queue retrain failed', 'danger');
+            return;
+        }
+        showToast(r?.job?.job_id ? `Job ${r.job.job_id} queued — processing live metrics.` : 'Retrain queued.', 'success');
+        setTimeout(() => window.itOpsPeekTrainingJobs?.(), 2500);
+    });
 };
 
 window.itOpsRunReportBuild = async function () {
     if (!requireITManagerAccess('predictive analytics operations')) return;
-    const r = await API.buildAnalyticsReport(['visitor_flow', 'satisfaction', 'sightings_trend', 'popular_content']);
+    const { start, end } = getPaDateRangeIso();
+    const r = await API.buildAnalyticsReportAdvanced(
+        ['visitor_flow', 'satisfaction', 'sightings_trend', 'popular_content'],
+        start,
+        end,
+        'ops_quick'
+    );
     if (r?.status >= 400) showToast(r?.error || 'Report build failed', 'danger');
     else {
         const keys = r?.sections ? Object.keys(r.sections) : [];
@@ -5639,6 +5771,7 @@ window.itOpsRunReportBuild = async function () {
 
 window.itOpsCreateReportSchedulePrompt = async function () {
     if (!requireITManagerAccess('predictive analytics operations')) return;
+    await paOpsRun(async () => {
     const name = await showPromptDialog('Schedule name', 'Weekly SIGTS analytics report');
     if (!name) return;
     const cron = await showPromptDialog('CRON expression', '0 9 * * 1');
@@ -5658,10 +5791,12 @@ window.itOpsCreateReportSchedulePrompt = async function () {
         return;
     }
     showToast('Report schedule created.', 'success');
+    });
 };
 
 window.itOpsRunLatestSchedule = async function () {
     if (!requireITManagerAccess('predictive analytics operations')) return;
+    await paOpsRun(async () => {
     const list = await API.listReportSchedules();
     const rows = Array.isArray(list?.schedules) ? list.schedules : [];
     if (!rows.length) {
@@ -5682,15 +5817,18 @@ window.itOpsRunLatestSchedule = async function () {
         footerHtml: `<button type="button" class="small-btn ghost-btn" onclick="document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();">${icon('x', 'icon-sm')} Close</button>`
     });
     showToast(`Schedule "${latest.name || latest.schedule_id}" executed.`, 'success');
+    });
 };
 
 window.itOpsExportAnalyticsPrompt = async function () {
     if (!requireITManagerAccess('predictive analytics operations')) return;
+    const range = getPaDateRangeIso();
     const format = (await showPromptDialog('Export format (json/csv)', 'json') || 'json').toLowerCase();
     const metricsRaw = await showPromptDialog('Metrics (comma-separated)', 'visitor_flow,sightings_trend,satisfaction');
     const metrics = String(metricsRaw || '').split(',').map((v) => v.trim()).filter(Boolean);
-    const start = await showPromptDialog('Start datetime (ISO8601, optional)', '');
-    const end = await showPromptDialog('End datetime (ISO8601, optional)', '');
+    const start = await showPromptDialog('Start datetime (ISO8601, optional)', range.start);
+    const end = await showPromptDialog('End datetime (ISO8601, optional)', range.end);
+    await paOpsRun(async () => {
     if (format === 'csv') {
         const raw = await API.exportAnalyticsDataRaw(metrics, start || '', end || '', 'csv');
         if (!raw?.ok) {
@@ -5731,10 +5869,12 @@ window.itOpsExportAnalyticsPrompt = async function () {
         });
         showToast(`JSON export ready with ${keys.length} top-level key(s).`, 'success');
     }
+    });
 };
 
 window.itOpsPeekTrainingJobs = async function () {
     if (!requireITManagerAccess('predictive analytics operations')) return;
+    await paOpsRun(async () => {
     const r = await API.listRetrainJobs();
     if (r?.status >= 400 || r?.error) {
         showToast(r?.error || 'Failed to load training jobs.', 'danger');
@@ -5750,6 +5890,7 @@ window.itOpsPeekTrainingJobs = async function () {
         footerHtml: `<button type="button" class="small-btn ghost-btn" onclick="document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();">${icon('x', 'icon-sm')} Close</button>`
     });
     showToast(`${jobs.length} training job(s) loaded.`, jobs.length ? 'info' : 'success');
+    });
 };
 
 function openTourAssignmentModal({ mode, guides, routes }) {
@@ -5917,17 +6058,24 @@ window.itOpsAssignWeeklyToursPrompt = async function () {
     showToast(`Weekly assignments created: ${out.created_count || 0}.`, 'success');
 };
 
-window.itOpsPeekBackupsList = async function () {
+window.itOpsCreateBackupNow = async function () {
     if (!requireITManagerAccess('backup operations')) return;
-    const create = await showConfirmDialog('Create a new backup now? This can take up to a few minutes.');
-    if (create) {
+    const ok = await showConfirmDialog('Create a new database backup now? This can take a few minutes.');
+    if (!ok) return;
+    await paOpsRun(async () => {
         const created = await API.createBackupRecord();
         if (created?.error || created?.status >= 400) {
             showToast(created?.error || 'Backup creation failed', 'danger');
             return;
         }
-        showToast(`Backup created: ${created.backup_id || 'new artifact'}`, 'success');
-    }
+        const sizeMb = created.size_bytes ? `${(Number(created.size_bytes) / 1048576).toFixed(2)} MB` : '';
+        showToast(`Backup created: ${created.backup_id || 'new artifact'}${sizeMb ? ` (${sizeMb})` : ''}`, 'success');
+    });
+};
+
+window.itOpsListBackups = async function () {
+    if (!requireITManagerAccess('backup operations')) return;
+    await paOpsRun(async () => {
     const r = await API.listBackupRecords();
     if (r?.status >= 400 || r?.error) {
         showToast(r?.error || 'Backup list failed', 'danger');
@@ -5948,6 +6096,7 @@ window.itOpsPeekBackupsList = async function () {
         footerHtml: `<button type="button" class="small-btn ghost-btn" onclick="document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();">${icon('x', 'icon-sm')} Close</button>`
     });
     showToast(`${n} backup record(s) loaded.`, 'info');
+    });
 };
 
 window.submitUserFeedback = async function () {
@@ -6097,19 +6246,90 @@ window.submitNPSFeedback = async function () {
     await loadRecentFeedback();
 };
 
+function wildlifeSearchTermMatches(blob, term) {
+    if (!term) return true;
+    const hay = String(blob || '').toLowerCase();
+    const q = term.toLowerCase().trim();
+    if (!q) return true;
+    if (hay.includes(q)) return true;
+    const underscored = q.replace(/\s+/g, '_');
+    if (underscored !== q && hay.includes(underscored)) return true;
+    const words = q.split(/\s+/).filter(Boolean);
+    return words.length > 0 && words.every((w) => hay.includes(w));
+}
+
+window.clearWildlifeCatalogSearch = function clearWildlifeCatalogSearch() {
+    const input = document.getElementById('animals-catalog-search');
+    if (input) input.value = '';
+    try {
+        sessionStorage.removeItem(SIGTS_WILDLIFE_SEARCH_KEY);
+    } catch (_) {
+        /**/
+    }
+    applyAnimalsCatalogFilter();
+};
+
+function wireWildlifeCatalogSearch() {
+    const input = document.getElementById('animals-catalog-search');
+    if (!input || input.dataset.sigtsWired === '1') return;
+    input.dataset.sigtsWired = '1';
+
+    try {
+        const saved = sessionStorage.getItem(SIGTS_WILDLIFE_SEARCH_KEY);
+        if (saved && !String(input.value || '').trim()) input.value = saved;
+    } catch (_) {
+        /**/
+    }
+
+    let debounceTimer;
+    const run = () => applyAnimalsCatalogFilter();
+    input.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = window.setTimeout(run, 160);
+    });
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            clearTimeout(debounceTimer);
+            run();
+        }
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            clearWildlifeCatalogSearch();
+        }
+    });
+    input.addEventListener('search', () => run());
+
+    applyWildlifeGuideGroupFilter(getValidatedAnimalsGuideGroup());
+    run();
+}
+
 window.applyAnimalsCatalogFilter = function applyAnimalsCatalogFilter() {
     const input = document.getElementById('animals-catalog-search');
     const term = String(input?.value || '').trim().toLowerCase();
     const grid = document.getElementById('animals-catalog-grid');
-    if (!grid) return;
+    if (!grid) return { visible: 0, term };
+
+    try {
+        if (term) sessionStorage.setItem(SIGTS_WILDLIFE_SEARCH_KEY, term);
+        else sessionStorage.removeItem(SIGTS_WILDLIFE_SEARCH_KEY);
+    } catch (_) {
+        /**/
+    }
+
     const activeGroup = getValidatedAnimalsGuideGroup();
+    let visible = 0;
     grid.querySelectorAll('.wildlife-species-card, .staying-safe-animal-card, .animal-card').forEach((card) => {
-        const blob = String(card.getAttribute('data-species-q') || '').toLowerCase();
+        const blob = String(card.getAttribute('data-species-q') || '');
         const cardGroup = String(card.getAttribute('data-guide-group') || '');
         const groupOk = activeGroup === 'all' || cardGroup === activeGroup;
-        const searchOk = !term || blob.includes(term);
-        card.style.display = groupOk && searchOk ? '' : 'none';
+        const searchOk = wildlifeSearchTermMatches(blob, term);
+        const show = groupOk && searchOk;
+        card.style.display = show ? '' : 'none';
+        card.setAttribute('aria-hidden', show ? 'false' : 'true');
+        if (show) visible += 1;
     });
+
     grid.querySelectorAll('.wildlife-section, .animals-guide-group').forEach((section) => {
         const sectionId = section.getAttribute('data-guide-section') || '';
         const groupOk = activeGroup === 'all' || sectionId === activeGroup;
@@ -6121,6 +6341,35 @@ window.applyAnimalsCatalogFilter = function applyAnimalsCatalogFilter() {
         const anyVisible = [...cards].some((c) => c.style.display !== 'none');
         section.style.display = anyVisible ? '' : 'none';
     });
+
+    const statusEl = document.querySelector('[data-wildlife-search-status]');
+    if (statusEl) {
+        if (!term) {
+            statusEl.textContent =
+                activeGroup === 'all'
+                    ? 'Type to filter species by name, scientific name, or group.'
+                    : `Filtered to ${activeGroup.replace(/_/g, ' ')}. Add text to narrow further.`;
+        } else if (visible === 0) {
+            statusEl.textContent = `No species match “${term}”. Try another name or clear the filter.`;
+        } else {
+            statusEl.textContent = `${visible} species match “${term}”.`;
+        }
+    }
+
+    let searchEmpty = grid.querySelector('.wildlife-search-empty');
+    if (term && visible === 0) {
+        if (!searchEmpty) {
+            searchEmpty = document.createElement('p');
+            searchEmpty.className = 'wildlife-search-empty animals-page-blurb';
+            grid.appendChild(searchEmpty);
+        }
+        searchEmpty.textContent = `No results for “${term}”. Check spelling or tap Clear.`;
+        searchEmpty.style.display = '';
+    } else if (searchEmpty) {
+        searchEmpty.style.display = 'none';
+    }
+
+    return { visible, term };
 };
 
 window.sigtsSubmitFaqHelpful = async function sigtsSubmitFaqHelpful(faqId) {
@@ -6772,8 +7021,18 @@ window.showConfirmDialog = showConfirmDialog;
 window.deactivateMyAccountFromProfile = deactivateMyAccountFromProfile;
 window.adminDeactivateAccountPrompt = adminDeactivateAccountPrompt;
 
+let __sigtsRegistrationInFlight = false;
+
 async function handleRegistration() {
+    if (__sigtsRegistrationInFlight) return;
+    __sigtsRegistrationInFlight = true;
     setAuthFeedback('');
+    const submitBtn = document.querySelector('.auth-form .auth-primary-btn');
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.setAttribute('aria-busy', 'true');
+    }
+    try {
     const result = await Auth.register({
         fullName: document.getElementById('regFullName')?.value,
         email: document.getElementById('regEmail')?.value,
@@ -6783,7 +7042,7 @@ async function handleRegistration() {
         confirmPassword: document.getElementById('regConfirmPassword')?.value,
         userType: document.getElementById('regUserType')?.value || 'tourist'
     });
-    const message = result.message || (result.success ? 'Success! Please login.' : result.error);
+        const message = result.message || (result.success ? 'Account created. You can sign in now.' : result.error);
     showToast(message, result.success ? 'success' : 'danger');
     setAuthFeedback(message, result.success ? 'success' : 'error');
     if (!result.success && result.field) {
@@ -6792,7 +7051,16 @@ async function handleRegistration() {
         );
         el?.focus();
     }
-    if (result.success) renderView('login');
+        if (result.success) {
+            window.setTimeout(() => renderView('login'), 1200);
+        }
+    } finally {
+        __sigtsRegistrationInFlight = false;
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.removeAttribute('aria-busy');
+        }
+    }
 }
 
 async function handleLogin() {
@@ -7023,26 +7291,26 @@ async function showSightingReportModal(options = {}) {
             showToast('Choose species and location.', 'warning');
             return;
         }
-        const result = await API.reportSighting({
+    const result = await API.reportSighting({
             animal_id: animalId,
             location_id: locationId,
-            number_observed: Math.max(1, Number.isFinite(count) ? count : 1),
+        number_observed: Math.max(1, Number.isFinite(count) ? count : 1),
             behavior: 'Field observation',
             notes: notes || 'Submitted from SIGTS',
             tour_session_id: tourSessionId
-        });
+    });
         document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();
-        if (result?.sighting_id || result?.success) {
-            if (result?.rare_alert) {
+    if (result?.sighting_id || result?.success) {
+        if (result?.rare_alert) {
                 showToast(
                     `Rare sighting flagged: ${result.rare_alert.animal_name || 'Wildlife'} (${String(result.rare_alert.risk_level || 'high').toUpperCase()})`,
                     'warning'
                 );
-            } else {
-                showToast('Sighting reported successfully.', 'success');
-            }
-            if (window.currentView === 'sightings') await renderView('sightings');
         } else {
+                showToast('Sighting reported successfully.', 'success');
+        }
+            if (window.currentView === 'sightings') await renderView('sightings');
+    } else {
             showToast(result?.error || 'Failed to report sighting.', 'danger');
         }
     });
@@ -7387,7 +7655,24 @@ async function renderView(view, options = {}) {
         }
     }
 
+    const parkBlocked =
+        Auth.isAuthenticated() && !PUBLIC_VIEWS.has(safeView) && isParkAccessBlocked(Auth.getCurrentUser());
+
+    const previousView = window.currentView;
     window.currentView = safeView;
+    if (
+        Auth.isAuthenticated() &&
+        !PUBLIC_VIEWS.has(safeView) &&
+        previousView !== safeView &&
+        typeof AI !== 'undefined' &&
+        AI.recordContentView
+    ) {
+        try {
+            AI.recordContentView('tab', safeView, [safeView]);
+        } catch (_) {
+            /**/
+        }
+    }
     const renderNonce = ++__sigtsRenderNonce;
 
     if (shouldUpdateHash) {
@@ -7440,6 +7725,17 @@ async function renderView(view, options = {}) {
     }
 
     ensureShimmerKeyframes();
+
+    document.body.classList.toggle('sigts-park-locked', parkBlocked);
+
+    if (parkBlocked) {
+        const lockoutHtml = renderParkAccessLockoutScreen(getParkAccessState());
+        app.innerHTML = renderMainLayout(lockoutHtml);
+        syncSidebarToggleA11y();
+        refreshNetworkStatusBadge();
+        syncNavDrawerBodyLock();
+        return;
+    }
 
     // 1) Paint instantly: cached view if available, otherwise a lightweight skeleton.
     const cached = getCachedViewHtml(safeView);
@@ -7502,6 +7798,15 @@ async function renderView(view, options = {}) {
     if (safeView === 'intranet') {
         requestAnimationFrame(() => refreshIntranetParkStatusLinks());
     }
+    if (safeView === 'dashboard') {
+        requestAnimationFrame(() => initDashboardEditorialHero());
+    }
+    if (safeView === 'it_predictive_analytics') {
+        requestAnimationFrame(() => refreshPaOperationsStatus());
+    }
+    if (safeView === 'wildlife' || safeView === 'animals') {
+        requestAnimationFrame(() => wireWildlifeCatalogSearch());
+    }
 }
 
 function refreshNetworkStatusBadge() {
@@ -7527,12 +7832,20 @@ function refreshParkAccessPanel() {
 
 window.refreshParkAccessPanel = refreshParkAccessPanel;
 
+function refreshParkAccessUiAfterSimChange() {
+    if (typeof window.refreshAccessContext === 'function') {
+        window.refreshAccessContext();
+    }
+    const view = window.currentView || getLandingViewForUser(Auth.getCurrentUser());
+    renderView(view, { updateHash: false, suppressAccessToast: true });
+}
+
 window.setParkBoundaryMode = function (mode) {
     if (!['auto', 'inside', 'outside'].includes(mode)) return;
     parkAccessSimulation.boundary = mode;
     saveParkAccessSimulation();
-    refreshParkAccessPanel();
-    if (mode === 'outside') showToast('Boundary simulation: OUTSIDE park', 'warning');
+    refreshParkAccessUiAfterSimChange();
+    if (mode === 'outside') showToast('Boundary simulation: OUTSIDE park — SIGTS locked for visitors', 'warning');
     if (mode === 'inside') showToast('Boundary simulation: INSIDE park', 'success');
 };
 
@@ -7540,16 +7853,24 @@ window.setParkNetworkMode = function (mode) {
     if (!['auto', 'online', 'offline'].includes(mode)) return;
     parkAccessSimulation.network = mode;
     saveParkAccessSimulation();
-    refreshParkAccessPanel();
-    if (mode === 'offline') showToast('Network simulation: OFFLINE', 'warning');
-    if (mode === 'online') showToast('Network simulation: ONLINE', 'success');
+    refreshParkAccessUiAfterSimChange();
+    if (mode === 'offline') {
+        const inside = getParkAccessState().insidePark;
+        showToast(
+            inside
+                ? 'Network simulation: OFFLINE — app stays available with cached park content'
+                : 'Network simulation: OFFLINE',
+            inside ? 'info' : 'warning'
+        );
+    }
+    if (mode === 'online') showToast('Network simulation: ONLINE (intranet)', 'success');
 };
 
 window.resetParkAccessSimulation = function () {
-    parkAccessSimulation = { boundary: 'auto', network: 'auto' };
+    parkAccessSimulation = { boundary: 'inside', network: 'online' };
     saveParkAccessSimulation();
-    refreshParkAccessPanel();
-    showToast('Park access simulation reset to live mode.', 'info');
+    refreshParkAccessUiAfterSimChange();
+    showToast('Presentation access restored (inside park, online — cellular OK).', 'success');
 };
 
 async function refreshRareAlertBadge() {
