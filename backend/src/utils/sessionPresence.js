@@ -77,20 +77,42 @@ async function touchUserSessionActivity(userId, coords = null) {
     }
 }
 
-/** SQL fragment: most recent activity timestamp for a user row. */
+/** SQL fragment when last_location_time column exists (legacy static export). */
 const LAST_ACTIVITY_SQL = `GREATEST(
     COALESCE(last_location_time, '1970-01-01'::timestamptz),
     COALESCE(last_login, '1970-01-01'::timestamptz)
 )`;
+
+let cachedLastActivitySql = null;
+
+/** Resolves activity SQL safely when last_location_time migration is not applied. */
+async function resolveLastActivitySql() {
+    if (cachedLastActivitySql) return cachedLastActivitySql;
+    const hasCol = await ensureLastLocationTimeColumn();
+    cachedLastActivitySql = hasCol
+        ? `GREATEST(
+            COALESCE(last_location_time, '1970-01-01'::timestamptz),
+            COALESCE(last_login, '1970-01-01'::timestamptz)
+        )`
+        : `COALESCE(last_login, '1970-01-01'::timestamptz)`;
+    return cachedLastActivitySql;
+}
 
 /** WHERE clause binding for users active within a sliding window. */
 function activeUsersWithinWindowClause(paramIndex = 1) {
     return `is_active = true AND ${LAST_ACTIVITY_SQL} > NOW() - ($${paramIndex})::interval`;
 }
 
+async function buildActiveUsersWithinWindowClause(paramIndex = 1) {
+    const activitySql = await resolveLastActivitySql();
+    return `is_active = true AND ${activitySql} > NOW() - ($${paramIndex})::interval`;
+}
+
 module.exports = {
     touchUserSessionActivity,
     LAST_ACTIVITY_SQL,
     activeUsersWithinWindowClause,
+    buildActiveUsersWithinWindowClause,
+    resolveLastActivitySql,
     ensureLastLocationTimeColumn
 };

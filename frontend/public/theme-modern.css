@@ -522,6 +522,12 @@ h2, h3 { font-weight: 600; }
     overflow: hidden;
 }
 
+/* Tour-help shell: transcript height follows messages (prevents empty flex gap above replies). */
+body.ai-chat-view .ai-simy-shell .section-card.ai-chat-panel {
+    min-height: 0;
+    max-height: none;
+}
+
 .section-card.ai-chat-panel .section-header {
     flex-shrink: 0;
 }

@@ -369,11 +369,16 @@ async function run() {
         }
 
         const guideUser = await getId("SELECT user_id FROM users WHERE username = 'demo_guide' LIMIT 1");
-        const touristUser = await getId("SELECT user_id FROM users WHERE username = 'demo_tourist' LIMIT 1");
-        const itUser = await getId("SELECT user_id FROM users WHERE username = 'demo_it' LIMIT 1");
+        let touristUser = await getId("SELECT user_id FROM users WHERE username = 'demo_tourist' LIMIT 1");
+        if (!touristUser) {
+            touristUser = await getId("SELECT user_id FROM users WHERE username = 'test_tourist' LIMIT 1");
+        }
+        const itUser =
+            (await getId("SELECT user_id FROM users WHERE username = 'demo_it' LIMIT 1")) ||
+            (await getId("SELECT user_id FROM users WHERE username = 'demo_admin' LIMIT 1"));
 
         if (!guideUser || !touristUser || !itUser) {
-            throw new Error('Demo accounts missing. Run resetDemoAccounts.js first.');
+            throw new Error('Demo accounts missing. Run resetDemoAccounts.js or seed.js first.');
         }
 
         const guideProfile = await getId('SELECT tourguide_id FROM tour_guides WHERE user_id = $1 LIMIT 1', [guideUser.user_id]);

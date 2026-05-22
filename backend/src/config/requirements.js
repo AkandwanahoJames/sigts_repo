@@ -13,8 +13,9 @@ const REQUIREMENTS = {
     },
     performance: {
         apiRequestBodyLimit: process.env.API_BODY_LIMIT || '10mb',
+        // IT dashboard polls ~8s with multiple parallel calls; 200/15min was too low for normal use.
         generalRateLimitWindowMs: parseInt(process.env.GENERAL_RATE_LIMIT_WINDOW_MS || `${15 * 60 * 1000}`, 10),
-        generalRateLimitMax: parseInt(process.env.GENERAL_RATE_LIMIT_MAX || '200', 10),
+        generalRateLimitMax: parseInt(process.env.GENERAL_RATE_LIMIT_MAX || '3000', 10),
         authRateLimitWindowMs: parseInt(process.env.AUTH_RATE_LIMIT_WINDOW_MS || `${15 * 60 * 1000}`, 10),
         authRateLimitMax: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '20', 10)
     },

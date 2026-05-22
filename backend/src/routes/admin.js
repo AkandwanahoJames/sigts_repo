@@ -6,7 +6,12 @@ const { pool } = require('../config/database');
 const { authenticateJWT, authorize } = require('../middleware/auth');
 const { hashPassword } = require('../config/auth');
 const { audit } = require('../utils/audit');
-const { LAST_ACTIVITY_SQL, activeUsersWithinWindowClause } = require('../utils/sessionPresence');
+const {
+    LAST_ACTIVITY_SQL,
+    activeUsersWithinWindowClause,
+    buildActiveUsersWithinWindowClause,
+    resolveLastActivitySql
+} = require('../utils/sessionPresence');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const path = require('path');
@@ -22,12 +27,14 @@ router.use(authenticateJWT, authorize('it_manager', 'admin'));
 // =====================================================
 router.get('/stats', async (req, res) => {
     try {
-        const [totalUsers, activeSessions, activeTours, pendingApprovals, avgRating, cacheHit] = await Promise.all([
-            pool.query('SELECT COUNT(*) FROM users WHERE is_active = true'),
+        const activeWindowClause = await buildActiveUsersWithinWindowClause(1);
+        const [totalAccounts, totalActiveUsers, activeSessions, activeTours, pendingApprovals, avgRating, cacheHit] = await Promise.all([
+            pool.query('SELECT COUNT(*)::int AS count FROM users'),
+            pool.query('SELECT COUNT(*)::int AS count FROM users WHERE is_active = true'),
             pool.query(
                 `SELECT COUNT(*)::int AS count
                  FROM users
-                 WHERE ${activeUsersWithinWindowClause(1)}`,
+                 WHERE ${activeWindowClause}`,
                 ['5 minutes']
             ),
             pool.query('SELECT COUNT(*) FROM tour_sessions WHERE status = \'ongoing\''),
@@ -37,7 +44,8 @@ router.get('/stats', async (req, res) => {
         ]);
 
         res.json({
-            totalUsers: parseInt(totalUsers.rows[0].count),
+            totalAccounts: parseInt(totalAccounts.rows[0].count, 10) || 0,
+            totalUsers: parseInt(totalActiveUsers.rows[0].count, 10) || 0,
             activeSessionsNow: parseInt(activeSessions.rows[0].count, 10) || 0,
             activeTours: parseInt(activeTours.rows[0].count),
             pendingApprovals: parseInt(pendingApprovals.rows[0].count),
@@ -54,11 +62,77 @@ router.get('/stats', async (req, res) => {
 });
 
 // =====================================================
+// GET /api/admin/users/directory
+// Full user list + aggregates for IT dashboard (no pagination cap under 500)
+// =====================================================
+router.get('/users/directory', async (req, res) => {
+    try {
+        const maxRows = 500;
+        const [usersResult, totalQ, activeQ, byTypeQ, regQ] = await Promise.all([
+            pool.query(
+                `SELECT user_id, username, email, first_name, last_name, user_type,
+                        is_active, created_at, last_login, phone
+                 FROM users
+                 ORDER BY is_active DESC NULLS LAST, user_type, username
+                 LIMIT $1`,
+                [maxRows]
+            ),
+            pool.query('SELECT COUNT(*)::int AS count FROM users'),
+            pool.query('SELECT COUNT(*)::int AS count FROM users WHERE is_active = true'),
+            pool.query(
+                `SELECT user_type, COUNT(*)::int AS count
+                 FROM users
+                 GROUP BY user_type
+                 ORDER BY count DESC, user_type`
+            ),
+            pool.query(
+                `SELECT to_char(date_trunc('month', created_at), 'YYYY-MM') AS month,
+                        COUNT(*)::int AS count
+                 FROM users
+                 WHERE created_at IS NOT NULL
+                 GROUP BY 1
+                 ORDER BY 1 DESC
+                 LIMIT 12`
+            )
+        ]);
+
+        const total = Number(totalQ.rows[0]?.count) || 0;
+        const users = usersResult.rows;
+        const regRows = (regQ.rows || []).slice().reverse();
+
+        return res.json({
+            generated_at: new Date().toISOString(),
+            users,
+            total,
+            loaded: users.length,
+            complete: users.length >= total,
+            stats: {
+                active: Number(activeQ.rows[0]?.count) || 0,
+                inactive: Math.max(0, total - (Number(activeQ.rows[0]?.count) || 0)),
+                by_type: byTypeQ.rows.map((r) => ({
+                    user_type: r.user_type,
+                    count: Number(r.count) || 0
+                })),
+                registrations_by_month: regRows.map((r) => ({
+                    month: r.month,
+                    count: Number(r.count) || 0
+                }))
+            }
+        });
+    } catch (error) {
+        console.error('Get users directory error:', error);
+        return res.status(500).json({ error: 'Failed to fetch user directory' });
+    }
+});
+
+// =====================================================
 // GET /api/admin/users
 // Get all users with filters
 // =====================================================
 router.get('/users', async (req, res) => {
-    const { role, search, limit = 50, offset = 0 } = req.query;
+    const { role, search } = req.query;
+    const limit = Math.min(500, Math.max(1, Number.parseInt(req.query.limit, 10) || 50));
+    const offset = Math.max(0, Number.parseInt(req.query.offset, 10) || 0);
 
     try {
         let query = `
@@ -80,22 +154,146 @@ router.get('/users', async (req, res) => {
             params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
         }
 
+        const countParams = [...params];
+        let countQuery = 'SELECT COUNT(*)::int AS count FROM users WHERE 1=1';
+        if (role && role !== 'all') {
+            countQuery += ' AND user_type = $1';
+        }
+        if (search) {
+            const base = role && role !== 'all' ? 2 : 1;
+            countQuery += ` AND (username ILIKE $${base} OR email ILIKE $${base + 1} OR first_name ILIKE $${base + 2} OR last_name ILIKE $${base + 3})`;
+        }
+
         query += ` ORDER BY created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
         params.push(limit, offset);
 
-        const result = await pool.query(query, params);
-        const total = await pool.query('SELECT COUNT(*) FROM users');
+        const [result, totalResult] = await Promise.all([
+            pool.query(query, params),
+            pool.query(countQuery, countParams)
+        ]);
 
         res.json({
             users: result.rows,
-            total: parseInt(total.rows[0].count),
-            limit: parseInt(limit),
-            offset: parseInt(offset)
+            total: Number(totalResult.rows[0]?.count) || 0,
+            limit,
+            offset
         });
 
     } catch (error) {
         console.error('Get users error:', error);
         res.status(500).json({ error: 'Failed to fetch users' });
+    }
+});
+
+// =====================================================
+// GET /api/admin/operational-snapshot
+// Live counts for IT admin dashboard (sightings, staff, guides, inventory)
+// =====================================================
+router.get('/operational-snapshot', [
+    query('window_minutes').optional().isInt({ min: 1, max: 120 })
+], async (req, res) => {
+    try {
+        const windowMinutes = Number.parseInt(req.query.window_minutes, 10) || 5;
+        const activeSinceInterval = `${windowMinutes} minutes`;
+
+        const sightingsQ = await pool.query(
+            `SELECT COUNT(*)::int AS total_all,
+                    COUNT(*) FILTER (WHERE verification_status = 'verified')::int AS total_verified,
+                    COUNT(*) FILTER (WHERE timestamp > NOW() - INTERVAL '24 hours')::int AS last_24h
+             FROM sightings`
+        );
+
+        let totalStaff = 0;
+        let guidesOnDuty = 0;
+        try {
+            const hrQ = await pool.query(
+                `SELECT COUNT(*)::int AS total_staff,
+                        COUNT(*) FILTER (
+                            WHERE status = 'active'
+                              AND (role ILIKE '%guide%' OR role ILIKE '%ranger%')
+                        )::int AS guides_active_hr
+                 FROM hr_employees`
+            );
+            totalStaff = Number(hrQ.rows[0]?.total_staff) || 0;
+            if (totalStaff > 0) {
+                guidesOnDuty = Number(hrQ.rows[0]?.guides_active_hr) || 0;
+            }
+        } catch (_) {
+            /** hr_employees may be missing in older DBs */
+        }
+
+        if (totalStaff === 0) {
+            const usersStaffQ = await pool.query(
+                `SELECT COUNT(*)::int AS total_staff
+                 FROM users
+                 WHERE is_active = true
+                   AND user_type IN ('guide', 'it_manager', 'admin')`
+            );
+            totalStaff = Number(usersStaffQ.rows[0]?.total_staff) || 0;
+        }
+
+        const guidesLiveClause = await buildActiveUsersWithinWindowClause(1);
+        const guidesLiveQ = await pool.query(
+            `SELECT COUNT(*)::int AS n
+             FROM users
+             WHERE is_active = true
+               AND user_type = 'guide'
+               AND ${guidesLiveClause}`,
+            [activeSinceInterval]
+        );
+        const guidesLive = Number(guidesLiveQ.rows[0]?.n) || 0;
+
+        let guidesShift = 0;
+        try {
+            const shiftQ = await pool.query(
+                `SELECT COUNT(DISTINCT tourguide_id)::int AS n
+                 FROM guide_shifts
+                 WHERE shift_date = CURRENT_DATE
+                   AND status = 'active'`
+            );
+            guidesShift = Number(shiftQ.rows[0]?.n) || 0;
+        } catch (_) {
+            /** guide_shifts optional */
+        }
+
+        guidesOnDuty = Math.max(guidesOnDuty, guidesLive, guidesShift);
+
+        let inventoryItems = 0;
+        try {
+            const invQ = await pool.query(
+                `SELECT COUNT(*)::int AS n FROM inventory_items WHERE status IS DISTINCT FROM 'retired'`
+            );
+            inventoryItems = Number(invQ.rows[0]?.n) || 0;
+        } catch (_) {
+            /** inventory_items optional */
+        }
+
+        const activeToursQ = await pool.query(
+            `SELECT COUNT(*)::int AS n FROM tour_sessions WHERE status = 'ongoing'`
+        );
+
+        return res.json({
+            generated_at: new Date().toISOString(),
+            window_minutes: windowMinutes,
+            totalSightings: Number(sightingsQ.rows[0]?.total_all) || 0,
+            totalSightingsVerified: Number(sightingsQ.rows[0]?.total_verified) || 0,
+            sightingsLast24h: Number(sightingsQ.rows[0]?.last_24h) || 0,
+            totalStaff,
+            guidesOnDuty,
+            guidesLive,
+            guidesOnShift: guidesShift,
+            inventoryItems,
+            activeTours: Number(activeToursQ.rows[0]?.n) || 0,
+            sources: {
+                sightings: 'sightings',
+                staff: totalStaff > 0 ? 'hr_employees_or_users' : 'users',
+                guides: 'max(hr_active, live_presence, shift_clocked_in)',
+                inventory: 'inventory_items'
+            }
+        });
+    } catch (error) {
+        console.error('Get operational snapshot error:', error);
+        return res.status(500).json({ error: 'Failed to fetch operational snapshot' });
     }
 });
 
@@ -109,18 +307,21 @@ router.get('/active-users', [
     try {
         const windowMinutes = Number.parseInt(req.query.window_minutes, 10) || 5;
         const activeSinceInterval = `${windowMinutes} minutes`;
+        const activitySql = await resolveLastActivitySql();
+        const activeClause = await buildActiveUsersWithinWindowClause(1);
 
         const rows = await pool.query(
             `SELECT user_id, username, first_name, last_name, user_type, email,
-                    ${LAST_ACTIVITY_SQL} AS last_seen,
-                    last_login, last_location_time, last_lat, last_lng
+                    ${activitySql} AS last_seen,
+                    last_login, last_lat, last_lng
              FROM users
-             WHERE ${activeUsersWithinWindowClause(1)}
-             ORDER BY ${LAST_ACTIVITY_SQL} DESC`,
+             WHERE ${activeClause}
+             ORDER BY ${activitySql} DESC`,
             [activeSinceInterval]
         );
         const activeUsers = rows.rows.map((row) => ({
             user_id: row.user_id,
+            id: row.user_id,
             username: row.username,
             name:
                 [row.first_name, row.last_name].filter(Boolean).join(' ').trim() ||

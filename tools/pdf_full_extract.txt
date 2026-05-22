@@ -1,0 +1,2672 @@
+PAGES: 90
+
+
+=== PAGE 1 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+ 
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+ 
+ 
+BY 
+GROUP 34. 
+DEPARTMENT OF INFORMATION SYSTEMS 
+SCHOOL OF COMPUTING AND INFORMATICS TECHNOLOGY 
+ 
+ 
+ 
+A Report submitted to the School of Computing and Informatics Technology 
+For the study Leading to a project in Partial Fulfillment of the 
+Requirements for the Award of the Degree of Bachelor of Information Systems and 
+Technology at Makerere University. 
+ 
+ 
+ 
+Supervisor 
+DR. ANNABELLA HABINKA 
+Department of Information Technology 
+School of Computing and Informatics Technology, Makerere University 
+annabella.habinka@cit.ac.ug, +256-41-540628, Fax: +256-41-540620 
+ 
+ 
+ 
+ 
+November, 2022
+
+=== PAGE 2 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+ 
+i 
+ 
+DECLARATION: 
+As Group 34, we hereby declare that the information presented in this project report is our 
+original work and that to the best of our knowledge, no similar study has been conducted nor 
+has the same report ever been presented to another university for the award of Bachelor of 
+Information Systems and Technology of Makerere University. 
+ 
+ 
+GROUP MEMBERS: 
+# NAME REGISTRATION 
+NUMBER 
+EMAILS AND CONTACTS SIGNATURE 
+1 NZIABAKE 
+ANNE LUISE 
+19/U/19260/PS 
+ 
+nziabakeanne@gmail.com 
+0704928591/ 0780105038 
+ 
+2 NANKUNDA 
+HEATHER 
+19/U/19215/PS 
+ 
+nankunda19heather@gmail.com 
+0708177605/ 0773230780 
+ 
+3 NANKUNDA 
+JACINTAH 
+19/U/19216/PS 
+ 
+nankundajacintah@gmail.com 
+0703730549/ 0771012246 
+ 
+4 AMESO 
+REBEECA 
+19/U/12908/EVE 
+ 
+amesorebecca19@gmail.com 
+0780511814/ 0705112705 
+ 
+5 KARUNGI 
+PHIONA 
+19/U/9491/PSA 
+ 
+phionak41@gmail.com 
+0701482549/ 0789702539 
+ 
+ 
+Date:/…………/………. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+  
+
+=== PAGE 3 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+ii 
+ 
+APPROVAL: 
+This is to certify that I have read, supervised, and approved the report for the project undertaken 
+by Group 34 in partial fulfillment of the requirements for the award of the Degree of Bachelor 
+of Information Systems and Technology of Makerere University. 
+ 
+ Signature………………………………         Date……………/……………/……………… 
+ 
+Dr. Annabella Habinka 
+annabella.habinka@cit.ac.ug, 
+Department of Information Technology, 
+School of Computing and Informatics Technology, 
+Makerere University. 
+  
+ 
+  
+
+=== PAGE 4 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+iii 
+ 
+DEDICATION: 
+It is with genuine gratitude and warm regard that we dedicate this work to people who have 
+done their best to ensure that we attain this level of education. A special feeling of gratitude to 
+our sponsors, The Mastercard Foundat ion Scholars Program at Makerere, our supervisor, Dr. 
+Annabella Habinka, and our parents for the support and continuous encouragement rendered 
+to us during the course of this project. 
+ 
+We also dedicate this work to all our friends and classmates, the doctors from various hospitals 
+who helped us in collection of data and for their contribution towards the successful 
+development of this application. May the Most High God bless them all in their endeavors.  
+
+=== PAGE 5 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+iv 
+ 
+ACKNOWLEDGEMENT: 
+The completion of this undertaking could not have been possible without the participation and 
+assistance of so many people whose names may not all be enumerated. Their contributions are 
+sincerely appreciated and gratefully acknowledged. However, the group would like to express 
+their deep appreciation and indebtedness particularly to the following people: 
+ 
+To our supervisor, Dr Annabella Habinka, who made this work possible. Her guidance and 
+advice carried us throu gh all the stages of writing our project report. We would also like to 
+thank the project coordinator, Dr Esther Namirembe and the entire staff at the College of 
+Computing and Information Sciences together with all lecturers and members of staff at 
+Makerere University, who have taught us all these years while pursuing this degree and availed 
+the necessary information which we have used to complete our Bachelor’s degree successfully. 
+To all relatives, friends, and others who in one way or another shared their support, either 
+morally, financially, or physically. 
+ 
+Above all, to the Great Almighty, the author of knowledge and wisdom, for his indescribable 
+love. We have experienced His guidance day by day and this has enabled us to finish this degree 
+successfully. We shall keep on trusting Him for the future. 
+ 
+  
+
+=== PAGE 6 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+v 
+ 
+TABLE OF CONTENTS: 
+Declaration: ................................................................................................................................ I 
+Approval: .................................................................................................................................. II 
+Dedication: ............................................................................................................................... III 
+Acknowledgement: .................................................................................................................. IV 
+List Of Tables: ...................................................................................................................... VIII 
+List Of Figures: ........................................................................................................................ IX 
+List Of Acronyms .................................................................................................................... XI 
+Abstract: ................................................................................................................................. XII 
+Chapter One: Introduction ......................................................................................................... 1 
+1.0 Introduction: .................................................................................................................... 1 
+1.1 Background: .................................................................................................................... 1 
+1.2 Statement Of The Problem: ............................................................................................ 3 
+1.3 Aims And Objectives ...................................................................................................... 3 
+1.4 Research Scope ............................................................................................................... 4 
+1.5 Significance Of Study ..................................................................................................... 4 
+Chapter Two: Literature Review ............................................................................................... 6 
+2.0 Introduction: .................................................................................................................... 6 
+2.1 Telemedicine ................................................................................................................... 6 
+2.2 Teledermatology ............................................................................................................. 7 
+2.4 Modalities Of Teledermatology. ................................................................................... 10 
+2.6 Teledermatology In Developing Economies ................................................................ 13 
+2.7 Factors Affecting Teledermatology .............................................................................. 14 
+2.8 Why Teledermatology. ................................................................................................. 16 
+2.9 Pros And Cons Of Teledermatology: ............................................................................ 16 
+2.10 Implications Of Teledermatology. ................................................................................ 17 
+2.11 Related Teledermatology Applications: ....................................................................... 18 
+2.12 Strengths And Weaknesses Of Related Apps: .............................................................. 21 
+2.13 Features Of Related Applications: ................................................................................ 22 
+2.14 Summary ....................................................................................................................... 24 
+Chapter Three: Research Methodology ................................................................................... 25 
+3.0 Introduction: .................................................................................................................. 25 
+3.1 Research Design............................................................................................................ 25 
+3.2 Research Methods ......................................................................................................... 25 
+
+=== PAGE 7 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+vi 
+ 
+3.3 Target Population .......................................................................................................... 26 
+3.4 Data Collection Methods .............................................................................................. 27 
+3.5 Data Analysis ................................................................................................................ 28 
+3.6 System Design .............................................................................................................. 28 
+3.7 System Implementation ................................................................................................ 29 
+3.8 System Security ............................................................................................................ 30 
+3.9 System Testing And Validation. ................................................................................... 30 
+3.10 Summary ....................................................................................................................... 31 
+Chapter Four: System Analysis And Design ........................................................................... 33 
+4.0 Introduction ................................................................................................................... 33 
+4.1 System Study ................................................................................................................ 33 
+4.2 System Analysis. ........................................................................................................... 34 
+4.3 Findings From Our Research. ....................................................................................... 34 
+4.4 Software Specifications. ............................................................................................... 39 
+4.5 Hardware Specification ................................................................................................. 39 
+4.6 User Requirements ........................................................................................................ 39 
+4.7 Functional Requirements: ............................................................................................. 41 
+4.8 Non-Functional Requirements ...................................................................................... 41 
+4.9 System Design .............................................................................................................. 42 
+Chapter Five: System Implementation, Testing And Validation. ............................................ 65 
+5.0 Introduction ................................................................................................................... 65 
+5.1 System Implementation ................................................................................................ 65 
+5.2 System Functionality .................................................................................................... 65 
+5.3 System Testing ................................................................................................................... 66 
+5.4 System Validation ......................................................................................................... 67 
+Chapter Six: Summary, Limitation, Conclusion And Recommendations ............................... 68 
+6.0 Introduction: .................................................................................................................. 68 
+6.1 Achievements:............................................................................................................... 68 
+6.2 Challenges: .................................................................................................................... 68 
+6.3 Limitation Of The Study: .............................................................................................. 68 
+6.4 Recommendations: ........................................................................................................ 68 
+6.5 Conclusions: .................................................................................................................. 68 
+References: ............................................................................................................................... 70 
+Appendix 1: Interview Guide For Dermatologist. ................................................................... 74 
+
+=== PAGE 8 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+vii 
+ 
+Appendix 2: Questionnaire ...................................................................................................... 75 
+Appendix 3: Interview With The Dermatologist ..................................................................... 76 
+Appendix 4: Snippets Of The Code Used For The Snapskin Info-Teledermatology Application
+.................................................................................................................................................. 77 
+ 
+  
+
+=== PAGE 9 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+viii 
+ 
+LIST OF TABLES: 
+Table 2.1: Strengths and Weaknesses of Related Apps ........................................................... 21 
+Table 2.2: Related Teledermatology Applications .................................................................. 24 
+ 
+Table 3.1: Summary of the techniques and tools used. ............................................................ 32 
+ 
+Table 4.1: Showing Gender distribution .................................................................................. 34 
+Table 4.2: Source of information about skin care. ................................................................... 37 
+Table 4.3: Physical design for patients. ................................................................................... 52 
+Table 4.4: Physical design for dermatologists. ........................................................................ 52 
+Table 4.5 : Physical design for booking. .................................................................................. 53 
+Table 4.6: Physical design for notifications. ............................................................................ 53 
+Table 4.7: Physical design for Qualifications. ......................................................................... 53 
+ 
+Table 5.1: Shows the target users selected for user testing...................................................... 66 
+ 
+  
+
+=== PAGE 10 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+ix 
+ 
+LIST OF FIGURES: 
+Figure 2.1:Foto Finder as used in Teledermoscopy ................................................................... 8 
+Figure 2.2: Tele-Dermatopathology........................................................................................... 9 
+Figure 2.3: A mobile device used to take a picture of a skin condition. .................................... 9 
+Figure 2.4: Showing Tele-wound care ..................................................................................... 10 
+Figure 2.5:Store and Forward modality ................................................................................... 11 
+Figure 2.6:Real Time Modality................................................................................................ 11 
+Figure 2.7:Hybrid Modality ..................................................................................................... 12 
+Figure 2.8:Miiskin Tracker & eHealth Application ................................................................. 19 
+Figure 2.9:Skin Check Dermatology Application ................................................................... 19 
+Figure 2.10: My SkinSelfie Application .................................................................................. 20 
+ 
+Figure 3.1: Agile Software Development phases .................................................................... 29 
+  
+Figure 4.1: Chart showing the percentages of both male and female respondents. ................. 35 
+Figure 4.2: Colleges from which responses were obtained. .................................................... 35 
+Figure 4.3: A pie-chart showing the responses according to Age group ................................. 36 
+Figure 4.4: A Chart showing the percentage of respondents who consider achieving a healthy 
+skin a priority ........................................................................................................................... 36 
+Figure 4.5: Distribution of access to skin clinics for medical attention................................... 37 
+Figure 4.6: Percentage of the usage of the Tele-health application. ........................................ 38 
+Figure 4.7: Experience from using a Tele-health Application. ................................................ 38 
+Figure 4.8: Different Interfaces for different users. ................................................................. 42 
+Figure 4. 9: The system architecture of the SnapSkin Info-Teledermatology Application ..... 43 
+Figure 4.10: The symbols used in data flow diagrams and their meanings. ............................ 43 
+Figure 4.11: Context diagram (Level 0) for the SnapSkin Info -Teledermatology Application
+.................................................................................................................................................. 44 
+Figure 4.12:Illustration of use case diagram for the Snapskin Info -Teledermatology 
+Application. .............................................................................................................................. 45 
+Figure 4.13: A Flow chart for the SnapSkin Info-Teledermatology Application .................... 46 
+Figure 4.14: DFD Level 1 for the SnapSkin Info-Teledermatology Application. ................... 47 
+Figure 4. 15: Entity Relationship Diagram for the SnapSkin Info-Teledermatology Application
+.................................................................................................................................................. 49 
+Figure 4.16:Sequence Diagram for the SnapSkin Info-Teledermatology Application. ........... 50 
+
+=== PAGE 11 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+x 
+ 
+Figure 4.17:Activity diagram for the SnapSkin Info-Teledermatology Application. .............. 51 
+Figure 4.18:Login Form for The Snapskin Info-Teledermatology Application. ..................... 54 
+Figure 4.19:Registration form for the SnapSkin Info-Teledermatology Application.............. 55 
+Figure 4.20 : Homepage for the SnapSkin Info-Teledermatology Application....................... 55 
+Figure 4.21: The blogs page for the SnapSkin Info-Teledermatology Application. ............... 56 
+Figure 4.22: User profile page for the SnapSkin Info-Teledermatology Application. ............ 56 
+Figure 4.23: Manage the patient skin view for the SnapSkin Info-Teledermatology Application.
+.................................................................................................................................................. 57 
+Figure 4.24: The book dermatologist view for the SnapSkin Info-Teledermatology Application.
+.................................................................................................................................................. 58 
+Figure 4.25: Calendar view for the SnapSkin Info-Teledermatology Application .................. 58 
+Figure 4.26: Dermatologist view of the SnapSkin Info-Teledermatology Application ........... 59 
+Figure 4.27: Home page view for the dermatologist of the SnapSkin Info -Teledermatology 
+Application ............................................................................................................................... 59 
+Figure 4.28: Appointment view by the dermatologist for the SnapSkin Info -Teledermatology 
+Application. .............................................................................................................................. 60 
+Figure 4.29: Dermatologist’s profile view for the SnapSkin Info-Teledermatology Application
+.................................................................................................................................................. 61 
+Figure 4.30: Admin’s login form for the SnapSkin Info-Teledermatology Application ......... 61 
+Figure 4.31: Admin’s login form for the SnapSkin Info-Teledermatology Application ......... 62 
+Figure 4.32: All Admins page of the SnapSkin Info-Teledermatology Application ............... 62 
+Figure 4.33: All users page of the SnapSkin Info-Teledermatology Application ................... 63 
+Figure 4.34: All dermatologists page of the SnapSkin Info-Teledermatology Application .... 63 
+Figure 4.35: Payment notification page of the SnapSkin Info-Teledermatology Application 64 
+Figure 4.36: Create blogs page of the SnapSkin Info-Teledermatology Application .............. 64 
+ 
+  
+
+=== PAGE 12 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+xi 
+ 
+LIST OF ACRONYMS 
+ 
+ADMIN:         Administrator 
+APP:               Application   
+BaaS:              Backend-as-a-Service 
+CSS:  Cascading Style Sheets 
+DFD:  Data Flow Diagram 
+ERD:  Entity Relationship Diagram 
+FK:  Foreign Key 
+GUI:  Graphical User Interface  
+HTML:            HyperText Markup Language  
+ID:  Identification 
+ISAD:   International Society of Atopic Dermatitis 
+ISP:  Internet Service Provider 
+ISSD:   The International Society of Skin Diseases 
+IST:  Information Systems and Technology 
+IT:                   Information Technology 
+PK:                  Primary Key. 
+SAF-TD:         Store-and-Forward Teledermatology 
+SD:   Skin Diseases. 
+SDLC:  System Development Life Cycle 
+TMGG:  The Medical Concierge Group  
+Txt:                  Text 
+WHO:              World Health Organization. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+=== PAGE 13 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+xii 
+ 
+ABSTRACT: 
+The vast advancements in telecommunications and converting medical information to a digital 
+format have increased the number of applications within telemedicine. In Uganda, there has 
+been increasing numbers of patients with skin diseases and yet there is a  limited number of 
+dermatologists. One of the solutions for reaching an economically and socially viable solution 
+to this challenge is exploiting the benefits of modern technologies.  
+ 
+This report presents a solution to the challenge of limited dermatologi sts which is a mobile 
+teledermatology application, the Snapskin Info-teledermatology Application that facilitates the 
+consultation, the aftercare of patients and providing information about skin health to patients 
+suffering from skin diseases. The application is based on store -and-forward teledermatology 
+and consists of two main components: an application implemented on the mobile phone with 
+two views: (1) For patients to transmit both skin image data and biofeedback information, (2) 
+For dermatologists to work on the patients.   
+ 
+A mobile application that allows sharing of photos showing different skin conditions by 
+patients to dermatologists was developed. Through this the Dermatologist can give diagnosis 
+and suggest the recommended prescriptions. This application was tested by Group 34 members 
+to ensure that all features work efficiently. 
+ 
+In conclusion therefore, the geographical and socioeconomic barriers preventing some patients 
+from receiving dermatologic care and information have been minimized using teledermatology 
+applications and systems and through addressing such obstacles improves the quality of 
+healthcare services. 
+ 
+Keywords: Application, Dermatology, Info -Teledermatology, Skin care, Skin diseases, 
+Snapskin, Teledermatology, Telemedicine 
+  
+ 
+ 
+ 
+
+=== PAGE 14 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+ 
+1 
+ 
+CHAPTER ONE: INTRODUCTION 
+1.0 Introduction overview: 
+This section presents the background of the study, the statement of the problem, objectives of 
+the study, scope of the study and the significance of the study.  This study was aimed at 
+designing and implementing a mobile application that enables patients with skin diseases to 
+have remote access to dermatologists and information about the different skin diseases. 
+ 
+1.1 Background: 
+Telemedicine is a service that is rapidly evolving to provide increased access to efficient, cost-
+effective, and high-quality healthcare in Uganda and the world at large. It is defined as the use 
+of devices along with technological resources to gain access to a patient and their health 
+information to assess, evaluate, and diagnose them, as well as to decide if a visit to a healthcare 
+center is required  (Giulio Nittari, 2022). It is also seen as a tool that can help manage the 
+medical and financial risk of patient care in many parts of the world most e specially the 
+underserved areas and as a result, providers with telemedicine capabilities are hoping to 
+become more competitive in winning health care contracts which has led to many 
+developments in the different sectors of telemedicine among which we have  teledermatology 
+(Perednia, 1995). 
+ 
+Teledermatology is a subspecialty of dermatology and probably among the most popular 
+applications of e-health and telemedicine. The term “Teledermatology” was first coined by two 
+dermatologists, Perednia and Brown in 1995 (Teledermatology: What Is It? Benefits of Virtual 
+Dermatologist - eVisit, 2022). In this field, telecommunication technologies are being used to 
+transfer medical information between the patients and the dermatologists over varying 
+distances through audio , visual and data communication with an aim to provide skin care 
+solutions to the patients with different skin issues. Teledermatology applications take on 
+different areas of healthcare management such as consultation, diagnosis, treatment and even 
+education about different skin diseases. 
+ 
+Skin diseases (SD) are conditions that affect your skin, and these diseases may cause rashes, 
+inflammation, itchiness, or other skin changes (Skin diseases: Types of, symptoms, treatment 
+& prevention 2022). Some skin conditions may be genetic, while lifestyle factors may cause 
+others, and these have proven to be a challenge in many communities. This has therefore called 
+for intervention from different people and organizations. To mitigate this challenge, th e 
+
+=== PAGE 15 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+2 
+ 
+International Society of Atopic Dermatitis (ISAD) defined a road map with top priorities 
+including increasing access to essential medicines for skin diseases and access to certified 
+dermatologists (Barogui et al., 2018). Additionally, there was also provision of better education 
+to primary healthcare workers including provision of better skin health care educational 
+materials to compensate for the low number and uneven distribution of dermatologists and use 
+of digital technologies to improve appropriate primary patient care and patient referrals.  
+ 
+In Africa, access to specialists in dermatology is difficult in all countries, with an average of 
+one dermatologist for 1 -2 million inhabitants (Schmid -Grendelmeier et al., 2019). In many 
+rural areas in sub-Saharan Africa, epidemiologic data concerning skin diseases is not available 
+and little is known about the effect of regular treatment schedules by paramedical staff 
+(especially community health workers) in the primary healthcare system on the severity and 
+prevalence of dermatoses (Schmeller, 1998). However, epidemiological studies of the burden 
+of skin disease in Africa have helped shape directions for physician training as well as public 
+health campaigns and empirical data about the local burden of disease ha s been used to help 
+guide educational and developmental efforts.  (Brooke et al., 2017). 
+ 
+According to World Health Organization (WHO) data published in 2018, skin disease deaths 
+in Uganda reached 1,050 or 0.40% of total deaths. The age adjusted Death Rate  is 5.18 per 
+100,000 of population ranking Uganda 28 in the world  (Skin Disease in Uganda , 2020). 
+Uganda has 16 registered dermatologists, but only 6 are practicing (Kiva, 2022) with a current 
+population being 49,008,844 as of Saturday, October 8, 2022, ba sed on Worldometer 
+elaboration of the latest United Nations data. This makes the ratio of dermatologist to people 
+ratio so low with approximately 8 million people served by one dermatologist. Hence, many 
+people in Uganda do not have access to dermatology services. Even more concerning, a few in 
+the community are aware that such services exist, and this has led to unattended skin issues. 
+ 
+Snapskin Info-Teledermatology Application offers a teledermatology solution to the challenge 
+of inadequate specialists in dermatology and inaccessibility of skin health care information and 
+services. This platform enables patients to take pictures of their skin condition and share them 
+with the dermatologist and thereaft er the consultant dermatologist reviews  the pictures to 
+prescribe appropriate treatment and then also monitor and evaluate treatment outcomes over 
+time. The application also provides skin health care information to the users and uses Store -
+
+=== PAGE 16 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+3 
+ 
+and-Forward Teledermatology (SAF-TD) as a mode of delivery since it is easier and cheaper 
+to implement. 
+ 
+1.2 Statement of the problem: 
+In Uganda, there has been inaccessibility of dermatologists by patients and even more 
+concerning, few people are aware that such services  exist. According to Dr. Leo Odongo, his 
+previous training as a dermatologist enabled him to recognize the burden of skin conditions 
+and infections within the local community ( Bringing Dermatology to the Underserved in 
+Uganda, 2018). With few practicing dermatologists in Uganda, proper treatment has not been 
+readily available and skin health care is limited due to lack of information about the skin 
+diseases amongst primary healthcare workers, limited access to dermatologists, lack of proper 
+training of healthcare workers and shortage of appropriate treatments. 
+ 
+The demand for dermatologic care is increasing, and this apparent undersupply of 
+dermatologists may be contributing to disparities in access to skin health care. One of the 
+largest barriers to accessing dermatologic care is inaccessibility of Dermatologists and 
+difficulty obtaining appointments due to long waiting time (Maddukuri et al., 2021). Therefore, 
+the Snapskin Info -Teledermatology Application serves  a purpose in bridging this gap, 
+increasing access to dermatology care and information to meet these unmet needs of the people 
+of Uganda. 
+ 
+1.3 Aims and Objectives 
+1.3.1 Main Objective 
+The main aim of this study is to develop a Snapskin Info -Teledermatology Application that 
+enables patients with  skin diseases to have remote access to dermatologists and information 
+about the different skin diseases. 
+ 
+1.3.2 Specific Objectives: 
+1. To conduct a literature review and carry out a field study to identify the system 
+requirements of the Snapskin Info-Teledermatology Application. 
+2. To design a Snapskin Info-Teledermatology Application. 
+3. To implement the Snapskin Info-Teledermatology Application based on the design. 
+4. To test and validate the Snapskin Info-Teledermatology Application. 
+
+=== PAGE 17 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+4 
+ 
+1.4 Research Scope  
+1.4.1 Geographical Scope  
+The study was conducted at Makerere University and hospitals located in Kampala that provide 
+Dermatology services given that expert dermatologists and skin clinics that provide 
+professional skin care services are centered in Kampala. This study covered hospitals such as 
+Case Hospital and Mulago hospital. It also targeted students in different colleges of Makerere 
+University from whom we obtained data about our topic of study between June to October 
+2022. 
+ 
+1.4.2 Time Scope  
+The study considered a period of six months during which the following activities were to be 
+achieved: proposal development, data collection and analysis, design, implementation, and 
+testing and validation of the Snapskin Info-Teledermatology Application. 
+ 
+1.4.3 Technical Scope  
+The study involved conducting a literature review and a field study to identify the system 
+requirements of the Snapskin Info -Teledermatology Application. These were used to design 
+the proposed system which was then implemented using fr ameworks like react native for 
+frontend, and firebase for backend. The system was tested and validated to find out the extent 
+to which it addressed the system requirements.  
+ 
+1.5 Significance of study 
+This study was intended to benefit the patients, developers, dermatologists, future researchers, 
+and the government through provision of information and improving the quality of health 
+services provided. 
+ 
+1.5.1  Patients 
+The developed application enables patients to consult specialists without the need to meet them 
+physically hence reduced costs. The application also  provides skin related information and 
+dermatology services to patients.  
+ 
+1.5.2  Dermatologists 
+
+=== PAGE 18 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+5 
+ 
+The system helps the dermatologists gain more information about new and evolving skin 
+diseases. The system also enables the dermatologists to ensure effective monitoring of   
+patients. The application eases communication between the patients and dermatologists. 
+ 
+1.5.3  Developers 
+The research study co nducted intends to help future programmers or developers with the 
+necessary information applied in the development of the SnapSkin Info -Teledermatology 
+Application and other related applications. 
+ 
+1.5.4  Government 
+Through taxes generated from billing transactions made by patients, the government benefits 
+through acquisition of revenue. This research also aimed at influencing the Ministry of Health 
+to adopt the use of teledermatology in Uganda. 
+ 
+1.5.5  Future Researchers  
+This research intends to provide information about teledermatology to other researchers to help 
+them in providing better solutions to skin issues. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+=== PAGE 19 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+6 
+ 
+CHAPTER TWO: LITERATURE REVIEW 
+2.0 Introduction: 
+This section focuses on existing literature that is related to Teledermatology. The literature was 
+sourced from textbooks, journals, and internet sources in relation to Teledermatology systems. 
+It also consists of the contribution of the existing systems in relation to the proposed system. 
+ 
+2.1 Telemedicine 
+Telemedicine can be defined as a new technology which provides medical information and 
+remote health care support or a modern technology supporting health care at a distance (Pala 
+et al., 2020)  According to the World Health Organization, Telemedicine is de fined as the 
+delivery of healthcare services, with distance as a critical factor, whereby all health care 
+professionals use information and communication technologies for the exchange of valid 
+information for diagnosis, treatment and prevention of diseases  and injuries, research and 
+evaluation, and for the continuing education of health care providers, all in the interests of 
+advancing the health of individuals and their communities (ISSA, 2021). 
+ 
+2.1.1 Forms of Telemedicine: 
+There are various forms of Telemedicine and these include: 
+Telepharmacy is a form of pharmaceutical care in which pharmacists and patients are not in 
+the same place and can interact using information and communication technology (ICT) 
+facilities (Baldoni, 2019).  
+Telepathology is the practice of remote pathology using telecommunication links to enable the 
+electronic transmission of digital pathology images (Farahani & Pantanowitz). 
+Telepsychiatry is a form of telemedicine that uses telephone or video conferencing tools to 
+provide psychiatric services (Leonard, 2020). 
+Telecardiology refers to the telemonitoring of patients with an IMD as part of the management 
+of a cardiac pathology (treatment or diagnosis): pacemaker, implantable cardiac defibrillator 
+or long-term rhythmic holter (Science-Direct, 2022). 
+Telesurgery, also called remote surgery, is performed by a surgeon at a site remote from the 
+patient and the s urgical tasks are directly performed by a robotic system controlled by the 
+surgeon at the remote site (Encyclopedia, 2018). 
+ 
+
+=== PAGE 20 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+7 
+ 
+2.2 Teledermatology 
+Teledermatology (commonly referred to as Telederm by practitioners) is one of the most 
+common telemedicine applications (Friis, 2022) and is defined as a subspecialty of 
+dermatology which is the branch of medicine  concerned with the diagnosis, treatment, and 
+prevention of diseases of the skin, hair, nails, oral cavity, and genitals (Davis, 2021).   
+ 
+The increase in use of teledermatology  technologies has been due to the many patients not 
+having access to appropriate dermatological care and the upward trend in the skin cancers 
+morbidity. Nowadays smartphones, computers and other Internet connected devices are 
+commonly used in teledermatolo gy since they are cheaper and more portable and since skin 
+disorders in majority of cases are easily seen by the human eye therefore can be accurately 
+captured by imaging technologies (Pala et al., 2020). 
+ 
+Applications of teledermatology span different mod es of healthcare management such as 
+consultation where a patient with a certain skin condition contacts a dermatologist through 
+telecommunication to request proper diagnosis and treatment (evisit, 2022), triage  which is a 
+process of prioritizing patients and determining the need for in-person visits, direct-care where 
+patients are able to take photos of their skin lesions and send them directly to their physicians 
+and Follow -up which involves remote medical supervision of chronic skin conditions and 
+optimize therapy (Pala et al., 2020). 
+ 
+These modes can be achieved by using the different areas of teledermatology that include; -
+telediagnosis which serves as a triage tool, guiding individuals to the appropriate health care 
+provider for his or her disease, speci alist referral  where medical professional or general 
+practitioner who sees the patient can consult a specialist through telecommunication in order 
+to receive a second opinion and home telehealth, or telehomecare which involves the treatment 
+of a patient wi th a chronic condition remotely at home. A critical aspect of interest of 
+telehomecare when it comes to dermatology deals with patients with skin conditions that 
+require follow-up appointments (evisit, 2022).  
+ 
+2.2 Teledermatology Technologies: 
+Teledermatology involves different technologies, and these include the following: 
+Teledermoscopy 
+
+=== PAGE 21 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+8 
+ 
+In teledermoscopy, a specialist can receive digital dermoscopic lesion images through 
+electronic transmission to examine them. Dermoscopy refers to the technical field of utilizing 
+an epiluminescence microscope to view skin lesions in magnification in -vivo. One can take 
+digital dermoscopic images by attaching a digital camera to a dermatoscope or by using special 
+video cameras designed for dermoscopy such as the FotoFinder as seen in the figure below. 
+Because dermoscopy involves the examination of two -dimensional images, it perfectly suits 
+digital imaging and teledermatology. Campus Medicus, an example of teledermoscopy, is a 
+web-based telediagnostic network that enables specialists to do this kind of work (evisit, 2022).  
+ 
+Figure 2. 1:Foto Finder as used in Teledermoscopy  
+(Source: https://images.app.goo.gl/9HJ1fvM4Et7f6cCY7) 
+ 
+Tele Dermatopathology  
+Teledermatopathology involves transmitting dermatopathologic images either via a store and 
+forward system (transmission of images as one file) or real -time with the help of a robotic 
+microscope. Teledermatopathology aided by teledermoscopy consists of the transmission of 
+critical medical data, clinical and dermoscopic images to a pathologist who p erforms the 
+traditional histopathologic diagnosis as seen in the figure below (evisit, 2022). 
+
+
+=== PAGE 22 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+9 
+ 
+ 
+Figure 2.2: Tele -Dermatopathology.  
+(Source: https://images.app.goo.gl/wEHH382Qq1MD8RGf9) 
+ 
+ 
+Mobile teledermatology 
+Mobile teledermatology is a process where at least one party (the person in need of advice or 
+the doctor) makes use of wireless or mobile equipment such as smartphones and tablets. Mobile 
+teledermatology appears to be particularly suited for patient triage ( i.e., referral according to 
+the character and severity of their specific skin condition). Another application of mobile 
+teledermatology is for follow-up visits of people suffering from chronic skin conditions (evisit, 
+2022). The figure below shows the use of a mobile device to take a picture of a skin condition. 
+ 
+Figure 2. 3: A mobile device used to take a picture of a skin condition.  
+(Source: https://images.app.goo.gl/pL8XctFeBiz41W3M7) 
+ 
+ 
+
+
+=== PAGE 23 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+10 
+ 
+Tele-wound care 
+This refers to remote wound assessment and treatment in the home care setting (Santamaria, 
+2013). Tele-wound care reduces costs, improves quality of life for chronic wound patients, and 
+is equally effective to conventional care (Chanussot-Deprez, C, & Contreras-Ruiz, 2008). 
+ 
+Figure 2. 4: Showing Tele -wound care  
+(Source: https://images.app.goo.gl/Ffq9NJKctdC2WrpA7) 
+ 
+2.4 Modalities of Teledermatology. 
+Teledermatology has two established modalities: store -and-forward (asynchronous) and live 
+interaction (synchronous).  
+ 
+Store and Forward Modality. 
+Store-and-forward teledermatology  consists of an electronic platform where referring 
+healthcare providers upload digital pictures including dermatoscopic images. These images, 
+combined with pertinent information on the patient’s medical history, are transmitted in 
+encrypted format to dermatologists who provide a diagnosis and treatment plan. On the other 
+hand, the live interaction modality involves real -time video interaction between the primary 
+care provider and the tele -dermatologist. Both the store -and-forward and live interaction 
+modalities can be applied between referring physicians and consulting dermatologists or 
+directly between patients and dermatologists (Campagna, et al., 2017).  
+
+
+=== PAGE 24 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+11 
+ 
+ 
+Figure 2. 5:Store and Forward modality  
+(Source: https://images.app.goo.gl/HEdDCmVoaK5fNFVA8) 
+ 
+Real Time Modality. 
+With real time or interactive teledermatology, the medical provider and the patient interact 
+through a live video conference. In some cases, a remote surgery may be involved as well as 
+the use of telerobotic microscopes particularly when it comes to dermatopathology. This makes 
+this mode of data transmission more expensive as sophisticated and costly technology must be 
+used and both parties must also be available at the same time (evisit, 2022). 
+ 
+ 
+Figure 2. 6:Real Time Modality  
+ 
+Hybrid Modality. 
+The store-and-forward and real time application methods can also be combined to form hybrid 
+modes of data transmission where patients were seen face-to-face by the primary care provider 
+
+
+=== PAGE 25 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+12 
+ 
+to ensure a relevant history, high -quality clinical and dermatoscopic photographs were taken. 
+The hybrid method merges advantages of the afore mentioned two: time saving aspects of real-
+time videoconferencing and quality of digital images (Pala et al., 2020). 
+ 
+Referrals are summarized and sent to the on-call dermatologist who provides a treatment plan 
+for the care provider to enact. For severe or life -threatening cases, the on -call dermatologist 
+would also attend for a face-to-face consultation. This system involved both synchronous and 
+asynchronous models (Cowan, et al., 2022). 
+According to a survey completed by (Armstrong, et al., 2012), most teledermatology programs 
+have shifted from live interaction video to the store -and-forward modality due to its 
+technological flexibility and lower cost of service delivery (Pak, et al., 2009) with the primary 
+advantage being that it does not require both parties to be present at the same time and location. 
+ 
+Figure 2. 7:Hybrid Modality  
+(Source: https://images.app.goo.gl/Z5h1EgYBUVnTwNe86) 
+ 
+2.5 Teledermatology in developed economies. 
+In USA: 
+Teledermatology is one of the most active applications of telemedicine rendered in the United 
+States. According to (Yim, et al., 2018), there were 40 active nongovernmental programs, 
+amounting to a 48% increase and 30% discontinuation rate over five years. Academia remained 
+the most common practice setting (50%). Median annual consultation volume was comparable 
+with 263 consultations, but maximum annual consultation volume increased (range: 20 -
+
+
+=== PAGE 26 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+13 
+ 
+20,000). The most frequent payment method was self-pay (53%). Store-and-forward continued 
+to be the most common delivery modality. In Fiscal Year 2016, the VA System consisted of 
+62 consultation sites and performed a total of 101,507 consultations (Yim, et al., 2018). 
+ 
+In China 
+Teledermatology is an important part of telemedicine in China, and many interactive websites 
+and mobile applications allow access to these services (Mu, et al., 2021). A survey showed that 
+18.0% of physicians offering telemedicine service on the Haodaifu platform in 2017 were 
+dermatologists. The cost of synchro nous teledermatology service is affordable. Taking the 
+Haodaifu application as an example, the consultation fee for new users is one CNY 
+(approximately 0.15 USD), while for regular users it is 29 CNY (approximately 4.5 USD) (Mu, 
+et al., 2021). 
+ 
+In Germany 
+In Germany, teledermatology is not yet implemented in routine care. To our knowledge, quite 
+a few patients and general practitioners (GPs) in Germany help themselves by using 
+commercial end-to-end encrypted communication platforms such as WhatsApp (Koch, e t al., 
+2018). However, with the increasing digitalization and the current pandemic, teledermatology 
+has gained importance in German-speaking countries in recent years (Greis, et al., 2022). From 
+the survey among dermatologists from Germany, 17.5 % of 480 r espondents offered online 
+video consultation, 11.3 % offline consultation (store and forward) and 10.0 % both (Elsner, 
+2020).  
+2.6 Teledermatology in developing economies 
+In India. 
+The dermatologist community in India is clustered in and around urban areas , limiting access 
+to specialists for many patients in rural locations, which is further complicated owing to limited 
+means of communication and transportation.   A mobile phone application developed by 
+Nurithm labs and All India Institute of Medical Sciences (AIIMS), Delhi, is DermaAId (F & 
+KT., 2020) for Android and IOS phones was launched which general physicians can use in 
+clinical settings to augment their disease diagnosis for common 20 dermatological dise ases 
+(Paola, et al., 2020).  
+ 
+ 
+ 
+
+=== PAGE 27 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+14 
+ 
+In Ghana. 
+Ghana is a developing country in West Africa. With low doctor to patient ratios, dermatologists 
+are few to none in Ghana’s community and as access to mobile communication increases 
+dermatologists are now able to us e the mobile telecommunications infrastructure to provide 
+“mobile teledermatology”, which uses mobile devices to provide dermatologic services at a 
+distance rather than face to face consultations (Ekanoye, et al., 2017). 
+ 
+In Kenya. 
+Doctors trained in derma tology are extremely rare in Kenya, but a new teledermatology 
+(telederm) system at the IU-led AMPATH partnership allows a single dermatologist to utilize 
+technology to serve patients throughout western Kenya and might soon do the same for patients 
+in Indiana as well. (IU, 2021) 
+Almasi Skincare  offers excellent online doctor consultation or teledermatology in Kenya 
+services to improve the health of the skin, hair, and nails. 
+(Almasi, 2022). 
+ 
+2.7 Factors Affecting Teledermatology  
+Authors from the Departure of Dermatology in New York distinguished five different 
+categories of factors: clinical, economic, technological, legal, and ethical (Pala et al., 2020).  
+ 
+Clinical 
+Clinical considerations are specifically important and account for proper diagnosis and the 
+following treatment process.  The accuracy of teledermatology might be disputed when 
+diagnosing dermatoses such as psoriasis, atopic dermatitis, and actinic keratosis. 
+Teledermatology does not allow palpation while it ha s been proven that the physical touch is 
+an important asset when examining a patient, equally as crucial as visual diagnosing. (Cox, 
+2007). 
+ 
+Some conditions are not perfectly suited for the store and forward model. For instance, cases 
+when full body examin ation is needed, patients with naevus are in the high -risk group of 
+developing melanoma or patients require in -person counseling due to extensive medical 
+records.  
+Patients seeking clarification, in case they have questions regarding recommendations, might  
+encounter difficulties with getting timely feedback. The lack of information exchange can 
+
+=== PAGE 28 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+15 
+ 
+inhibit development and improvement of teledermatology programs.  When it comes to 
+assessing pigmented lesions, general practitioners relying only on teledermatology  may risk 
+under detection of melanomas. In order to take the necessary precautions in this health care 
+model, both dermatologists and non-dermatologists must be willing to conduct full -body skin 
+examinations. 
+ 
+Economic 
+The most frequently named economic ch allenge is obtaining reimbursements. There is a 
+widespread concern that consultations delivered through teledermatology are reimbursed at a 
+lower rate compared to in -person visits. Most mentioned concerns are delays or even lack of 
+any refunds in cases when the patient has failed to obtain the services. While many insurance 
+policies, including Medicare, often offer coverage for teledermatology services, there are still 
+several insurances that do not  reimburse for this type of care. This can be a major barri er for 
+teledermatology (Pala et al., 2020). 
+ 
+Technological 
+Most frequently mentioned challenges in teledermatology are technological barriers. Evidence 
+suggests that poor image quality, billing systems integration and inefficient, expensive 
+software are ar eas which require a lot of improvement.  Smartphones and commercially 
+available telemedicine platforms remain expensive, thus there is a need to make them 
+affordable and compatible with the existing medical record systems (Pala et al., 2020). Reliance 
+on sm artphone-captured images may be misleading because  their cameras are of inferior 
+quality and the health care workforce lack formal photography training. All these issues impair 
+the ability to provide high-quality and timely care. 
+ 
+Legal 
+Main considerations relate to security of patients’ information and medical data transmitted 
+electronically. In the Position Statement on Telemedicine made by the American Aca demy of 
+Dermatology Association (Pala et al., 2020), there is a record that providers should encrypt 
+transmissions to secure health information, and they should include safety understanding in a 
+consent form. Information should be stored on firewall -protected servers. Patients should be 
+properly informed of who has access, how information is stored along with all its benefits and 
+risks. 
+ 
+
+=== PAGE 29 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+16 
+ 
+Ethical 
+Support for Teledermatology is especially applicable in underserved areas. Providers and 
+systems that utilize Tel edermatology should give notice how it impacts access to healthcare, 
+relationships with patients, capacity for equitable treatment, cost, and quality of life. Physicians 
+express concerns that telemedicine would promote a technology -centric rather than pati ent-
+centric model. They also report the fear that a variety of technological advances will 
+depersonalize the medical consultations (Pala et al., 2020). 
+ 
+2.8 Why Teledermatology. 
+Rapid technological development: 
+Teledermatology is quickly becoming the solution for providing quality skin health care. The 
+number of mobile connections in Uganda in January 2021 was equivalent to 60.3% of the total 
+population and Internet penetration in Uganda stood at 26.2% in January 2021 (Kemp, 20 21). 
+This is evidence that there is steady progress in technological development in Uganda which 
+has favored growth of telemedicine technologies. The lack of awareness about dermatology 
+services has birthed the idea of the SnapSkin Info-Teledermatology Mobile Application. 
+ 
+The burden of dermatological diseases in Uganda 
+Skin disorders vary greatly in symptoms and severity. They can be temporary or permanent 
+and may be painless or painful. Some have situational causes, while others may be genetic. 
+Some skin conditions are minor, and others can be life -threatening. Some of the diseases 
+include Acne, Cold sore, Blister, Eczema among others (Brind'Amour, 2016).  In February 
+2022, Uganda prisons were hit by a skin disease called scabies. As stated by Raphael Oling a 
+the commissioner in charge of health services in the Uganda Prisons service, skin diseases were 
+becoming a dynamic problem given the fact that every year the prisons receive 120,000 inmates 
+(Kiva N., 2022). 
+ 
+High mortality rate of skin disease patients in Uganda 
+According to the data published by WHO in 2018 Skin Disease Deaths in Uganda reached 
+1,050 or 0.40% of total deaths. The age adjusted Death Rate is 5.18 per 100,000 of population 
+ranks Uganda the 28 in the world (WLE, 2020).  
+ 
+2.9 Pros and Cons of Teledermatology: 
+According to the American Academy of Dermatology (AAD), teledermatology can: 
+
+=== PAGE 30 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+17 
+ 
+• Offer clinical support to patients. 
+• Increase access to care by reducing geographical barriers. 
+• Use various forms of technology to provide comprehensive care. 
+• Improve patient care and outcomes. 
+• Offer cost-effective solutions. 
+• Some of the major advantages of teledermatology include: 
+Greater convenience. 
+Teledermatology appointments can get your condition diagnosed accurately and quickly by the 
+right person. You may be able to get a teledermatology consultation much quicker than an in -
+person appointment as well (JotForm, 2021).  
+ 
+Improved access to treatment. 
+Teledermatology can increase access to care. If you live in a rural area, or even just somewhere 
+where there may not be a dermatologist or the exact type of specialist you need to see for your 
+specific condition, teledermatology can be an ideal way to get your questions answered and 
+your condition looked at without driving a far distance (Fadadu, 2021). 
+ 
+Reduced cost. 
+Teledermatology can save time and driving distance as well as money. It is considered to have 
+fewer associated out-of-pocket costs than most in-person services (Fadadu, 2021). 
+In conclusion, teledermatology aims to train physicians in rural areas and combat patients’ 
+exploitation, build medical awareness of recipients and their dermatologic acumen, still 
+remembering that education is the core of teledermatology. 
+ 
+2.10 Implications of Teledermatology. 
+Teledermatology has various implications to the following categories; 
+Country: Teledermatology as a business model has a good potential because it generates  
+revenue for the country through taxation of different teledermatology services and taxes on 
+data for internet connection (Wang, et al., 2020). 
+ 
+Consultation from other expert dermatologists across the world helps to improve the health 
+sector of the country. This would help to improve dermatology services offered to the public 
+of Uganda through education of more junior healthcare professionals.  
+
+=== PAGE 31 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+18 
+ 
+Teledermatology contributes to the reduction in the mortality rate as a result of deaths caused 
+by skin diseases. 
+ 
+Society: 
+Implementation of teledermatology increases access to dermatology services such as diagnostic 
+testing treatment and skin surgeries to people in remote areas such as Kabale district, Karamoja 
+among others (Hvo, 2018).  Teledermatology provides employment to people such as software 
+engineers who develop and maintain the teledermatology softwares and dermatology 
+specialists who provide diag nosis and treatment to the people.  Teledermatology creates 
+awareness about skin diseases and dermatology -related information to the people in the 
+community. Teledermatology helps to improve the general skin health care system of the 
+community through providing general information about skin diseases and prevention (Pala et 
+al., 2020). 
+ 
+Individual: 
+Teledermatology helps one to access dermatology services anywhere and at any time which  
+reduces the waiting time at the health facilities. Teledermatology can reduce healthcare costs 
+by reducing the travel burden for patients, improving long -term follow-up, and increasing 
+successful care collaboration to improve patient outcomes (Kathleen, 20 11).Teledermatology 
+has been reported to improve patient access, increase distance medical education and the 
+number of unnecessary referrals. 
+ 
+2.11 Related Teledermatology Applications: 
+Miiskin Skin Tracker & eHealth. 
+Miiskin is a Danish application from D enmark founded in 2015 by the founders named Jon 
+Friis as the Chief Executive Officer, Nikolaj Falstie-Jensen as the Chief Technical Officer, and 
+Daniel Efdal Tronier as the  Chief Marketing Officer (Miiskin, 2022). In Denmark, Specialist 
+dermatology servic e is exclusively provided by Zealand University Hospital to the Faroe 
+Islands in the North Atlantic (Andersen et al., 2019). Miiskin app is a skin & mole tracking 
+dermatology tool that helps you check your moles and monitor your skin for changes over time. 
+
+=== PAGE 32 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+19 
+ 
+ 
+Figure 2. 8:Miiskin Tracker & eHealth Application  
+(Source: Play Store) 
+ 
+Skin Check: Dermatology App: 
+Skin Check is an application made in Germany by German and Portuguese Fraunhofer 
+researchers to significantly speed-up diagnosis. With increasing digitalization and the current 
+pandemic, teledermatology has gained importance in German -speaking countries in  recent 
+years (Greis, et al., 2022). The Skin Check application assists in recording skin lesions and 
+sends these to dermatology departments in hospitals. Using AI and image analysis, the software 
+analyzes the risk of skin cancer, aiding dermatologists wit h prioritizing their analyses (RN, 
+2022). 
+ 
+Figure 2. 9:Skin Check Dermatology Application  
+(Source: Play Store) 
+ 
+
+
+=== PAGE 33 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+20 
+ 
+MySkinSelfie App 
+My skin selfie app originates from the United Kingdom where there have been numerous 
+attempts at introducing and using teledermatology over the previous decade however, the 
+development of teledermatology as routine service provision remains limited (Finch,  et al., 
+2007). The application is used to keep track of patients’ skin conditions. 
+ 
+Figure 2. 10: My SkinSelfie Application  
+(Source: Play Store) 
+ 
+AI dermatologist: skin scanner 
+It is a USA-developed application integrated with artificial intelligence to detect and monitor 
+skin diseases. Teledermatology is one of the most active applications of telemedicine rendered 
+in the United States.  
+(Source: Play Store) 
+  Figure 2.1 1:AI Dermatologist  Skin Scanner Application.  
+ 
+
+=== PAGE 34 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+21 
+ 
+ 
+The last comprehensive survey of U.S. teledermatology programs was conducted in 2011 when 
+the teledermatology programs had increased in number and  annual consultation volume. 
+Academia was the most prevalent practice setting, and self -pay is the dominant accepted 
+payment method (Yim, et al., 2018).  
+ 
+2.12 Strengths and Weaknesses of Related Apps: 
+ Application and Link Strength Weaknesses 
+1 Miiskin Skin Tracker & 
+eHealth 
+https://miiskin.com 
+-One can set up an extra secure PIN code for an extra 
+layer of privacy of their photos on the phone. 
+- Miiskin supports the leading skin cancer 
+organizations in the US, the UK, Canada, and South 
+Africa 
+-It is costly 
+- It does not provide 
+information about the 
+different skin diseases 
+2 Skin Check: 
+Dermatology App 
+https://innovationorigins
+.com/en/selected/app-
+can-recognize-skin-
+cancer-in-time/ 
+ 
+- Data is encrypted in transit where your d ata is 
+transferred over a secure connection. 
+ 
+-I t is not accessible in 
+all countries all over 
+the world 
+3 MySkinSelfie 
+https://www.newcastle-
+hospitals.nhs.uk/services
+/dermatology/myskinsel
+fie/ 
+-The app can be accessed by people all over the world 
+-It ensures high quality photos taken by patients 
+-It is very costly when 
+accessed by foreign 
+countries most 
+especially in Africa 
+-Does not have a 
+unique data protection 
+strategy 
+4 AI dermatologist: skin 
+scanner 
+https://ai-derm.com 
+-It can accurately detect a skin disease when the skin 
+has been scanned 
+-Does not have strong 
+data protection 
+strategies 
+Table 2. 1: Strengths and Weaknesses of Related Apps  
+  
+
+=== PAGE 35 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+22 
+ 
+2.13 Features of Related Applications: 
+APPLICATION ORIGIN FEATURES 
+MIISKIN SKIN 
+TRACKER & 
+EHEALTH 
+DENMARK MOLE&SKIN-TRACKER 
+- Easily track and log your moles’ locations on a body 
+chart/map 
+CLOSE-UP-PHOTOGRAPHY  
+- Track detected changes in moles and other lesions on your 
+skin. 
+IN-APP-COMPARISON  
+- Use the SIDE -BY-SIDE VIEW to compare your baseline 
+and follow-up photos over time to easily spot changes in your 
+skin and moles.  
+SKIN-CHECK-REMINDERS  
+- Get a reminder when it’s time to take a new photo.  
+SECURITY-AND-PRIVACY 
+- Securely back-up all photos taken by Miiskin and separate 
+them from your regular photo gallery. All images are 
+encrypted. HIPAA and GDPR compliance. 
+SKIN-MAPPING 
+- Use AI-based skin mapping to automatically identify new 
+moles and other marks on the skin.  
+AUTOMATIC-SKIN-IMAGING  
+- Automatically create a photo log of your skin and body. 
+Powered by Computer Vision and Augmented Reality, 
+Automatic Skin Imaging can take full -body images of you 
+with your own smartphone.  
+WEB-COMPARE  
+- Access your Mi iskin App photos in the browser on any 
+tablet or computer.  
+SHARE-YOUR-PHOTOS  
+- Miiskin has a sharing functionality to give someone access 
+to your photos via email.  
+EASY-PHONE-TRANSFER  
+
+=== PAGE 36 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+23 
+ 
+- Easily transfer your account and photos when you get a new 
+phone.  
+ADDED-SECURITY  
+Set up an extra secure PIN code for an extra layer of privacy 
+of your photos on your phone. 
+ 
+ 
+SKIN CHECK: 
+DERMATOLOGY APP 
+GERMANY DOCTOR OPINIONS: 
+-This app offers the power of human expertise to the users. 
+Their team of skin doctors allows giving recommendations so 
+you can get a better understanding of your skin health.  
+ 
+MOBILE DERMOSCOPY 
+-These images are more information-rich than normal camera 
+images. These more detailed images of your skin moles lead 
+to accurate recommendations. 
+ 
+SCHEDULED NOTIFICATIONS 
+- This app allows you to set notifications, so you don’t forget 
+your next check. 
+MY SKIN SELFIE UNITED 
+KINGDOM 
+CUSTOM CAMERA 
+-Provides a photo guide to help you structure your Skin 
+Selfies. 
+SKIN IN-APP COMPARISON 
+-By showing a 'ghosting' image of the previous photo you can 
+quickly and more accurately identify any changes when 
+comparing photos. 
+SECURITY AND PRIVACY 
+-A user can create a secure password to the application and 
+for each folder of images. 
+AI 
+DERMATOLOGIST: 
+SKINSCANNER 
+USA SKIN SNAPSHOT 
+-Snapshot your skin spots, birthmarks, mole, or other skin 
+diseases such as angioma, warts, papillomas, and mollusks. 
+
+=== PAGE 37 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+24 
+ 
+SKIN MAPPING 
+-Easily log the tracked skin condition’s locations on your 
+body. 
+SKIN SCREENING  
+-These include rash identification, mole checker, skin 
+analyzer, or an acne scanner, depending on the problem. 
+NEW PHOTO REMINDER 
+-Sends a reminder when it is time to take a new photo 
+Table 2. 2: Related Teledermatology Applications  
+ 
+2.14 Summary 
+The proposed project, the Snapskin Info -Teledermatology Mobile Application aims at 
+providing a solution to the challenge of inaccessibility to expert dermatologists and create 
+awareness about the different dermatology services and skin health care solutions. 
+The features of the Snapskin Info-Teledermatology Mobile Application include;  
+Skin Snapshot: Enables capture of skin pictures. 
+Share Your Photos: Pictures are shared with the dermatologist. 
+Notifications: About scheduled appointments. 
+Blogs: Provide information about different skin diseases. 
+Doctors’ Panel: Enables dermatology experts to approve appointments and also monitor the 
+progress of their patients through review of skin pictures. 
+Patients’ Panel: Used to assist patients do consultations and make appointments. 
+Security And Privacy:  A user can create a secure password to the application and for each 
+folder of images. 
+ 
+  
+
+=== PAGE 38 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+25 
+ 
+CHAPTER THREE: RESEARCH METHODOLOGY 
+3.0 Introduction: 
+This section presents the methodologies that were used to achieve the main objective of the 
+research.  Section 3.1 addresses the research design; Section 3.2 looks at the Software 
+Development Model; Section 3.3 covers the Target Population; Section 3.4 details the 
+Sampling size and techniques; Section 3.5 looks i nto the data collection methods; Section 3.6 
+addresses the data validity and reliability; Section  3.7 looks at the analysis; Section 3.8 covers 
+System Design; Section 3.9 looks into implementation; Section 3.10 looks at System testing 
+and validation; Section 3.11 looks at Ethical consideration; while Section 3.12 summarizes the 
+chapter. 
+ 
+3.1 Research design 
+The research design refers to the overall strategy you choose to integrate the different 
+components of the study in a coherent and logical way, thereby  ensuring you will effectively 
+address the research problem ( Ridzuan et al,2021 ). This study adopted a descriptive cross -
+sectional design which involved looking at data at one specific point in time (Kesmodel, 2018). 
+This is because the study involved looking at different characteristics for example age, income, 
+gender among others of the participants and also enabled us to obtain information about the 
+ease of access of dermatological information and services. 
+ 
+This study used data gathering approaches such a s questionnaires, interviews, existing 
+documents, and surveys to collect both qualitative and quantitative data.  The use of the 
+qualitative data informed the researcher about people’s feelings, thoughts, and beliefs (Sutton 
+& Austin, 2015) while the quantitative approach helped the researcher verify the hypothesis 
+meaning for purposes of better understanding of the study variables. 
+ 
+3.2 Research Methods 
+Qualitative 
+Qualitative research involved collecting and analyzing non-numerical data (e.g., text, video, or 
+audio) to understand concepts, opinions, or experiences. It can be used to gather in -depth 
+insights into a p roblem or generate new ideas for research. Qualitative research is used to 
+understand how people experience the world (Bhandari, 2020). 
+ 
+
+=== PAGE 39 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+26 
+ 
+Qualitative data obtained using interviews, questionnaires and documentary review was sorted, 
+classified, and categorized into various variables. From the interview conducted with one of 
+the dermatologist, his response was “I think the physical way where a patient walks into the 
+skin clinic is still more effective because it gives us the chance to see the patient and analyze 
+the skin lesions and get accurate results/diagnosis. The teledermatology application is good 
+but it als o comes with challenges like requiring one to have a very good and clear camera, 
+good internet among others”. 
+ 
+Quantitative 
+Quantitative research is the process of collecting and analyzing numerical data. It can be used 
+to find patterns and averages, make predictions, test causal relationships, and generalize results 
+to wider populations  (Bhandari, 2020 ). Quantitative data was obtained from surveys, 
+interviews, and existing documents.  
+ 
+3.3 Target Population 
+The target population is the group of individuals that the intervention intends to conduct 
+research in and draw conclusions from (Nghiem, 2018). The study focused on the population 
+of Makerere University of about 38000 students and 6 dermatologists (times highereducation, 
+2022). 
+ 
+3.3.1 Sampling and Sampling Techniques: 
+This study adopted a non-probability sampling method where individuals were selected based 
+on non-random criteria, and not every individual had a chance of being included. This was to 
+develop an initial understanding of a small or under-researched population (Salamba,2021). 
+ 
+Convenience sampling 
+A convenience sample simply includes the individuals who happen to be most accessible to the 
+researcher. This is an easy and inexpensive way to gather initial data (McCombes, 2019). This 
+study followed a random selection of 200 individuals from Makerere University, asking 
+detailed questions about their experiences as far as access to dermatological services and 
+information is concerned in order to draw conclusions about the whole population of Uganda. 
+The study also involved carrying out a survey on 10 patients in two skin clinics and having 
+interviews on a randomly selected number of Dermatologists out of the six dermatologists in 
+Uganda. 
+
+=== PAGE 40 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+27 
+ 
+ 
+3.4 Data Collection Methods 
+In this project study, data collection methods were used in gathering user requirements for the 
+project and the research relied on both primary and secondary data methods to collect 
+information. Questionnaires and interviews were used fo r primary data while surveys and 
+existing documents were used for secondary data. 
+ 
+Interviews: Interviews are a method of data collection that involve two or more people 
+exchanging information through a series of questions and answers ( DeCarlo, 2018). A 
+structured interview was used to obtain information from the participants whereby questions 
+were designed by a researcher to elicit information. This was used with the dermatologists to 
+obtain information about the commonly encountered skin diseases and the average daily patient 
+turn up and contact details. See the interview guide in the appendix 3. 
+ 
+Questionnaires: A questionnaire is a list of questions or items used to gather data from 
+respondents about their attitudes, experiences, or opinions (Pritha, 2021). Questionnaires were 
+used to collect qualitative information, and these were self-administered to different students.  
+These were structured questionnaires that included a number of varying questions about 
+different variables like age, income, gender am ong others. The questionnaires were delivered 
+online and others in person or through mail. All questions were standardized so that all 
+respondents receive the same questions with identical wording. See a sample of questionnaire 
+in the appendix 4. 
+ 
+Use of existing documents: 
+This involved gathering reliable information from different publications and sources. These 
+include; books, articles, recordings, news, journals among others. 
+In this study all different accessible sources, were reviewed to obtain information  
+Some of the tools we used in this study include; 
+• Sound or voice recorders 
+• Notebooks and pens 
+• Phone Cameras  
+• Spreadsheets and word documents 
+• Websites 
+
+=== PAGE 41 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+28 
+ 
+3.5 Data Analysis 
+Data Analysis is the process of systematically applying statistical and/or logical techniques to 
+describe and illustrate, condense, and recap, and evaluate data (Sharma, 2018).  Qualitative 
+research focuses on words, descriptions, concepts, or ideas while quantitative research focuses 
+on numbers and statistics (Kerryn, 2020). The qualitative data analysis method used was 
+Thematic Analysis. Thematic analysis looks at patterns of me aning in a data set. Thematic 
+analysis takes bodies of data (which are often quite large) and  groups them according 
+to similarities (themes). These themes help us make sense of the content and derive meaning 
+from it (Kerryn, 2020).  With thematic analysis,  100 questionnaires, interviews and surveys 
+were analyzed from the different respondents. Thematic analysis was useful for finding out 
+about people’s experiences, views, and opinions.  
+ 
+Quantitative data analysis was used. Quantitative analysis is powered by statistical analysis 
+methods which includes descriptive statistics and inferential statistics. Descriptive statistics 
+focus on describing the sample, while inferential statistics aim to make predictions about the 
+population, based on the findings within the sample. This study employed descriptive statistics 
+where the mean and standard deviation were used as descriptive methods (Kerryn, 2020).  
+ 
+3.6 System Design 
+System design involved defining the components, modules, interfaces, and data for the 
+Snapskin Info-Teledermatology application to meet the specified requirements. These were 
+defined using the following tools. 
+Data Flow Diagram (DFD): A data flow diagram indicates the way information flows through 
+a process or system. It included data inputs and outputs, data stores, and the various sub 
+processes the data moves through. 
+ 
+Flow Chart: A flowchart is a picture of the separate steps of a process in sequential order. 
+Elements that were included in a flowchart are a sequence of actions, materials or  services 
+entering or leaving the process (inputs and outputs), decisions that must be made, people who 
+become involved, time involved at each step, and/or process measurements. 
+ 
+Entity Relationship Diagram (ERD):  An Entity Relationship Diagram illustrated  how 
+entities such as people, objects or concepts relate to each other within a system with their 
+attributes and indicated the number of occurrences an entity could exist for a single occurrence 
+
+=== PAGE 42 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+29 
+ 
+of the related entity (Thalheim, 2013). An ERD was used to id entify the data that is captured, 
+stored, and retrieved to support the activities performed in discussion processes (Eltinge, 2012). 
+ERDs were relatively simple, user -friendly, and provided a unified view of data, which were 
+independent of the data model. 
+ 
+3.6.1 Software Development Model 
+The researchers used the Agile software development model to build the system.  Agile 
+development is a group of software development methodologies based on iterative incremental 
+development, where requirements and solutions evolve through collaboration between self -
+organizing cross-functional teams (Moniruzzaman et al., 2013). 
+ 
+Agile software development is one of the best software development approaches that was used 
+to design a disciplined software management process which also allows some frequent 
+alteration in the development project. This is a type of software development methodology that 
+is one conceptual framework for undertaking various software engineering projects. Agile 
+Development was used to minimize risk by developing software in short time boxes which are 
+called iterations that generally last for one week to one month. Th e phases of the Agile 
+development process were; 
+ 
+ 
+Figure 3. 1: Agile Software Development phases  
+(Source): agile development methodology diagram - Bing 
+ 
+3.7 System Implementation 
+System implementation included user notification, user training, installation of hardware, 
+installation of software onto production computers, and integration of the system into daily 
+
+
+=== PAGE 43 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+30 
+ 
+work processes. This phase continued until the system was operating in p roduction in 
+accordance with the defined user requirements. 
+ 
+Coding. 
+This involved the use of programming languages/frameworks and technologies to transform 
+the design of a system into a complete fully functioning application. Here are the programming 
+tools and technologies that were used to develop the application . React Native is an open -
+source user -interface software framework created by Meta Platforms, Inc. It was used to 
+develop applications for Android by enabling developers to use the React framework  along 
+with native platform capabilities. 
+ 
+JavaScript (JS), which was also an easy-to-use open-source client-side scripting language, was 
+used to develop dynamic functionalities of the system. Its ability to display information in the 
+browsers may also enable users to use the system. Firebase is a platform developed by Google 
+for creating mobile and web applications. It is a Backend-as-a-Service (BaaS) app development 
+platform that provides hosted backend services such as a real -time database, cloud storage, 
+authentication, crash reporting, machine learning, remote configuration, and hosting for your 
+static files. This was used in the backend of the development of the Application. 
+ 
+3.8 System Security 
+The system was intended to provide a login form for various stakeholders involved to prevent 
+unauthorized users from accessing confidential information. Furthermore, data that was input 
+into the database of the system was validated before submission to prevent wrong and 
+inaccurate data from being captured and stored in the system’s database. 
+ 
+3.9 System Testing and Validation. 
+After the construction of the system, it was tested by the developers using sample data based 
+on error rates to verify that it met design requirements. Testing was done before and after the 
+system has been used. This involved different methods. We used three testing methods. Unit 
+testing, integration testing and system testing. 
+Unit testing: This was the first testing method to be done in our system. Single units were 
+checked to ensure there were no errors. 
+
+=== PAGE 44 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+31 
+ 
+Integration testing:  This level of software testing was done where individual units were 
+combined and tested as a group. The purpose of this level of testing was to expose faults in the 
+interaction between integrated units. 
+System Testing:  This involved a  black box testing technique performed to evaluate the 
+complete systems compliance against specified requirements. In system testing, the 
+functionalities of the system were tested from an end-to-end perspective. 
+Usability testing: Is a way to see how easy to use something by testing it with real users. Users 
+were asked to complete tasks, typically while they were being observed by a researcher to see  
+where they encountered problems and experience confusion. 
+ 
+3.10 Summary 
+In summary, the study used qualitative and quantitative research methods, applying both 
+secondary and primary data collection approaches. Whenever first-hand data or secondary data 
+was collected, it kept the criteria of validity and reliability. Therefore, to meet these demands, 
+all respondents were informed about the content of the analysis before the actual interviews. 
+The table below shows a summary of different tools and techniques, phases of the methodology 
+and deliverables that were used to achieve each of the study objectives. 
+ 
+SPECIFIC OBJECTIVE TOOLS AND 
+TECHNIQUES 
+AGILE METHODOLOGY 
+STEPS 
+DELIVERABLES 
+To conduct a literature 
+review and carry out a field 
+study to identify the 
+application requirements of 
+the SnapSkin Info - 
+Teledermatology 
+Application. 
+ 
+Interview, 
+questionnaires, 
+documentation 
+review 
+Planning Requirements’ 
+documentation. 
+To design a model of the 
+SnapSkin Info -
+Teledermatology application. 
+ 
+Microsoft Visio to 
+come up with data 
+flow diagrams 
+(DFDs), ERDs 
+Designing System design 
+documentation. 
+
+=== PAGE 45 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+32 
+ 
+To implement the SnapSkin 
+Info-Teledermatology 
+application. 
+Coding using 
+React Native, 
+JavaScript, 
+Firebase 
+Developing/Implementing Prototype for the 
+system. 
+To test and validate the 
+SnapSkin Info -
+Teledermatology application. 
+ 
+User testing, 
+module testing. 
+Testing and Deployment Working system 
+Table 3. 1: Summary of the techniques and tools used.   
+ 
+ 
+
+=== PAGE 46 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+33 
+ 
+CHAPTER FOUR: SYSTEM ANALYSIS AND DESIGN 
+4.0 Introduction 
+This chapter provides a detailed description of the analysis and the design of the Snapskin Info-
+teledermatology Application. It explains the functional and non -functional requirements, the 
+current system concerning teledermatology and gives an in-depth analysis of the requirements 
+of the new system as well as the design parameters. It also describes the data and process 
+modeling in the design of the system. 
+ 
+4.1 System Study 
+The phase of this projec t study required a review of the structural dimensions of the current 
+system’s operation and procedures to establish its strengths and weaknesses. In this procedure, 
+appropriate data collection instruments were used which include; interviews and questionnaires 
+using both online means and physical copies. This study was done to identify the problems and 
+challenges faced by the existing system and incorporate Snapskin Info -teledermatology 
+Application as the solution. The information collected at this phase fr om the potential system 
+users was critically analyzed, evaluated and findings reviewed to establish specific system 
+objectives and user requirements. The findings of the study are presented as follows; 
+ 
+4.1.1 Current Study 
+The current system of accessing Dermatology services in Uganda is both physical and contact 
+based. Currently, hospitals in Uganda allow patients to book appointments either physically at 
+the hospital premises or via a call to the hospital help desk. 
+Some hospitals have websites  that are accessed by a number of people, and these provide 
+general information about general doctors, how to access ambulances, and other hospital 
+services. However, due to lack of dermatology services on some of these websites, patients are 
+compelled to search for dermatologists’ contacts on th e internet, or from other sources, and 
+make calls that are sometimes received by receptionists who help to make the appointments 
+depending on the dermatologists’ working schedule. 
+ 
+4.1.2 Strength of the Current System 
+The current system has various strengths as explained below. 
+The system allows the patients to physically access the hospital premises where the 
+dermatologist diagnoses and prescribes the required medication according to the skin disease. 
+This mode provides accurate diagnosis to the patient. 
+
+=== PAGE 47 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+34 
+ 
+The websites provide an insight into the services the patient should expect given that they are 
+accessible at any time. 
+ 
+4.1.3 Weaknesses of the Current system 
+The system is time-consuming, and patients travel to meet dermatologists even those with 
+minor skin diseases that can be prescribed without physically seeing the dermatologist. 
+The system provides limited information about dermatology services and skincare. It does not 
+provide enough information about the various skin diseases, most common and deadly skin 
+diseases, how to prevent them and possible ways for one to take care of their skin from such 
+diseases. It is difficult for dermatologists to carry out regular follow up on skin patients since 
+they are supposed to follow review dates. 
+ 
+4.2 System Analysis. 
+This section contains findings from research, system functional and non -functional 
+requirements, user functional and non-functional requirements, and system requirements which 
+covers both software and hardware requirements.  It also describes the process of collecting 
+and interpreting facts, identifying the problem, and decomposition of the system into its 
+components. System Analysis is conducted to analyze and interpret data from the field and 
+involves presentation of results. 
+ 
+4.3 Findings from our research. 
+The tools that we used for our research were questionnaires and interviews both physical and 
+online. The questionnaire was for students of Makerere University where we got 231 responses. 
+Additionally, we interviewed 2 doctors one via a phone call and the other physically. 
+ 
+GENDER: 
+We had more male respondents compared to the female from the results obtained from both 
+online and physical questionnaires as shown below. 
+ Male Female Total 
+Physical 49 29 78 
+Online 83 70 153 
+Total 132 99 231 
+Table 4. 1: Showing Gender distribution  
+
+=== PAGE 48 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+35 
+ 
+ 
+Figure 4. 1: Chart showing the percentages of both male and female respondents.  
+ 
+COLLEGE: 
+The results obtained depict that the highest number of respondents were from CoCIS. 
+ 
+Figure 4. 2: Colleges from which responses were obtained.  
+ 
+AGE: The results obtained from the questionnaire depicts that the highest number of 
+respondents were from between 21 -30 years with a percentage of 75.8%, followed by 0 -20 
+years (21.2%) then by 31-40 years as shown below. 
+
+
+=== PAGE 49 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+36 
+ 
+ 
+Figure 4. 3: A pie -chart showing the responses according to Age group  
+ 
+ 
+EVALUATION ON THE IMPORTANCE OF ACHIEVING A HEALTHY SKIN: 
+From the study, we found out that the most percentage of the population found it important to 
+have healthy skin.  
+ 
+ 
+ 
+Figure 4. 4: A Chart showing the percentage of respondents who consider achieving 
+a healthy skin a priority  
+
+=== PAGE 50 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+37 
+ 
+SOURCE OF INFORMATION ABOUT SKIN CARE: 
+The internet is the most used source of information about skincare. This has been concluded 
+from the below table where the internet had many users.  
+Information Source Number of users 
+Internet 175 
+Word of Mouth 70 
+Magazines 35 
+Shops 16 
+Television 68 
+Other 24 
+Table 4. 2: Source of information about skin care.  
+ 
+ACCESS TO SKIN CLINICS OR HOSPITALS FOR MEDICAL ATTENTION: 
+The percentage of people who didn't have access to hospitals or skin clinics to get medical 
+attention concerning the different skin issues was higher as compared to those who had access 
+as shown by the chart below. This gives an insight that there is limited access to dermatological 
+care and information. 
+ 
+Figure 4. 5: Distribution of access to skin clinics for medical attention.  
+ 
+
+
+=== PAGE 51 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+38 
+ 
+USAGE OF A TELE-HEALTH APPLICATION TO SEEK MEDICAL ATTENTION: 
+The percentage of people who have used a tele -health application was 21.9% which was less 
+than the ones who have never used it before (78.1%). 
+ 
+Figure 4. 6: Percentage of the usage of the Tele -health application.  
+EXPERIENCE FROM USING A TELE-HEALTH APPLICATION: 
+The bar chart below shows the evaluation obtained from the respondents about their 
+experiences as they used different applications to access health care services.  
+ 
+Figure 4. 7: Experience from using a Tele -health Application.  
+ 
+ 
+Found it easy to 
+navigate 
+through the 
+application 
+Service 
+delivery was 
+good 
+ 
+Am likely to 
+choose 
+telemedicine over 
+in-person care 
+ 
+I was satisfied 
+the treatment 
+prescribed 
+ 
+Experienced 
+poor network 
+connectivity 
+while using the 
+application 
+ 
+
+=== PAGE 52 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+39 
+ 
+The evidence shown from the chart above encourages the use of a Tele -dermatology 
+application to access skin health care services and information given that the highest percentage 
+of respondents approve of the fact that the service delivery wa s good, and they were satisfied 
+with the treatment prescribed.   
+ 
+4.4 Software specifications. 
+The following are the software specifications that were considered in the development of the 
+Snapskin Info-Teledermatology Application. 
+React native: This is the language used in the development of the Frontend of the Snapskin 
+Application. 
+Firebase: The Firebase Realtime Database is a cloud-hosted database. Data is stored as JSON 
+and synchronized in realtime to every connected client. This is what we used for our Backend. 
+React: React is a declarative, efficient, and flexible JavaScript library for building  user 
+interfaces. This was also used during the development. 
+Visual studio : This is a code editor redefined and optimized for building and debugging 
+modern web and cloud applications.  
+Google Chrome: The browser we used to have access to the admin panel. 
+Operating System: We used Windows 10 Operating system for development 
+ 
+4.5 Hardware specification 
+During the development process, these are the hardware specifications we considered: 
+A laptop with at least 8GB of ram. 
+The hard disk of 1000GB space and above. 
+The processor of Intel Pentium III and above. 
+And smartphones only with Android Operating system. 
+Processor speed of 800MHZ and above. 
+ 
+4.6 User requirements 
+This platform allows for easy access to Dermatological care and information. Doctors will be 
+able to deliver treatment to their patients via telecommunications as part of the program. 
+Doctors can communicate with their patients during consultations, diagnoses, monitoring, and 
+prescriptions. 
+This platform is perfect to achieve all the expectations of both the patient and the 
+dermatologists according to the specified requirements as shown below. 
+
+=== PAGE 53 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+40 
+ 
+ 
+Patients 
+They are the priority users of the system. They interact with the doctors concerning the different 
+skin diseases they have. Their privileges include the following; 
+Send an appointment request to the dermatologists.  
+Read the blogs posted. 
+View the images of their skin condition and monitor progress 
+View information about the different doctors. 
+Make consultations online. 
+Make payments for online consultations. 
+Make changes to the profile information. 
+ 
+System Administrators 
+These are among the staff members responsible for the co ntrol of the system, and these 
+understand how the system works. They have different privileges compared to other users of 
+the system. 
+Privileges include; 
+Management of the system database and server to ensure that they run smoothly without 
+interference. 
+Verifying dermatologists and patients after the sign-up process. 
+Update blogs and articles. 
+Manage users’ information. 
+ 
+Dermatologists/Doctors 
+These are qualified dermatologists registered on the system to interact with the different 
+patients. They have the following privileges; 
+Manage Appointment Information: -Accept, Cancel, and Reject appointment request 
+information of the patients. 
+Receive appointment notifications 
+Diagnose patients accordingly. 
+Read the information about the patient  
+Send an email to the patient telling him/her to come to the hospital in case the viewed image 
+signifies a serious skin disease. 
+See all the appointment requests sent by a patient  
+
+=== PAGE 54 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+41 
+ 
+Review and monitor the progress of their patients 
+ 
+4.7 Functional Requirements: 
+Functional requirements define what a product must do. They are product features or functions 
+that developers must implement to enable users to accomplish their tasks. Generally, functional 
+requirements describe system behavior under specific conditions. For example: 
+When a user logs into the system, he must be able to see his/her personal information on the 
+screen, and he or she is able to modify it.  
+Once the patient is on his homepage, he must be able to have an online consultation with the 
+dermatologist ensuring that they share pictures of the diseased skin and must also be able to 
+ask for an appointment with the Dermatologist.  
+Once the doctor has logged in, they must be able to see a list of all the patients’ appointment 
+requests and then, after selecting one of them, access to the information of that patient.  
+The doctor must be able to send an email to the patient to ask him to go to the hospital if any 
+parameters noted in the consultation are out of the normal range. 
+The doctor must not be able to ac cess the patient's options like requesting for consultation or 
+an appointment.  
+The system sends a confirmation email when a new user account is created. 
+The system denies non-authorized administrators from accessing private information through 
+the provision of restrictions like passwords. 
+The Application is available at any time needed and performs its required functions under stated 
+conditions.  
+User-friendly menu interface that is easy to interact with and learn in the shortest time possible. 
+Username and password created by the user are used to access their personal information. 
+The payment transaction is handled by the System administrator. 
+A user can either register as a doctor or as a normal user (patient). 
+ 
+4.8 Non-functional requirements 
+These are not related to the system functionality, rather define how the system should perform. 
+These describe how a system must behave and establish constraints of its functionality. The 
+Info-teledermatology Application was developed to meet non-functional requirements which 
+include the following. 
+The application should load in 3 seconds with the total number of simultaneous users. 
+The system should be able to handle at least 1000 users without performance deterioration. 
+
+=== PAGE 55 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+42 
+ 
+The application must be accessible 24 hours a day, 7 days a week. A mobile phone with internet 
+connection is required.  
+Access permissions for the system information may only be changed by the system’s data 
+administrator. 
+ 
+4.9 System Design 
+This section defines the physical, architectural design, logical design, and database design 
+needed to meet the specific requirements. 
+ 
+4.9.1 Architectural Design of the Snapskin Info-Teledermatology Application 
+Architectural design is the process of defining a  collection of hardware and software 
+components and their interfaces to establish the framework for the development of the system. 
+It shows the main components of the system and how they communicate with each other. 
+A framework of the layout and flow of data between different entities of data of the SnapSkin 
+Info-Teledermatology Application is shown below. The entities are users (patients, 
+doctors/dermatologists, admins), web server, and database. 
+ 
+INTERFACES: 
+The figure below shows the different interfaces  that a user can find, depending on the type of 
+user.   
+ 
+Figure 4. 8: Different Interfaces for different users.  
+ 
+ 
+ 
+
+
+=== PAGE 56 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+43 
+ 
+SYSTEM ARCHITECTURE: 
+ 
+ 
+Figure 4. 9: The system architecture of the SnapSkin Info -Teledermatology Application  
+ 
+4.9.2 Process Modeling 
+In process modeling, a context diagram and a data flow diagram were used to illustrate the 
+activities and the major data flows. A data dictionary was also cr eated to define the processes 
+identified during process modeling. 
+The symbols used during process modeling are illustrated below. 
+ 
+Figure 4. 10: The symbols used in data flow diagrams and their meanings.  
+ 
+
+
+=== PAGE 57 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+44 
+ 
+4.9.3 Context diagram of the Snapskin Info-Teledermatology Application 
+Context diagrams show the interactions between a system and other actors (external factors) 
+with which the system is designed to interface (waterloo, 2019). 
+A Context Diagram represents all external entities that interact with that Application. 
+ 
+Figure 4. 11: Context diagram for the SnapSkin Info -Teledermatology Application  
+ 
+4.9.4 Use case diagram of the Snapskin Info-Teledermatology Application 
+A use case diagram summarizes the details of the system's users and their interactions with the 
+system. A use case diagram can identify the different types of users of a system and the different 
+use cases (Lucidchart, 2021). 
+
+
+=== PAGE 58 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+45 
+ 
+ 
+Figure 4. 12:Illustration of use case diagram for the Snapskin Info -Teledermatology 
+Application.  
+ 
+From the figure, the system has got three users that is: the Systems Administrator, Doctor, and 
+the Patient. The System administrator can log in, verify patients upon submission of the photos 
+of their IDs, verify doctors upon submission of their documents, that is to say all the 
+qualifications required, approve a user as an Admin, review monthly reports, manage payments 
+made by the different users. The patient can be able to make consultations, schedule 
+appointments and view the prescriptions given by the doctor and the Doctor on the other hand, 
+can manage their  patients, prescribe medication for the patients, approve appointments and 
+consultations.  
+  
+
+
+=== PAGE 59 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+46 
+ 
+4.9.5 Flow chart of the Snapskin Info-Teledermatology Application. 
+A flowchart is a diagram that depicts a process, system, or computer algorithm. 
+ 
+Figure 4. 13: A Flow chart for the SnapSkin Info -Teledermatology Application  
+ 
+Initially, the user (patient or doctor) is requested to submit his details like email, password, 
+phone number, and full name if he/she hasn’t registered then if he/she is registered, the system 
+requests for his email and password after he/she is redirected to the patient or doctor dashboard 
+respectively.  
+ 
+Everytime the user needs to access the system, he/she is required to log in using the login 
+credentials (username and password) which were used upon registration. If the login credentials 
+are correct the user proceeds to interact with the different features in the application. However, 
+if the login credentials are wrong, then access is denied, and the user is requested to try logging 
+in again with the correct username and password. If the user has logged in correctly, they can 
+
+
+=== PAGE 60 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+47 
+ 
+always interact with the different functionalities in the application after which they log out to 
+exit the application. 
+ 
+ 
+4.9.6 Data Flow Diagram of the Snapskin Info-Teledermatology Application. 
+ A data flow diagram shows the way information flows through a process or system. It includes 
+data inputs and outputs, data stores, and the various sub processes the data moves through (Joel, 
+2019). 
+Level 1: 
+ 
+Figure 4. 14: DFD Level 1 for the SnapSkin Info -Teledermatology Application.  
+ 
+4.9.7 Entity Relationship diagram of the Snapskin Info-Teledermatology Application 
+An entity -relationship diagram (ERD), also known as an entity -relationship model, is a 
+graphical representation that depicts relationships among people, objects, places, concepts, or 
+events within an information technology (IT) system (Jacqueline, 2019). This is the first phase 
+
+
+=== PAGE 61 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+48 
+ 
+of the system’s development, and it served as the foundation for the building of the system’s 
+actual database. 
+  
+
+=== PAGE 62 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+49 
+ 
+We followed 3 basic rules in creating the ER Diagram. 
+• Identify all the entities that is; Patient, Doctor, Appointment, Payment. 
+• Identify the relationship between entities. 
+The patient or representative processes their appointment or consultation in the appointment 
+module of the project. The patient record may appear more than once in the appointment record, 
+but the patient can only process an appointment one at a time (1 to many relationships).  The 
+patient or representative processes the payments through the payment module of the system. 
+Patient information ma y appear multiple times in the payment records (1 to many 
+relationships). The doctor processes the appointments. Doctors can cancel, accept, and 
+reschedule the appointments based on their availability. (1 to many relationships).  The doctor 
+can view the list of payments in the payment records (1 to many relationships). 
+ 
+ 
+ 
+ 
+Figure 4. 15: Entity Relationship Diagram for the SnapSkin Info -Teledermatology 
+Application  
+
+
+=== PAGE 63 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+50 
+ 
+Figure 4.15 shows the relationship between the tables. A one-to-many relationship between the 
+doctor’s table and the appointment table. A one -to-many optional relationship between the 
+patient table and the appointment table. A many-to-many relationship between the doctor’s and 
+the patient table. One -to-many relationship between the admin table and both the patient and 
+doctor’s table. And a many -to-one relationship between the admin table and the blogs and 
+Articles table. 
+ 
+4.9.8 Sequence diagram of the Snapskin Info-Teledermatology Application 
+A sequence diagram is a type of interaction diagram because it describes how and in what order 
+a group of objects works together. 
+ 
+ 
+Figure 4. 16:Sequence Diagram for the SnapSkin Info -Teledermatology Application.  
+ 
+ 
+
+
+=== PAGE 64 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+51 
+ 
+4.9.9 Activity diagram of the Snapskin Info-Teledermatology Application 
+An activity diagram is essentially a flowchart that shows activities performed by a system. We 
+model sequential and concurrent activities using activity diagrams. So, we basically depict 
+workflows visually using an activity diagram (GeeksforGeeks, 2022). 
+ 
+Figure 4. 17:Activity diagram for the SnapSkin Info -Teledermatology Application.  
+ 
+4.9.7 Logical database design 
+Logical database design is the process of deciding how to arrange the attributes of the entities 
+in each  business environment into database structures, such as the tables of a relational 
+database. The goal of logical database design is to create well-structured tables that properly 
+reflect the company's business environment. The tables store data about the company's entities 
+in a non-redundant manner and foreign keys are placed in the tables so that all the relationships 
+among the entities are supported (Mark, 2011). 
+ 
+ 
+ 
+
+
+=== PAGE 65 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+52 
+ 
+ 
+4.9.8 Physical design 
+Physical database design is the process of transforming logical dat a models into physical data 
+models. (Georgia, 2006) 
+Physical design for Patients 
+Field Type Sample value 
+email string “johnklyn@gmail.com” 
+firstName string “John” 
+lastName string “Klyn” 
+password string “An@123” 
+confirmPassword string “An@123” 
+role string “user”  
+Table 4.3: Physical design for patients. 
+ 
+Physical design for Dermatologists. 
+Field Type Sample value 
+email string “johnklyn@gmail.com” 
+firstName string “John” 
+lastName string “Klyn” 
+password string “An@123” 
+confirmPassword string “An@123” 
+role string “dermatologist”  
+Table 4. 4: Physical design for dermatologists.  
+ 
+Physical design for booking 
+Field Type Sample Value 
+doctor_id string “nrfuhfeufgbvgcshjfg” 
+amount number 20000 
+appointmentDate string “12/03/2023” 
+
+=== PAGE 66 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+53 
+ 
+description string “I am a certified dermatologist 
+with an experience of two 
+years” 
+name null  
+paid boolean  
+photoURL null  
+status string “completed” 
+Table 4. 5 : Physical design for booking.  
+Physical Design for notifications 
+Field Type Sample Value 
+doctor_id string “jfuhfrhejgyuwgey” 
+message string “Your payment of 20000 has 
+been received.” 
+paymentMessage string “Your payment has been 
+received” 
+status string “unread” 
+time string “25/09/2022” 
+user_id string “72gehbvfukkndb” 
+Table 4. 6: Physical design for notifications.   
+ 
+Physical design for Qualifications: 
+Field Type Sample Value 
+doctorQualificationDocument String “hsjdgyewyfbhadbsj” 
+Table 4. 7: Physical design for Qualifications.  
+  
+
+=== PAGE 67 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+54 
+ 
+4.10 Data inputs 
+• Login 
+The following forms were designed to be used to capture user data using the application. 
+Login form.  
+The login form allows a patient to enter their email and password If the password is correct the 
+user can then access the application. 
+Registration form: 
+This form is used to capture details of the new users upon registration. Information captured 
+from a normal user(patient) includes First and last name of the user, phone number, gender, 
+email, and password. 
+ 
+Figure 4. 18:Login Form for The Snapskin Info -Teledermatology Application . 
+
+=== PAGE 68 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+55 
+ 
+ 
+The user can interact or navigate through the following views upon registration. 
+• The homepage / Dashboard. 
+This is the first page a user sees immediately after registration or after logging in. 
+ 
+Figure 4. 20 : Homepage for the SnapSkin Info -Teledermatology Application.   
+ 
+Figure 4. 19:Registration form for the SnapSkin Info -Teledermatology Application . 
+
+=== PAGE 69 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+56 
+ 
+ 
+• The Blogs page: 
+This is where all blogs are posted concerning different information related to skin health care 
+• The Profile page: 
+This page contains information about the user(patient) and can be edited accordingly by the 
+user. 
+ 
+Figure 4. 22: User profile page for the SnapSkin Info -Teledermatology Application.  
+ 
+Figure 4. 21: The blogs page for the SnapSkin Info -Teledermatology Application . 
+
+=== PAGE 70 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+57 
+ 
+• The Manage your skin view: 
+This page contains user (patient) information and how the patient can manage their skin. It also 
+allows a patient to take/upload a photo of the affected area. 
+ 
+Figure 4. 23: Manage the patient skin view for the SnapSkin Info -Teledermatology 
+Application.  
+ 
+• The Book Dermatologist view: 
+This page contains the available dermatologists that a patient can book and information they 
+need to know about the dermatologist. 
+
+
+=== PAGE 71 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+58 
+ 
+ 
+Figure 4. 24: The book dermatologist view for the SnapSkin Info -Teledermatology 
+Application.  
+ 
+• The Calendar view: 
+This page view shows a patient the available days for the dermatologists and can as well allow 
+the patient to start the booking process. 
+ 
+ 
+Figure 4. 25: Calendar view for the SnapSkin Info -Teledermatology Application  
+ 
+
+
+=== PAGE 72 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+59 
+ 
+Dermatologist. 
+This section shows the different views accessed by the dermatologist. 
+• Menu view: 
+This view shows the doctors dashboard. 
+ 
+Figure 4. 26: Dermatologist view of the SnapSkin Info -Teledermatology Application  
+ 
+• The home page view 
+This is the page the doctor or dermatologist views immediately after login or registration. 
+ 
+Figure 4. 27: Home page view for the dermatologist of the SnapSkin Info -
+Teledermatology Application  
+ 
+
+
+=== PAGE 73 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+60 
+ 
+• The appointments view 
+This view shows appointments that are pending, the confirmed and completed appointments, 
+and the completed appointments. 
+ 
+Figure 4. 28: Appointment view by the dermatologist for the SnapSkin Info -
+Teledermatology Application.  
+ 
+ 
+• The dermatologist’s profile view. 
+This displays all the information about the doctor that a patient may need to know. 
+ 
+
+
+=== PAGE 74 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+61 
+ 
+Figure 4. 29: Dermatologist’s profile view  for the SnapSkin Info -Teledermatology 
+Application   
+Systems Administrator.  
+When logged in as a system administrator into the web application. One can be able to approve 
+pending verifications, and manage payments together with users.After the system administrator 
+can then log out. 
+Admin login page 
+The admin enters the email and password as shown in the figure below. 
+This is the first page to the admin panel that requires one to confirm if they have administrative 
+rights. It is only accessed by authorised users. 
+ 
+Figure 4. 30: Admin’s login form for the SnapSkin Info -Teledermatology Application   
+ 
+Admin dashboard 
+The dashboard of the admin panel shows all the views of the admin on the left-hand side. 
+
+
+=== PAGE 75 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+62 
+ 
+ 
+Figure 4.31: Admin’s login form for the SnapSkin Info-Teledermatology Application 
+ 
+All admins page 
+This view shows the number of admins that are registered on the panel and their status. Whether 
+verified or not verified. 
+ 
+Figure 4.32: All Admins page of the SnapSkin Info-Teledermatology Application 
+  
+All users page 
+The admin can see all the users of the system and can be able to assign different privileges to 
+them. For example, making a User an Admin. 
+
+
+=== PAGE 76 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+63 
+ 
+ 
+Figure 4. 33: All users page of the SnapSkin Info -Teledermatology Application   
+ 
+All doctors page 
+The Admin also views the number of doctors or dermatologists registered and can be able to 
+verify them once they meet the required criteria. 
+ 
+Figure 4. 34: All dermatologists page of the SnapSkin Info -Teledermatology Application   
+ 
+Payment notifications page 
+Payments made by patients are viewed and monitored by the admin  
+
+
+=== PAGE 77 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+64 
+ 
+ 
+Figure 4.35: Payment notification page of the SnapSkin Info-Teledermatology Application 
+ 
+Create blogs page 
+The administrator posts blogs and articles about skincare for patients to be able to access this 
+information easily. 
+ 
+Figure 4. 36: Create blogs page of the SnapSkin Info -Teledermatology Application  
+  
+
+
+=== PAGE 78 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+65 
+ 
+CHAPTER FIVE: SYSTEM IMPLEMENTATION, TESTING AND VALIDATION. 
+5.0 Introduction 
+The chapter defines the implementation of the design to meet the requirements of the system 
+as well as testing and validation of the system. 
+ 
+5.1 System Implementation 
+Different technologies were used during the implementation of this application as they are 
+further explained below. 
+ 
+5.1.1  System technologies 
+The Snapskin Info-Teledermatology Application was developed with the aid of React Native 
+which is an open-source user-interface software framework created by Meta Platforms, Inc. It 
+was used to develop applications for Android by enabling developers to use the React 
+framework along with native platform capabilities. 
+ 
+HyperText Markup Language (HTML) was used as a language that specified the structure of 
+the document retrieval across the internet using browser programs on the World Wide Web. 
+JavaScript (JS), which is also an easy -to-use open-source client-side scripting language, was 
+used to develop dynamic functionalities of the system. Its ability to display information in the 
+browsers enables users to use the system. 
+ 
+Firebase is a platform developed by Google for creating mobile and web applications. It  is a 
+Backend-as-a-Service (BaaS) app development platform that provides hosted backend services 
+such as a real-time database, cloud storage, authentication, crash reporting, machine learning, 
+remote configuration, and hosting for your static files.  Most of the software used in the 
+application implementation were chosen because it was cheap, readily available, and supported 
+in rapid development. 
+ 
+5.2 System Functionality 
+5.2.1 Authentication 
+The system allows administrators to log in before accessing the Dashboard page to carry out 
+the administrative roles. On the other hand, the system requires the users, that is the patients 
+and the dermatologists, to login before accessing the system but requires verification of the 
+doctor before he or she logs in. 
+
+=== PAGE 79 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+66 
+ 
+ 5.2.2 Online money Transaction 
+The system allows patients to make payments for their online consultations and the 
+dermatologists can receive their payments as well. 
+ 
+ 5.2. 3  Blogs and Article management 
+The system administrators handle most of the information posted on the application. They 
+upload information about skincare and the dermatologists available. 
+  
+5.2.4 Appointment booking. 
+Patients are in position to make appointments and the dermatologists approve them according 
+to their schedule. 
+ 
+5.3 System Testing 
+The following testing strategies were deployed: 
+ 
+5.3.1 User testing 
+A group of target users was selected to examine the system functionality and gave us feedback 
+as shown in table 5.1 below. 
+ User testing question 1 2 3 4 5 
+1 The system enables patients to make appointments 
+with the dermatologists 
+     
+2 The system enables patients to make consultations      
+3 The system enables patients to make payments      
+4 The system enables administrators to upload 
+information and get reports 
+     
+5 The system enables the dermatologists to approve 
+appointments. 
+     
+6 The system enables dermatologists to receive their 
+payments from patients. 
+     
+7 The system enables administrators to assign account 
+types to the users.  
+     
+Table 5. 1: Shows the target users selected for user testing.   
+ 
+
+=== PAGE 80 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+67 
+ 
+Unit testing 
+System testing was done after the system was coded. Individual units or components of the 
+system were checked to ensure they are fully functional units before integrating them. This was 
+done by examining each unit and that it performed as exactly intended. 
+ 
+5.4 System Validation 
+System validation is concerned with ensuring tha t data entered the systems meets predefined 
+formats with defined input criteria. It was done to ensure that the data entered and retrieved is 
+valid. 
+ 
+  
+
+=== PAGE 81 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+68 
+ 
+CHAPTER SIX: SUMMARY, LIMITATION, CONCLUSION AND 
+RECOMMENDATIONS 
+6.0 Introduction: 
+This chapter provides a summary, limitation, conclusion, and recommendations of the 
+Snapskin Info-teledermatology application. 
+ 
+6.1 Achievements: 
+The Snapskin Info -teledermatology application has ensured easy access to dermatologists, 
+Skincare services, Information about skin diseases and healthy skin follow up by patients. 
+ 
+6.2 Challenges: 
+ The Snapskin Info-teledermatology application is intended to be installed on smartphones and 
+used when there is internet access. As such, it requires an internet connection. The system shall 
+not be able to function if the server stops running. The server should always run when the 
+system is loading. 
+ 
+6.3 Limitation of the study: 
+The project needed a variety of resources that is to say funds to facilitate the data collection 
+and the computer system for developing the application which were not easy to get, and it was 
+difficult for us to get dermatologists to interview due to the limited number of dermatologists 
+and they are always occupied since they have to meet very many patients. 
+ 
+6.4 Recommendations: 
+Snapskin Info-teledermatology application is highly recommended for use by Skin patients and 
+dermatologists because its aim is to reduce the gap between dermatologists and the skin 
+patients. It is also important to train and encourage users to get accustomed to the Snapskin 
+Info-teledermatology application. This being a new application, some of the users (patients) 
+may need to fully understand how the application functions. 
+ 
+6.5 Conclusions:  
+The core reason for the establishment of The Snapskin Info -teledermatology application is to 
+reduce the gap between skin patients and dermatologists within Kampala. Therefore, the 
+technologies used should   support the core objective of the system if it is to remain relevant to 
+the users. A lot still needs to be done in the IT d epartment to make available technology 
+
+=== PAGE 82 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+69 
+ 
+effective. The application administration has to keep updating the hardware and software 
+requirements of the system through its panel; Information Technologies and computer systems 
+need to be sustainably upgraded as m ore software is introduced in today's IT market. Our 
+research therefore acknowledges the fact that the system is currently standalone. 
+  
+
+=== PAGE 83 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+70 
+ 
+REFERENCES: 
+1. Baldoni, S., Amenta, F., & Ricci, G. (2019). Telepharmacy services: present status and 
+future perspectives: a review. Medicina, 55(7), 327. 
+2. Barogui, Y. T., Diez, G., Anagonou, E., Johnson, R. C., Gomido, I. C., Amoukpo, H., 
+... & Asiedu, K. (2018). Integrated approach in the control and management of skin 
+neglected tropical diseases in Lalo, Benin. PLoS neglected tropical diseases , 12(6), 
+e0006584. 
+3. Bringing Dermatology to the Underserved in Uganda . (2018, October 22). Health 
+Volunteers Overseas. Retrieved October 9, 2022, from https://hvousa.org/blog-
+bringing-dermatology-to-the-underserved-in-uganda/ 
+4. Davis, C. P. (2021, March 29). DEFINITION OF DERMATOLOGY . Retrieved from 
+rxlist.com: https://www.rxlist.com/dermatology/definition.htm 
+5. Encyclopedia. (2018, August 18). Telesurgery. Retrieved from Encyclopedia.com: 
+https://www.encyclopedia.com/medicine/divisions-diagnostics-and-
+procedures/medicine/telesurgery 
+6. Farahani, N., & Pantanowitz, L. (2015). Overview of telepathology. Surgical pathology 
+clinics, 8(2), 223-231. 
+7. Friis, J. (2022). Teledermatology: Definition, Benefits, and Applications . Retrieved 
+from Miiskin website: https://miiskin.com/telehealth/teledermatology/ 
+8. https://gradcoach.com/qualitative-data-analysis-methods/ 
+9. https://pressbooks.pub/scientificinquiryinsocialwork/chapter/13-1-interview-research-
+what-is-it-and-when-should-it-be-
+used/#:~:text=In%20social%20science%2C%20interviews%20are,topic%20or%20set
+%20of%20topics. 
+10. https://www.sciencedirect.com/topics/engineering/target-
+population#:~:text=Target%20Population%20and%20Subgroups,subgroups%20shoul
+d%20be%20described%20clearly. 
+11. https://www.scribbr.com/methodology/qualitative-
+research/#:~:text=Revised%20on%20October%2010%2C%202022,generate%20new
+%20ideas%20for%20research. 
+12. https://www.scribbr.com/methodology/quantitative-
+research/#:~:text=Revised%20on%20October%2010%2C%202022,generalize%20res
+ults%20to%20wider%20populations. 
+
+=== PAGE 84 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+71 
+ 
+13. https://www.scribbr.com/methodology/questionnaire/#:~:text=A%20questionnaire%2
+0is%20a%20list,the%20social%20and%20health%20sciences. 
+14. https://www.scribbr.com/methodology/sampling-methods/ 
+15. https://www.timeshighereducation.com/world-university-rankings/makerere-
+university 
+16. Kesmodel, U. S. (2018). Cross‐sectional studies –what are they good for? Acta 
+obstetricia et gynecologica Scandinavica, 97(4), 388-393. 
+17. Kiva. (2022, February 3). Skin diseases hit Uganda’ s prisons - New Vision Official . 
+Skin Diseases Hit Uganda’s Prisons - New Vision Official. Retrieved October 9, 2022, 
+from https://www.newvision.co.ug/articledetails/126104. 
+18. Leonard, J. (2020, April 20). What to know about telepsychiatry . Re trieved from 
+www.medicalnewstoday.com: 
+https://www.medicalnewstoday.com/articles/telepsychiatry 
+19. Maddukuri, S., Patel, J., & Lipoff, J. B. (2021, March 12). Teledermatology Addressing 
+Disparities in Health Care Access: A Review. Current Dermatology Reports , 10(2), 
+40–47. https://doi.org/10.1007/s13671-021-00329-2 
+20. Moniruzzaman, A. B. M., & Hossain, D. S. A. (2013). Comparative Study on Agile 
+software development methodologies. arXiv preprint arXiv:1307.3356. 
+21. Nittari, G., Savva, D., Tomassoni, D., Tayebati, S. K., & Amenta, F. (2022). 
+Telemedicine in the COVID-19 Era: A Narrative Review Based on Current Evidence. 
+International Journal of Environmental Research and Public Health, 19(9), 5101. 
+22. Pala, P., Bergler -Czop, B. S., & Gwiżdż, J. (2020). Teledermatology: idea, benefits, 
+and risks of modern age –a systematic review based on melanoma. Advances in 
+Dermatology and Allergology/Postępy Dermatologii i Alergologii, 37(2), 159-167. 
+23. Perednia, D. A., & Brown, N. A. (1995). Teledermatology: one application of 
+telemedicine. Bulletin of the Medical Library Association, 83(1), 42. 
+24. Rosenbaum, B. E., Klein, R., Hagan, P. G., Seadey, M. Y., Quarcoo, N. L., Hoffmann, 
+R., ... & Leger, M. C. (201 7). Dermatology in Ghana: a retrospective review of skin 
+disease at the Korle Bu Teaching Hospital Dermatology Clinic. The Pan African 
+medical journal, 26. 
+25. Salamba, J. (2021). The Effect of Using E-Procurement during the Covid-19 Pandemic 
+on The Profitability of Small and Medium Enterprises in Ilala District, Dar Es Salaam, 
+Tanzania. 
+
+=== PAGE 85 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+72 
+ 
+26. Schmeller MD, W. (1998). Community health workers reduce skin diseases in East 
+African children. International journal of dermatology, 37(5), 370-377. 
+27. Schmid‐Grendelmeier, P., Takaoka, R., Ahogo, K., Belachew, W., Brown, S., Correia, 
+J., Correia, M., Degboe, B., Dorizy‐Vuong, V., Faye, O., Fuller, L., Grando, K., Hsu, 
+C., Kayitenkore, K., Lunjani, N., Ly, F., Mahamadou, G., Manuel, R., Kebe Dia, M., . 
+. . Taïeb, A. (2019, Novemb er). Position Statement on Atopic Dermatitis in Sub‐
+Saharan Africa: current status and roadmap. Journal of the European Academy of 
+Dermatology and Venereology, 33(11), 2019–2028. https://doi.org/10.1111/jdv.15972 
+28. Science-Direct. (2022). Telecardiology. Ret rieved from Science Direct website: 
+https://www.sciencedirect.com/topics/nursing-and-health-
+professions/telecardiology#:~:text=Telecardiology%20refers%20to%20the%20telemo
+nitoring,or%20long%2Dterm%20rhythmic%20holter. 
+29. Sharma, B. (2018). Processing of data a nd analysis. Biostatistics and Epidemiology 
+International Journal, 1(1), 3-5. 
+30. Skin Disease in Uganda . (2020). World Life Expectancy. Retrieved October 9, 2022, 
+from https://www.worldlifeexpectancy.com/uganda-skin-disease. 
+31. Skin diseases: Types of, symptoms, treatment & prevention . Cleveland Clinic. (2022). 
+Retrieved October 2, 2022, from https://my.clevelandclinic.org/health/diseases/21573-
+skin-diseases 
+32. Sutton, J., & Austin, Z. (2015). Qualitative research: Data collection, analysis, and 
+management. The Canadian journal of hospital pharmacy, 68(3), 226. 
+33. TechTarget-Contributor. (2022). Telepathology. Retrieved from www.techtarget.com: 
+https://www.techtarget.com/searchhealthit/definition/telepathology 
+34. Teledermatology: What is It? Benefits of Virtual Dermatologist - eVisit. (2022, January 
+27). eVisit. Retrieved October 1, 2022, from  https://evisit.com/resources/what-is-
+teledermatology. 
+35. Teledermatology: What is It? Benefits of Virtual Dermatologist - eVisit. (2022, 
+September 27). eVisit. Retrieved October 14, 2022, from 
+https://evisit.com/resources/what-is-teledermatology 
+36. Telemedicine: Good practices from Latin America | International Social Security 
+Association (ISSA). (2021, May 11). International Social Security Association (ISSA). 
+Retrieved October 14, 2022, from https://ww1.issa.int/analysis/telem edicina-buenas-
+practicas-en-america-
+
+=== PAGE 86 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+73 
+ 
+latina#:~:text=The%20World%20Health%20Organization%20(WHO,prevention%20
+of%20disease%20and%20injuries%2C 
+37. Thalheim, B. (2013). Entity -relationship modeling: foundations of database 
+technology. Springer Science & Business Media. 
+ 
+  
+
+=== PAGE 87 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+74 
+ 
+APPENDICES: 
+APPENDIX 1: INTERVIEW GUIDE FOR DERMATOLOGIST. 
+Interview guide for the Dermatologist. 
+Name of interviewee: ___________________________________  
+Job title: _____________________________________________  
+Name of the Skin Clinic: __________________________________  
+1. What is your view about teledermatology?  
+…………………………………………………………………………………………………
+……………………..  
+2. What is the average number of skin patients you encounter on a daily basis?  
+…………………………………………………………………………………………………
+………………….. 
+3. What are the common skin diseases affecting the patients?  
+…………………………………………………………………………………………………
+……………………  
+4. What gender is more affected by skin diseases? 
+…………………………………………………………………………………………………
+………………………. 
+5. How have you carried out follow up on patients?  
+…………………………………………………………………………………………………
+…………………………………..  
+6. Do you have any public awareness program on teledermatology in Uganda?  
+…………………………………………………………………………………………………
+………………………………. 
+7. How have people in remote areas been able to access the dermatology services?  
+………………………………………………………………………………………………… 
+Thank you. 
+  
+
+=== PAGE 88 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+75 
+ 
+APPENDIX 2: QUESTIONNAIRE  
+Questionnaire for students at Makerere University about Teledermatology. 
+Teledermatology is a subspecialty in the medical field of dermatology and probably one of the 
+most common applications of telemedicine and e -health. In teledermatology, 
+telecommunication technologies are used to exchange medical informatio n over a distance 
+using audio, visual, and data communication. 
+1. Name of the respondent…………………………………………………………………. 
+2. Gender: 
+o Male 
+o Female  
+3. Place of residence  
+………………………………………………………………………………………………… 
+4. Have you heard about Dermatology?  
+o YES 
+o NO 
+5. IF YES, How did you hear about it?  
+o Online 
+o Friend 
+o Newspapers 
+o Other: 
+6. Have you ever gotten a skin disease?  
+o YES 
+o NO 
+7. IF YES, Specify the disease.  
+…………………………………………………………………………………………………
+………………………………………………………………………………………………… 
+8. Have you sought medical attention from a dermatologist?  
+o YES 
+o NO 
+9. IF YES, whom did you contact and from which area in Uganda?  
+…………………………………………………………………………………………………
+………………………………………………………………………………………………… 
+10. How did you easily access one?  
+
+=== PAGE 89 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+76 
+ 
+…………………………………………………………………………………………………
+………………………………………………………………………………………………… 
+11. What was your experience with the dermatologist?  
+…………………………………………………………………………………………………
+……………………………. 
+12. Any other comments. 
+…………………………………………………………………………………………………
+……………………… 
+ 
+ 
+APPENDIX 3: INTERVIEW WITH THE DERMATOLOGIST. 
+ 
+The picture was taken during the interview with the dermatologist (Dr. Martin). 
+ 
+  
+
+
+=== PAGE 90 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+77 
+ 
+APPENDIX 4: SNIPPETS OF THE CODE USED FOR THE SNAPSKIN INFO -
+TELEDERMATOLOGY APPLICATION. 
+ 
+ 
+ 
+ 

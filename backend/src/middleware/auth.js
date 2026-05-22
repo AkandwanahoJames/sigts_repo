@@ -2,7 +2,7 @@
 const jwt = require('jsonwebtoken');
 const { pool } = require('../config/database');
 const { logger } = require('../utils/logger');
-const { touchUserSessionActivity } = require('../utils/sessionPresence');
+const { touchUserSessionActivity, ensureLastLocationTimeColumn } = require('../utils/sessionPresence');
 const { REQUIREMENTS } = require('../config/requirements');
 
 const SESSION_IDLE_MINUTES = Number.isFinite(REQUIREMENTS.security.sessionIdleTimeoutMinutes)
@@ -89,13 +89,18 @@ async function authenticateJWT(req, res, next) {
     
     try {
         const decoded = verifyToken(token);
-        
-        // Verify user still exists and is active
+
+        const hasLocCol = await ensureLastLocationTimeColumn();
         const result = await pool.query(
-            `SELECT user_id, username, email, user_type, is_active, language_pref,
-                    last_location_time, last_login, created_at,
-                    (LOWER(COALESCE(email, '')) LIKE '%@guest.sigts.local') AS is_guest
-             FROM users WHERE user_id = $1`,
+            hasLocCol
+                ? `SELECT user_id, username, email, user_type, is_active, language_pref,
+                          last_location_time, last_login, created_at,
+                          (LOWER(COALESCE(email, '')) LIKE '%@guest.sigts.local') AS is_guest
+                   FROM users WHERE user_id = $1`
+                : `SELECT user_id, username, email, user_type, is_active, language_pref,
+                          NULL::timestamptz AS last_location_time, last_login, created_at,
+                          (LOWER(COALESCE(email, '')) LIKE '%@guest.sigts.local') AS is_guest
+                   FROM users WHERE user_id = $1`,
             [decoded.userId]
         );
         
@@ -181,29 +186,63 @@ function rejectGuestAccounts(req, res, next) {
 }
 
 /**
+ * Canonical role string from users.user_type (handles legacy casing/aliases).
+ */
+function normalizeUserType(userType) {
+    const raw = String(userType || '').trim().toLowerCase();
+    if (raw === 'it-manager' || raw === 'itmanager') return 'it_manager';
+    return raw;
+}
+
+/**
+ * True when the account is listed in it_managers (covers mis-typed user_type rows).
+ */
+async function userHasItManagerRecord(userId) {
+    if (!userId) return false;
+    try {
+        const result = await pool.query(
+            `SELECT 1 FROM it_managers WHERE user_id = $1 LIMIT 1`,
+            [userId]
+        );
+        return result.rows.length > 0;
+    } catch (_) {
+        return false;
+    }
+}
+
+/**
  * Role-Based Access Control middleware
  * @param {...string} roles - Allowed roles
  */
 function authorize(...roles) {
-    return (req, res, next) => {
+    const allowed = roles.map((r) => normalizeUserType(r));
+    const allowsItDesk = allowed.includes('it_manager') || allowed.includes('admin');
+
+    return async (req, res, next) => {
         if (!req.user) {
-            return res.status(401).json({ 
+            return res.status(401).json({
                 success: false,
                 error: 'Unauthorized',
                 message: 'Authentication required'
             });
         }
-        
-        if (!roles.includes(req.user.user_type)) {
-            return res.status(403).json({ 
-                success: false,
-                error: 'Access denied',
-                message: `Insufficient permissions. Required role: ${roles.join(', ')}`,
-                your_role: req.user.user_type
-            });
+
+        const role = normalizeUserType(req.user.user_type);
+        if (allowed.includes(role)) {
+            return next();
         }
-        
-        next();
+
+        if (allowsItDesk && (await userHasItManagerRecord(req.user.user_id))) {
+            return next();
+        }
+
+        return res.status(403).json({
+            success: false,
+            error: 'Access denied',
+            message: `Insufficient permissions. Required role: ${allowed.join(', ')}`,
+            your_role: role || req.user.user_type || null,
+            required_roles: allowed
+        });
     };
 }
 

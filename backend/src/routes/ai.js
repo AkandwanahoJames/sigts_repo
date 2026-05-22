@@ -5,7 +5,7 @@ const { pool } = require('../config/database');
 const { authenticateJWT } = require('../middleware/auth');
 const { logger } = require('../utils/logger');
 const { retrieveSigtsKnowledge, formatClientCatalogueSnapshot } = require('../services/chatGrounding');
-const { completeChat, isLLMConfigured } = require('../services/llmChat');
+const { completeChat, isLLMConfigured, readChatEnv } = require('../services/llmChat');
 
 router.use(authenticateJWT);
 
@@ -25,12 +25,21 @@ function normalizeTourHelpQuestion(question) {
         .trim();
 }
 
-/** Client-supplied SIGTS catalogue snapshot (tour theme briefings + Animals list). */
+/** Client-supplied SIGTS catalogue snapshot (themes, animals, map, culture, FAQs, safety). */
 function sanitizeAppContext(raw) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
         return null;
     }
-    const out = { themes: [], animals: [] };
+    const out = {
+        themes: [],
+        animals: [],
+        locations: [],
+        stories: [],
+        faqs: [],
+        safety_species: [],
+        weather: null,
+        catalog_meta: null,
+    };
 
     if (Array.isArray(raw.themes)) {
         for (const t of raw.themes.slice(0, 24)) {
@@ -42,7 +51,7 @@ function sanitizeAppContext(raw) {
                 slug,
                 session_title,
                 subtitle: clampStr(t.subtitle, 240),
-                tourist_summary_en: clampStr(t.tourist_summary_en, 720)
+                tourist_summary_en: clampStr(t.tourist_summary_en, 720),
             });
         }
     }
@@ -54,14 +63,85 @@ function sanitizeAppContext(raw) {
             if (!name) continue;
             out.animals.push({
                 name,
-                scientific_name: clampStr(a.scientific_name || a.scientific, 200)
+                scientific_name: clampStr(a.scientific_name || a.scientific, 200),
             });
         }
     }
 
-    if (!out.themes.length && !out.animals.length) {
-        return null;
+    if (Array.isArray(raw.locations)) {
+        for (const l of raw.locations.slice(0, 48)) {
+            if (!l || typeof l !== 'object') continue;
+            const name = clampStr(l.name, 160);
+            if (!name) continue;
+            out.locations.push({
+                name,
+                location_type: clampStr(l.location_type || l.type, 48),
+                description: clampStr(l.description, 280),
+            });
+        }
     }
+
+    if (Array.isArray(raw.stories)) {
+        for (const s of raw.stories.slice(0, 24)) {
+            if (!s || typeof s !== 'object') continue;
+            const title = clampStr(s.title || s.title_en, 200);
+            if (!title) continue;
+            out.stories.push({
+                title,
+                community: clampStr(s.community, 40),
+                summary: clampStr(s.summary || s.narrative_en, 400),
+            });
+        }
+    }
+
+    if (Array.isArray(raw.faqs)) {
+        for (const f of raw.faqs.slice(0, 32)) {
+            if (!f || typeof f !== 'object') continue;
+            const question = clampStr(f.question || f.question_en, 240);
+            const answer = clampStr(f.answer || f.answer_en, 400);
+            if (!question) continue;
+            out.faqs.push({ question, answer, category: clampStr(f.category, 48) });
+        }
+    }
+
+    if (Array.isArray(raw.safety_species)) {
+        for (const s of raw.safety_species.slice(0, 16)) {
+            if (!s || typeof s !== 'object') continue;
+            const name = clampStr(s.name, 120);
+            if (!name) continue;
+            out.safety_species.push({
+                name,
+                safety_tip: clampStr(s.safety_tip, 320),
+            });
+        }
+    }
+
+    if (raw.weather && typeof raw.weather === 'object') {
+        out.weather = {
+            condition: clampStr(raw.weather.condition, 80),
+            temperatureC: raw.weather.temperatureC,
+            rainProbabilityPct: raw.weather.rainProbabilityPct,
+        };
+    }
+
+    if (raw.catalog_meta && typeof raw.catalog_meta === 'object') {
+        out.catalog_meta = {
+            animals: Number(raw.catalog_meta.animals) || 0,
+            locations: Number(raw.catalog_meta.locations) || 0,
+        };
+    }
+
+    const hasData =
+        out.themes.length ||
+        out.animals.length ||
+        out.locations.length ||
+        out.stories.length ||
+        out.faqs.length ||
+        out.safety_species.length ||
+        out.weather ||
+        out.catalog_meta;
+
+    if (!hasData) return null;
     return out;
 }
 
@@ -340,11 +420,44 @@ function deriveAnswerSources(question, answer, appContext, locationName, groundi
     if (groundingMeta?.themeHits) {
         sources.push(`Wildlife tour themes (${groundingMeta.themeHits} matches)`);
     }
+    if (groundingMeta?.cultureHits) {
+        sources.push(`Cultural narratives (${groundingMeta.cultureHits} matches)`);
+    }
+    if (groundingMeta?.locationHits) {
+        sources.push(`Map locations (${groundingMeta.locationHits} matches)`);
+    }
+    if (groundingMeta?.tourContentHits) {
+        sources.push(`Tour content (${groundingMeta.tourContentHits} matches)`);
+    }
+    if (groundingMeta?.routeHits) {
+        sources.push(`Trek routes (${groundingMeta.routeHits} in knowledge pack)`);
+    }
+    if (groundingMeta?.sightingHits) {
+        sources.push(`Recent sightings (${groundingMeta.sightingHits} anecdotal rows)`);
+    }
+    if (groundingMeta?.coreBriefing) {
+        sources.push('SIGTS core park briefing (always-on context)');
+    }
     if (appContext?.animals?.length) {
         sources.push(`Client Animals catalogue snapshot (${appContext.animals.length} species)`);
     }
     if (appContext?.themes?.length) {
         sources.push(`Client wildlife tour theme briefings (${appContext.themes.length} sessions)`);
+    }
+    if (appContext?.locations?.length) {
+        sources.push(`Client map POIs (${appContext.locations.length})`);
+    }
+    if (appContext?.stories?.length) {
+        sources.push(`Client cultural stories (${appContext.stories.length})`);
+    }
+    if (appContext?.faqs?.length) {
+        sources.push(`Client cached FAQs (${appContext.faqs.length})`);
+    }
+    if (appContext?.safety_species?.length) {
+        sources.push(`Client staying-safe species (${appContext.safety_species.length})`);
+    }
+    if (appContext?.weather) {
+        sources.push('Client weather capsule');
     }
     const a = String(answer || '').toLowerCase();
     if (a.includes('unesco') || a.includes('heritage')) sources.push('UNESCO list 682 framing (public summary)');
@@ -353,40 +466,32 @@ function deriveAnswerSources(question, answer, appContext, locationName, groundi
     return [...new Set(sources)];
 }
 
-function wantsLlmForThread(rulesQuestion, appContext, locationName, questionTrimmed) {
-    const qThread = normalizeTourHelpQuestion(rulesQuestion);
-    if (!qThread.length) return false;
-    if (looksClearlyOffTopic(qThread)) return false;
+/** When an LLM API key is configured, route in-app visitor questions through it (rules remain offline fallback). */
+function shouldUseLlmForQuestion(question, mergedThread) {
+    const ql = normalizeTourHelpQuestion(question);
+    if (!ql.length) return false;
+    if (looksClearlyOffTopic(ql)) return false;
 
-    if (buildAnswerFromAppContext(questionTrimmed, rulesQuestion, appContext, locationName)) {
-        return true;
-    }
-
-    const qt = String(questionTrimmed || '').trim();
-    if (
-        qt.length < 240 &&
-        /^(tell\s+me|what'?s\s+possible|help|hey|hi)\b/i.test(qt) &&
-        !/\b(permit|gorilla|bird|trail|culture|rain|pack|fee|faq|animal|species|forest|sector|map)\b/i.test(qThread)
-    ) {
+    const qt = normalizeTourHelpQuestion(mergedThread || question);
+    if (looksClearlyOffTopic(qt) && !isBwindiParkContextQuery(ql) && !isNatureTourismTopic(ql)) {
         return false;
     }
 
-    const parkish =
-        isBwindiParkContextQuery(qThread) ||
-        Boolean(locationName) ||
-        /\b(bwindi|buhoma|ruhija|rushaga|nkuringo|kanungu|kisoro|kabale|uganda\s+wildlife|uwa|binp|sigts)\b/i.test(
-            qThread
-        );
+    return true;
+}
 
-    const natureLike =
-        isNatureTourismTopic(qThread) ||
-        /\b(gorilla|chimpan|bonobo|primate|colobus|turaco|albertine|forest\s+elephant|bee[-\s]?eater|broadbill)\b/i.test(
-            qThread
-        );
-
-    const flagshipTaxa = /\b(mountain\s+gorilla|silverback|grauer|ruwenzori)\b/i.test(qThread);
-
-    return (parkish && natureLike) || flagshipTaxa;
+function buildRetrievalQuery(question, history) {
+    const parts = [String(question || '').trim()];
+    if (Array.isArray(history)) {
+        history
+            .filter((h) => h && h.role === 'user')
+            .slice(-3)
+            .forEach((h) => {
+                const t = String(h.text || '').trim();
+                if (t.length >= 2) parts.push(t);
+            });
+    }
+    return clampStr(parts.join('\n'), 4000);
 }
 
 function buildLlmSystemPrompt({ language, locationName, knowledgePack, serverTimeISO, utcNote }) {
@@ -398,9 +503,9 @@ function buildLlmSystemPrompt({ language, locationName, knowledgePack, serverTim
         'Tone: warm, succinct field-guide energy—friendly human ranger briefing, never corporate boilerplate.',
         'Carry conversation: briefly acknowledge what they asked or how they sounded (worried, excited, confused—only if evident). Prefer one or two short paragraphs; use bullets only when the visitor asked for steps, packing lists, or “give me bullets”.',
         'When it fits, end with **one** light follow-up invitation (single sentence), e.g. “Want muddy-boot tips or permits-in-general wording?” Avoid stacking multiple rhetorical questions.',
-        'GROUNDING: Tie species/FAQ/safety/park snippets to the KNOWLEDGE BASE whenever it speaks to their question. Paraphrase; do not paste whole DB rows verbatim.',
+        'GROUNDING: The KNOWLEDGE BASE is retrieved live from SIGTS Postgres (FAQs, safety tips, park guide, animals, cultural narratives, locations, tour themes, routes, sightings) plus any device snapshot. Prefer facts found there; paraphrase naturally.',
         'If KNOWLEDGE BASE lacks the answer (exact permit price, quotas, closures, medical advice), say so plainly and steer them to **Uganda Wildlife Authority**, lodge staff, or on-site rangers for authority.',
-        'Never invent citations, ordinance numbers, or promises about sightings. Keep total reply roughly under 220 words unless they explicitly requested depth.',
+        'Never invent citations, ordinance numbers, or promises about sightings. Keep total reply roughly under 280 words unless they explicitly requested depth.',
         'Stay on Bwindi / SIGTS visitor themes; politely decline unrelated topics.',
         locHint,
         utcNote ? `Server UTC hint: ${utcNote}` : '',
@@ -430,6 +535,30 @@ async function resolveLocationName(lat, lng) {
         return null;
     }
 }
+
+router.get('/status', (_req, res) => {
+    const env = readChatEnv();
+    res.json({
+        success: true,
+        llm_configured: isLLMConfigured(),
+        model: env.model,
+        provider: env.baseUrl,
+        max_tokens: env.maxTokens,
+        grounding: [
+            'parks',
+            'faqs',
+            'safety_tips',
+            'destination_info',
+            'animals',
+            'wildlife_tour_themes',
+            'cultural_narratives',
+            'locations',
+            'tour_content',
+            'tour_routes',
+            'sightings',
+        ],
+    });
+});
 
 router.post('/chat', [
     body('question').isString().isLength({ min: 2, max: 2000 }),
@@ -463,16 +592,13 @@ router.post('/chat', [
     let nlp_mode = 'rule_kb_v1';
     let groundingMeta = null;
 
-    const latestNorm = normalizeTourHelpQuestion(question);
-    const bareSocial = isBareSocialUtterance(latestNorm);
-
-    const llmEligible = wantsLlmForThread(rulesQuestionForLlm, appContext, locationName, question);
-    /** Short greetings/thanks deserve a conversational model reply when configured; rules stay the offline fallback. */
-    const tryLlm = isLLMConfigured() && (bareSocial || llmEligible);
+    const llmEligible = shouldUseLlmForQuestion(question, mergedThread);
+    const tryLlm = isLLMConfigured() && llmEligible;
 
     if (tryLlm) {
         try {
-            const { text: kbText, used } = await retrieveSigtsKnowledge(question);
+            const retrievalQuery = buildRetrievalQuery(question, history);
+            const { text: kbText, used } = await retrieveSigtsKnowledge(retrievalQuery);
             groundingMeta = used;
             const clientSnap = formatClientCatalogueSnapshot(appContext);
             const knowledgePack = [clientSnap.length ? `${clientSnap}\n\n` : '', kbText].join('');
@@ -543,9 +669,11 @@ router.post('/chat', [
             time_context: timeContext,
             nlp_mode,
             llm_configured: isLLMConfigured(),
+            llm_model: isLLMConfigured() ? readChatEnv().model : null,
             llm_eligible_question: llmEligible,
-            history_turns_client: history.length
-        }
+            history_turns_client: history.length,
+            grounding_hits: groundingMeta || null,
+        },
     });
 });
 

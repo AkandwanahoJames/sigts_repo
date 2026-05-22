@@ -241,6 +241,11 @@ class APIService {
     }
 
     async request(endpoint, options = {}, meta = {}) {
+        const method = String(options.method || 'GET').toUpperCase();
+        const retryCount = Number(meta._retryCount) || 0;
+        const maxRetries =
+            method === 'GET' && !meta._noRetry ? Math.min(2, Number(meta._maxRetries ?? 2)) : 0;
+
         if (window.Auth?.touchSessionActivity) {
             window.Auth.touchSessionActivity();
         }
@@ -324,6 +329,15 @@ class APIService {
             }
 
             if (!response.ok) {
+                if (response.status === 429) {
+                    return {
+                        ...(payload && typeof payload === 'object' ? payload : {}),
+                        error: payload?.error || payload?.message || 'Too many requests',
+                        status: 429,
+                        rateLimited: true,
+                        ok: false,
+                    };
+                }
                 if (response.status === 401 && payload?.code === 'SESSION_IDLE_EXPIRED') {
                     await window.Auth?.logout?.();
                     return { ...payload, status: response.status };
@@ -349,6 +363,22 @@ class APIService {
             }
             return payload;
         } catch (error) {
+            const isTransient =
+                error?.name === 'AbortError' ||
+                error?.message === 'Failed to fetch' ||
+                error?.message === 'NetworkError when attempting to fetch resource.';
+            if (meta._rateLimited || meta._noRetry) {
+                return {
+                    error: error?.message || 'Request failed',
+                    network: true,
+                    status: 0,
+                };
+            }
+            if (isTransient && retryCount < maxRetries) {
+                const delayMs = 800 * (retryCount + 1);
+                await new Promise((r) => window.setTimeout(r, delayMs));
+                return this.request(endpoint, options, { ...meta, _retryCount: retryCount + 1 });
+            }
             if (error?.name === 'AbortError') {
                 console.warn(`API timeout (${endpoint}) after ${timeoutMs}ms`);
                 return {
@@ -1070,6 +1100,30 @@ class APIService {
         return result || { count: 0, users: [] };
     }
 
+    /** IT dashboard: full user directory with server-side aggregates (all rows up to 500). */
+    async getAdminUserDirectory() {
+        const result = await this.request('/admin/users/directory', {}, { timeoutMs: 20000 });
+        if (!result || result.error) {
+            return {
+                users: [],
+                total: 0,
+                loaded: 0,
+                complete: false,
+                stats: null,
+                error: result?.error || 'Failed to load user directory'
+            };
+        }
+        return {
+            users: Array.isArray(result.users) ? result.users : [],
+            total: Number(result.total) || 0,
+            loaded: Number(result.loaded) || (Array.isArray(result.users) ? result.users.length : 0),
+            complete: result.complete !== false,
+            stats: result.stats || null,
+            generated_at: result.generated_at || null,
+            error: null
+        };
+    }
+
     async pingPresence() {
         const coords = this.getLiveCoordinates();
         const body = coords ? JSON.stringify({ lat: coords.lat, lng: coords.lng }) : undefined;
@@ -1322,6 +1376,19 @@ class APIService {
         return this.request('/analytics/operations/status');
     }
 
+    async getAdminOperationalSnapshot(windowMinutes = 5) {
+        return this.request(
+            `/admin/operational-snapshot?window_minutes=${encodeURIComponent(windowMinutes)}`,
+            {},
+            { timeoutMs: 12000 }
+        );
+    }
+
+    async getOperationalSummary(days = 14) {
+        const d = Math.min(90, Math.max(7, Number(days) || 14));
+        return this.request(`/analytics/operational-summary?days=${d}`, {}, { timeoutMs: 20000 });
+    }
+
     async getAnalyticsAnomalies(z = 2.5) {
         const result = await this.request(`/analytics/anomalies?z=${encodeURIComponent(z)}`);
         return result || { anomalies: [] };
@@ -1421,6 +1488,15 @@ class APIService {
             method: 'POST',
             body: JSON.stringify({ animals })
         });
+    }
+
+    /** Tour help LLM status (model name, grounding tables) — requires auth. */
+    async getAiChatStatus() {
+        try {
+            return await this.request('/ai/status');
+        } catch (_) {
+            return { success: false, llm_configured: false };
+        }
     }
 }
 

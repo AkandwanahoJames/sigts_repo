@@ -6,7 +6,10 @@ const { pool } = require('../config/database');
 const { authenticateJWT, authorize } = require('../middleware/auth');
 const { execFile } = require('child_process');
 const path = require('path');
-const { LAST_ACTIVITY_SQL, activeUsersWithinWindowClause } = require('../utils/sessionPresence');
+const {
+    buildActiveUsersWithinWindowClause,
+    resolveLastActivitySql
+} = require('../utils/sessionPresence');
 
 router.use(authenticateJWT);
 
@@ -123,7 +126,7 @@ router.get('/status-lite', async (req, res) => {
     return res.json(buildAccessContext(req));
 });
 
-router.use(authorize('it_manager'));
+router.use(authorize('it_manager', 'admin'));
 
 // Get current intranet status
 router.get('/status', async (req, res) => {
@@ -136,13 +139,15 @@ router.get('/peers', async (req, res) => {
     try {
         const windowMinutes = Math.min(120, Math.max(1, Number.parseInt(req.query.window_minutes, 10) || 5));
         const activeSinceInterval = `${windowMinutes} minutes`;
+        const activitySql = await resolveLastActivitySql();
+        const activeClause = await buildActiveUsersWithinWindowClause(1);
         const result = await pool.query(
             `SELECT user_id, username, first_name, last_name, user_type, email,
                     last_lat, last_lng,
-                    ${LAST_ACTIVITY_SQL} AS last_seen
+                    ${activitySql} AS last_seen
              FROM users
-             WHERE ${activeUsersWithinWindowClause(1)}
-             ORDER BY ${LAST_ACTIVITY_SQL} DESC`,
+             WHERE ${activeClause}
+             ORDER BY ${activitySql} DESC`,
             [activeSinceInterval]
         );
 

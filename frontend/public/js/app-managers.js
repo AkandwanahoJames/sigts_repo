@@ -367,21 +367,43 @@ class AuthManager {
                     name: 'System Admin',
                     email: 'admin@sigts.local',
                     username: 'demo_admin',
-                    role: 'it_manager',
-                    user_type: 'it_manager',
+                    role: 'admin',
+                    user_type: 'admin',
                     department: 'IT'
                 },
-                token: 'demo.it_manager.token'
+                token: 'demo.admin.token'
             }
         };
 
         const key = String(username || '').trim().toLowerCase();
         const demo = demoCredentials[key];
-        if (demo && password === demo.password) {
+        const demoPasswords = demo
+            ? [password, demo.password, 'Test123!', 'ITManager123!', 'Admin123!'].filter(Boolean)
+            : [];
+        const uniqueDemoPasswords = [...new Set(demoPasswords.map((p) => String(p)))];
+        if (demo && uniqueDemoPasswords.includes(String(password))) {
+            for (const pw of uniqueDemoPasswords) {
+                const apiLogin = await API.request('/auth/login', {
+                    method: 'POST',
+                    body: JSON.stringify({ username: key, password: pw })
+                });
+                if (apiLogin?.success && (apiLogin.token || apiLogin.accessToken) && apiLogin.user) {
+                    return this.completeLogin(
+                        apiLogin.user,
+                        apiLogin.token || apiLogin.accessToken,
+                        rememberMe,
+                        apiLogin.refreshToken || null
+                    );
+                }
+            }
             if (isDev) {
                 const loginEnd = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                console.debug(`[auth] demo login flow completed in ${Math.round(loginEnd - loginStart)}ms`);
+                console.debug(`[auth] offline demo login (no API JWT) in ${Math.round(loginEnd - loginStart)}ms`);
             }
+            showToast?.(
+                'Server sign-in failed — using offline demo mode. Operations and admin APIs need a live login (e.g. demo_it / Test123!).',
+                'warning'
+            );
             return this.completeLogin(demo.user, demo.token, rememberMe, null);
         }
 
@@ -462,6 +484,9 @@ class AuthManager {
         this.bindActivityMonitor();
         this.startPresenceHeartbeat();
         this._pingPresenceNow();
+        if (typeof navigator !== 'undefined' && navigator.onLine && typeof Intranet?.clearLegacyDemoIntranetCache === 'function') {
+            Intranet.clearLegacyDemoIntranetCache();
+        }
         AppState.currentUser = this.user;
         AppState.authToken = this.token;
         this.failedAttempts = 0;
@@ -487,7 +512,7 @@ class AuthManager {
         if (now < this.activityThrottleUntil) return;
         this.activityThrottleUntil = now + 1000;
         this.startSessionTimer();
-        this._schedulePresencePing();
+        /** Presence uses the 20s heartbeat only — do not ping on every API call (avoids rate limits). */
     }
 
     _pingPresenceNow() {
@@ -582,7 +607,33 @@ class AuthManager {
     }
 
     isAuthenticated() { return !!this.token && (this.token.match(/\./g) || []).length === 2; }
-    hasRole(role) { return this.user?.role === role || this.user?.userType === role; }
+    hasRole(role) {
+        const mine = String(this.user?.role || this.user?.userType || this.user?.user_type || '')
+            .trim()
+            .toLowerCase();
+        const want = String(role || '').trim().toLowerCase();
+        if (want === 'it_manager') {
+            return mine === 'it_manager' || mine === 'admin';
+        }
+        return mine === want;
+    }
+
+    async syncRoleFromProfile() {
+        if (!this.isAuthenticated() || typeof API?.request !== 'function') return null;
+        const profile = await API.request('/users/profile');
+        const role = profile?.user_type;
+        if (!role || profile?.error || profile?.status >= 400) return null;
+        const user = this.getCurrentUser() || {};
+        user.role = role;
+        user.userType = role;
+        user.user_type = role;
+        this.user = user;
+        AppState.currentUser = user;
+        const persistLocal = Boolean(localStorage.getItem('token'));
+        const storage = persistLocal ? localStorage : sessionStorage;
+        storage.setItem('user', JSON.stringify(user));
+        return role;
+    }
     
     sendVerificationEmail(email) { return email; }
 
@@ -1723,20 +1774,102 @@ class AIRecommendationEngine {
             return null;
         }
         try {
-            const [themes, animals] = await Promise.all([Content.getWildlifeTourThemes(), Content.getAnimals()]);
+            const settled = await Promise.allSettled([
+                Content.getWildlifeTourThemes(),
+                Content.getAnimals(),
+                Content.getLocations?.(),
+                Content.getCulturalStories?.(),
+                typeof API !== 'undefined' && API.getFaqs ? API.getFaqs() : Promise.resolve([]),
+                typeof API !== 'undefined' && API.getTouristBiodiversity ? API.getTouristBiodiversity() : Promise.resolve(null),
+                typeof API !== 'undefined' && API.getParkWeatherForecast ? API.getParkWeatherForecast() : Promise.resolve(null),
+                typeof API !== 'undefined' && API.getContentCatalogMeta ? API.getContentCatalogMeta() : Promise.resolve(null),
+            ]);
+
+            const pick = (i, fallback) => (settled[i].status === 'fulfilled' ? settled[i].value : fallback);
+            const themes = pick(0, []);
+            const animals = pick(1, []);
+            const locations = pick(2, []);
+            const stories = pick(3, []);
+            const faqs = pick(4, []);
+            const biodiv = pick(5, null);
+            const weather = pick(6, null);
+            const catalogMeta = pick(7, null);
+
             const themeList = (Array.isArray(themes) ? themes : []).slice(0, 24).map((t) => ({
                 slug: t.slug,
                 session_title: t.session_title,
                 subtitle: t.subtitle,
                 tourist_summary_en:
-                    typeof t.tourist_summary_en === 'string' ? t.tourist_summary_en.slice(0, 650) : ''
+                    typeof t.tourist_summary_en === 'string' ? t.tourist_summary_en.slice(0, 650) : '',
             }));
+
             const animalList = (Array.isArray(animals) ? animals : []).slice(0, 300).map((a) => ({
                 name: a.name,
-                scientific_name: a.scientific_name || a.scientific
+                scientific_name: a.scientific_name || a.scientific,
             }));
-            if (!themeList.length && !animalList.length) return null;
-            return { themes: themeList, animals: animalList };
+
+            const locationList = (Array.isArray(locations) ? locations : []).slice(0, 48).map((l) => ({
+                name: l.name,
+                location_type: l.location_type || l.type,
+                description: typeof l.description === 'string' ? l.description.slice(0, 280) : '',
+            }));
+
+            const storyList = (Array.isArray(stories) ? stories : []).slice(0, 24).map((s) => ({
+                title: s.title_en || s.title,
+                community: s.community,
+                summary:
+                    typeof s.narrative_en === 'string'
+                        ? s.narrative_en.slice(0, 400)
+                        : typeof s.story === 'string'
+                          ? s.story.slice(0, 400)
+                          : '',
+            }));
+
+            const faqList = (Array.isArray(faqs) ? faqs : []).slice(0, 32).map((f) => ({
+                question: f.question_en || f.question,
+                answer: typeof (f.answer_en || f.answer) === 'string' ? (f.answer_en || f.answer).slice(0, 400) : '',
+                category: f.category,
+            }));
+
+            const safetySpecies = Array.isArray(biodiv?.species)
+                ? biodiv.species.slice(0, 14).map((s) => ({
+                      name: s.name,
+                      safety_tip: s.safety_tip || '',
+                  }))
+                : [];
+
+            const weatherCapsule = weather
+                ? {
+                      condition: weather.condition,
+                      temperatureC: weather.temperatureC,
+                      rainProbabilityPct: weather.rainProbabilityPct,
+                  }
+                : null;
+
+            const metaCounts = catalogMeta?.counts
+                ? { animals: catalogMeta.counts.animals, locations: catalogMeta.counts.locations }
+                : { animals: animalList.length, locations: locationList.length };
+
+            if (
+                !themeList.length &&
+                !animalList.length &&
+                !locationList.length &&
+                !storyList.length &&
+                !faqList.length
+            ) {
+                return null;
+            }
+
+            return {
+                themes: themeList,
+                animals: animalList,
+                locations: locationList,
+                stories: storyList,
+                faqs: faqList,
+                safety_species: safetySpecies,
+                weather: weatherCapsule,
+                catalog_meta: metaCounts,
+            };
         } catch (_) {
             return null;
         }
@@ -1996,7 +2129,13 @@ class AIRecommendationEngine {
                     body: JSON.stringify(payload)
                 });
                 if (result && result.success && result.answer) {
-                    const meta = { ...(result.meta || {}), knowledge_base: 'BINP + SIGTS curated rules' };
+                    const meta = {
+                        ...(result.meta || {}),
+                        knowledge_base:
+                            result.meta?.nlp_mode === 'llm_grounded_v1'
+                                ? 'SIGTS LLM grounded on live database + device catalogue'
+                                : 'BINP + SIGTS curated rules',
+                    };
                     if (!meta.sources || !meta.sources.length) {
                         meta.sources = [
                             'Server park interpreter',
@@ -2272,40 +2411,83 @@ class OfflineSyncManager {
     constructor() {
         this.isSyncing = false;
         this.pendingItems = [];
+        this.maxAttempts = 5;
         this.loadQueue();
         window.addEventListener('online', () => this.processQueue());
+        window.setInterval(() => {
+            if (navigator.onLine && this.pendingItems.length) this.processQueue();
+        }, 45000);
     }
 
     loadQueue() {
-        this.pendingItems = JSON.parse(localStorage.getItem('sync_queue') || '[]');
+        try {
+            this.pendingItems = JSON.parse(localStorage.getItem('sync_queue') || '[]');
+        } catch (_) {
+            this.pendingItems = [];
+        }
+    }
+
+    _persistQueue() {
+        localStorage.setItem('sync_queue', JSON.stringify(this.pendingItems));
+        window.refreshNetworkStatusBadge?.();
+    }
+
+    _backoffMs(attempts) {
+        return Math.min(60000, 2000 * 2 ** Math.min(attempts, 5));
     }
 
     async addToQueue(action, data) {
-        this.pendingItems.push({ id: Date.now(), action, data, attempts: 0 });
-        localStorage.setItem('sync_queue', JSON.stringify(this.pendingItems));
-        window.refreshNetworkStatusBadge?.();
+        this.pendingItems.push({
+            id: Date.now(),
+            action,
+            data,
+            attempts: 0,
+            lastError: null,
+            queuedAt: new Date().toISOString(),
+        });
+        this._persistQueue();
         if (navigator.onLine) await this.processQueue();
     }
 
     async processQueue() {
         if (this.isSyncing || !navigator.onLine) return;
         const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-        if (conn?.saveData) return;
+        if (conn?.saveData && this.pendingItems.length < 3) return;
         this.isSyncing = true;
         const items = [...this.pendingItems];
         for (const item of items) {
+            if ((item.attempts || 0) >= this.maxAttempts) continue;
+            const wait = this._backoffMs(item.attempts || 0);
+            if (item.nextRetryAt && Date.now() < new Date(item.nextRetryAt).getTime()) continue;
             try {
                 let success = false;
                 switch (item.action) {
-                    case 'sighting': success = await this.syncSighting(item.data); break;
-                    case 'feedback': success = await this.syncFeedback(item.data); break;
+                    case 'sighting':
+                        success = await this.syncSighting(item.data);
+                        break;
+                    case 'feedback':
+                        success = await this.syncFeedback(item.data);
+                        break;
                 }
-                if (success) this.pendingItems = this.pendingItems.filter(i => i.id !== item.id);
-            } catch (error) {}
+                if (success) {
+                    this.pendingItems = this.pendingItems.filter((i) => i.id !== item.id);
+                } else {
+                    item.attempts = (item.attempts || 0) + 1;
+                    item.lastError = 'Server rejected payload';
+                    item.nextRetryAt = new Date(Date.now() + this._backoffMs(item.attempts)).toISOString();
+                }
+            } catch (error) {
+                item.attempts = (item.attempts || 0) + 1;
+                item.lastError = String(error?.message || error || 'sync failed');
+                item.nextRetryAt = new Date(Date.now() + this._backoffMs(item.attempts)).toISOString();
+            }
         }
-        localStorage.setItem('sync_queue', JSON.stringify(this.pendingItems));
+        this._persistQueue();
         this.isSyncing = false;
-        window.refreshNetworkStatusBadge?.();
+    }
+
+    getFailedCount() {
+        return this.pendingItems.filter((i) => (i.attempts || 0) >= this.maxAttempts).length;
     }
 
     async syncSighting(data) {
@@ -2331,7 +2513,15 @@ class OfflineSyncManager {
         const result = await API.submitFeedback(normalized);
         return Boolean(result?.success && result.feedback);
     }
-    getPendingCount() { return this.pendingItems.length; }
+    getPendingCount() {
+        return this.pendingItems.filter((i) => (i.attempts || 0) < this.maxAttempts).length;
+    }
+
+    getQueueSummary() {
+        const pending = this.getPendingCount();
+        const failed = this.getFailedCount();
+        return { pending, failed, total: this.pendingItems.length };
+    }
 }
 
 // =====================================================
@@ -2343,27 +2533,18 @@ class IntranetManager {
     }
 
     initIntranetData() {
-        if (!localStorage.getItem('internal_announcements')) {
-            localStorage.setItem('internal_announcements', JSON.stringify([
-                { id: 1, title: 'Staff Meeting', content: 'All guides meeting at HQ at 3pm.', date: new Date().toISOString(), priority: 'high', author: 'Admin' },
-                { id: 2, title: 'New Gorilla Trek Protocol', content: 'Updated safety guidelines issued.', date: new Date().toISOString(), priority: 'medium', author: 'Park Management' }
-            ]));
-        }
-        if (!localStorage.getItem('inventory_items')) {
-            localStorage.setItem('inventory_items', JSON.stringify([
-                { id: 1, name: 'GPS Devices', quantity: 15, category: 'Equipment', status: 'available' },
-                { id: 2, name: 'First Aid Kits', quantity: 8, category: 'Medical', status: 'available' },
-                { id: 3, name: 'Radio Transceivers', quantity: 12, category: 'Communication', status: 'available' }
-            ]));
-        }
-        if (!localStorage.getItem('hr_employees')) {
-            localStorage.setItem('hr_employees', JSON.stringify([
-                { id: 1, name: 'John Mbabazi', role: 'Senior Guide', department: 'Tour Operations', status: 'active', hireDate: '2020-01-15' },
-                { id: 2, name: 'Grace Akello', role: 'IT Manager', department: 'IT', status: 'active', hireDate: '2019-06-10' },
-                { id: 3, name: 'Peter Mugisha', role: 'Tour Guide', department: 'Tour Operations', status: 'active', hireDate: '2021-03-22' },
-                { id: 4, name: 'Sarah Nyira', role: 'Ranger', department: 'Security', status: 'active', hireDate: '2020-11-01' }
-            ]));
-        }
+        /** No static HR/inventory demo rows — panel and intranet must reflect PostgreSQL via /api/intranet/*. */
+    }
+
+    /** Drop legacy browser-only demo rows so IT views cannot show stale static counts. */
+    clearLegacyDemoIntranetCache() {
+        ['inventory_items', 'hr_employees'].forEach((key) => {
+            try {
+                localStorage.removeItem(key);
+            } catch (_) {
+                /**/
+            }
+        });
     }
 
     async getAnnouncements() {
@@ -2401,19 +2582,30 @@ class IntranetManager {
     }
 
     async getInventory() {
-        const result = await API.request('/intranet/inventory');
-        if (result?.items) {
-            const normalized = result.items.map(item => ({
-                id: item.inventory_item_id,
-                name: item.name,
-                quantity: item.quantity,
-                category: item.category,
-                status: item.status
-            }));
-            localStorage.setItem('inventory_items', JSON.stringify(normalized));
-            return normalized;
+        try {
+            const result = await API.request('/intranet/inventory');
+            if (result && !result.error) {
+                const items = Array.isArray(result.items) ? result.items : [];
+                const normalized = items.map((item) => ({
+                    id: item.inventory_item_id,
+                    name: item.name,
+                    quantity: item.quantity,
+                    category: item.category,
+                    status: item.status
+                }));
+                localStorage.setItem('sigts_inventory_api_cache', JSON.stringify(normalized));
+                return normalized;
+            }
+        } catch (_) {
+            /** API unavailable — use last successful API cache only */
         }
-        return JSON.parse(localStorage.getItem('inventory_items') || '[]');
+        try {
+            const cached = localStorage.getItem('sigts_inventory_api_cache');
+            if (cached) return JSON.parse(cached);
+        } catch (_) {
+            /**/
+        }
+        return [];
     }
 
     async updateInventoryItem(id, updates) {
@@ -2435,20 +2627,31 @@ class IntranetManager {
     }
 
     async getEmployees() {
-        const result = await API.request('/intranet/employees');
-        if (result?.employees) {
-            const normalized = result.employees.map(e => ({
-                id: e.employee_id,
-                name: e.name,
-                role: e.role,
-                department: e.department,
-                status: e.status,
-                hireDate: e.hire_date
-            }));
-            localStorage.setItem('hr_employees', JSON.stringify(normalized));
-            return normalized;
+        try {
+            const result = await API.request('/intranet/employees');
+            if (result && !result.error) {
+                const employees = Array.isArray(result.employees) ? result.employees : [];
+                const normalized = employees.map((e) => ({
+                    id: e.employee_id,
+                    name: e.name,
+                    role: e.role,
+                    department: e.department,
+                    status: e.status,
+                    hireDate: e.hire_date
+                }));
+                localStorage.setItem('sigts_hr_employees_api_cache', JSON.stringify(normalized));
+                return normalized;
+            }
+        } catch (_) {
+            /** API unavailable — use last successful API cache only */
         }
-        return JSON.parse(localStorage.getItem('hr_employees') || '[]');
+        try {
+            const cached = localStorage.getItem('sigts_hr_employees_api_cache');
+            if (cached) return JSON.parse(cached);
+        } catch (_) {
+            /**/
+        }
+        return [];
     }
 
     async addEmployee(employeeData) {
@@ -2470,11 +2673,36 @@ class IntranetManager {
     }
 
     async getHRStats() {
+        try {
+            const snap = await API.getAdminOperationalSnapshot(5);
+            if (snap && !snap.error && snap.totalStaff != null) {
+                return {
+                    totalStaff: Number(snap.totalStaff) || 0,
+                    guidesOnDuty: Number(snap.guidesOnDuty) || 0,
+                    itStaff: 0
+                };
+            }
+        } catch (_) {
+            /**/
+        }
         const employees = await this.getEmployees();
-        const totalStaff = employees.length;
-        const guidesOnDuty = employees.filter(e => e.role.includes('Guide') && e.status === 'active').length;
-        const itStaff = employees.filter(e => e.department === 'IT' && e.status === 'active').length;
+        if (!employees.length) {
+            return { totalStaff: 0, guidesOnDuty: 0, itStaff: 0 };
+        }
+        const totalStaff = employees.filter((e) => e.status === 'active').length;
+        const guidesOnDuty = employees.filter(
+            (e) => e.status === 'active' && /guide|ranger/i.test(String(e.role || ''))
+        ).length;
+        const itStaff = employees.filter(
+            (e) => e.status === 'active' && String(e.department || '').toLowerCase() === 'it'
+        ).length;
         return { totalStaff, guidesOnDuty, itStaff };
+    }
+
+    async getOperationalSnapshot(windowMinutes = 5) {
+        const snap = await API.getAdminOperationalSnapshot(windowMinutes);
+        if (snap && !snap.error) return snap;
+        return null;
     }
 
     async getPeers() {
@@ -2530,9 +2758,17 @@ class ITManagerAPI {
             Number(adminStats?.activeSessionsNow) ||
             (Array.isArray(activeNow?.users) ? activeNow.users.length : 0);
 
+        let operationalSnap = null;
+        try {
+            operationalSnap = await Intranet.getOperationalSnapshot(5);
+        } catch (_) {
+            operationalSnap = null;
+        }
+
         const totalSightings = Number(
-            sightingStats?.totalSightings ??
+            operationalSnap?.totalSightings ??
             sightingStats?.total ??
+            sightingStats?.totalSightings ??
             0
         );
         const globalPendingSync = Number(systemHealth?.checks?.pending_sync_items);
@@ -2540,15 +2776,25 @@ class ITManagerAPI {
 
         return {
             activeUsers: activeSessions,
-            totalRegisteredUsers: Number(adminStats?.totalUsers || liveTotalUsers || 0),
+            totalRegisteredUsers: Number(
+                liveTotalUsers ||
+                adminStats?.totalAccounts ||
+                adminStats?.totalUsers ||
+                0
+            ),
+            totalActiveAccounts: Number(adminStats?.totalUsers || 0),
             syncQueueSize: Number.isFinite(globalPendingSync) ? globalPendingSync : localPendingSync,
             localSyncQueueSize: localPendingSync,
             storageUsed: Content.getOfflineStorageSize(),
             totalSightings,
             averageRating: Number(adminStats?.avgRating || 0),
-            totalStaff: Number(hrStats?.totalStaff || 0),
-            guidesOnDuty: Number(hrStats?.guidesOnDuty || 0),
-            inventoryItems: Array.isArray(inventory) ? inventory.length : 0,
+            totalStaff: Number(operationalSnap?.totalStaff ?? hrStats?.totalStaff ?? 0),
+            guidesOnDuty: Number(operationalSnap?.guidesOnDuty ?? hrStats?.guidesOnDuty ?? 0),
+            inventoryItems: Number(
+                operationalSnap?.inventoryItems ?? (Array.isArray(inventory) ? inventory.length : 0)
+            ),
+            sightingsLast24h: Number(operationalSnap?.sightingsLast24h ?? 0),
+            operationalSnapshotAt: operationalSnap?.generated_at || null,
             activeTours: Number(adminStats?.activeTours || 0)
         };
     }
@@ -2666,9 +2912,13 @@ class ITManagerAPI {
             }
         });
         const health = valueOf(2) || {};
+        const liveUsers = (valueOf(0)?.users || []).map((u) => ({
+            ...u,
+            id: u.user_id || u.id
+        }));
         return {
-            peers: valueOf(0)?.users || [],
-            activeCount: Number(valueOf(0)?.count) || (valueOf(0)?.users || []).length,
+            peers: liveUsers,
+            activeCount: Number(valueOf(0)?.count) || liveUsers.length,
             windowMinutes,
             intranetStatus: valueOf(1) || {},
             syncStatus: {

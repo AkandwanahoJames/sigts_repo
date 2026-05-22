@@ -59,7 +59,9 @@ function buildTourHelpMetaHtml(meta) {
             nm === 'rule_kb_v1'
                 ? 'Bwindi rules + curated facts (consistent when offline)'
                 : nm === 'llm_grounded_v1'
-                  ? 'AI assistant grounded on SIGTS FAQs, safety copy, guides, themes & species rows'
+                  ? meta.llm_model
+                      ? `Advanced LLM (${meta.llm_model}) grounded on full SIGTS data — FAQs, safety, park guide, wildlife, culture, map, routes`
+                      : 'Advanced LLM grounded on full SIGTS database + your device catalogue'
                   : nm === 'rule_kb_v1_fallback'
                     ? 'Rules + curated facts (API mode unavailable — same as offline backup)'
                     : nm;
@@ -187,9 +189,40 @@ function renderSigtsStoredTurnHtml(turn) {
     const presented = formatBwindiChatAssistantPresentation(String(turn?.answerRaw || ''));
     const formattedAnswer = formatTourHelpAnswerHtml(presented);
     const metaBlock = buildTourHelpMetaHtml(turn.meta && typeof turn.meta === 'object' ? turn.meta : {});
-    return `<div class="ai-chat-turn ai-chat-turn--user" role="article"><div class="ai-chat-bubble ai-chat-bubble--user"><div class="ai-chat-bubble-text">${escapeHtml(
+    return `<div class="ai-chat-exchange" role="group" aria-label="Chat exchange">
+        <div class="ai-chat-turn ai-chat-turn--user" role="article"><div class="ai-chat-bubble ai-chat-bubble--user"><div class="ai-chat-bubble-text">${escapeHtml(
         String(turn?.user || '')
-    )}</div></div></div><div class="ai-chat-turn ai-chat-turn--assistant" role="article"><span class="ai-chat-turn-label">Bwindi assistant</span><div class="ai-chat-bubble ai-chat-bubble--assistant"><div class="ai-chat-bubble-text ai-chat-response-block">${formattedAnswer}</div></div>${metaBlock}</div>`;
+    )}</div></div></div>
+        <div class="ai-chat-turn ai-chat-turn--assistant" role="article"><span class="ai-chat-turn-label">Bwindi assistant</span><div class="ai-chat-bubble ai-chat-bubble--assistant"><div class="ai-chat-bubble-text ai-chat-response-block">${formattedAnswer}</div></div>${metaBlock}</div>
+    </div>`;
+}
+
+function collapseSigtsChatWelcome() {
+    const messages = document.getElementById('aiChatMessages');
+    if (!messages) return;
+    messages.querySelector('.ai-chat-welcome-wrap')?.remove();
+    messages.querySelector('.ai-chat-starters')?.remove();
+}
+
+function scrollSigtsChatToLatestExchange(behavior = 'smooth') {
+    const messages = document.getElementById('aiChatMessages');
+    if (!messages) return;
+    const scrollRoot =
+        messages.closest('.ai-simy-scroll') ||
+        (messages.scrollHeight > messages.clientHeight ? messages : null);
+    const target =
+        messages.querySelector('.ai-chat-exchange:last-of-type') ||
+        messages.querySelector('.ai-chat-turn--assistant:last-of-type') ||
+        messages.querySelector('.ai-chat-turn--user:last-of-type');
+    if (target) {
+        target.scrollIntoView({ behavior, block: 'nearest', inline: 'nearest' });
+        return;
+    }
+    if (scrollRoot && scrollRoot !== messages) {
+        scrollRoot.scrollTop = scrollRoot.scrollHeight;
+    } else {
+        messages.scrollTop = messages.scrollHeight;
+    }
 }
 
 function getSigtsChatInitialMessagesHtml() {
@@ -250,9 +283,98 @@ function setTourHelpMicButtonState(listening) {
     if (!btn) return;
     btn.disabled = Boolean(listening);
     btn.setAttribute('aria-busy', listening ? 'true' : 'false');
+    btn.classList.toggle('ai-simy-tool-btn--listening', Boolean(listening));
     btn.title = listening
         ? 'Listening... speak clearly and wait for capture'
         : 'Speak your question (browser Speech Recognition)';
+}
+
+function tourHelpSpeechRecognitionCtor() {
+    return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
+function tourHelpMicEnvironment() {
+    const SR = tourHelpSpeechRecognitionCtor();
+    if (!SR) {
+        const isFirefox = typeof navigator !== 'undefined' && /firefox/i.test(navigator.userAgent || '');
+        return {
+            ok: false,
+            reason: 'unsupported',
+            message: isFirefox
+                ? 'Voice input needs Chrome or Edge (Firefox does not support in-browser speech-to-text yet). You can still type your question.'
+                : 'Speech recognition is not supported in this browser. Use Chrome or Edge, or type your question.'
+        };
+    }
+    if (window.isSecureContext) {
+        return { ok: true, SR };
+    }
+    const host = String(window.location.hostname || '').toLowerCase();
+    if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]') {
+        return { ok: true, SR };
+    }
+    const lanIp = /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(host);
+    return {
+        ok: false,
+        reason: 'insecure',
+        message: lanIp
+            ? 'Microphone is blocked on http://LAN-IP addresses. Open SIGTS at http://localhost:3000 or https://… instead.'
+            : 'Microphone requires HTTPS or localhost (not plain http:// on this host).'
+    };
+}
+
+function stopTourHelpVoiceCapture(silent) {
+    const rec = window.__sigtsTourHelpRec;
+    window.__sigtsTourHelpRec = null;
+    window.__sigtsTourHelpRecListening = false;
+    if (window.__sigtsTourHelpRecTimeout) {
+        clearTimeout(window.__sigtsTourHelpRecTimeout);
+        window.__sigtsTourHelpRecTimeout = null;
+    }
+    if (rec) {
+        try {
+            rec.abort();
+        } catch (_) {
+            try {
+                rec.stop();
+            } catch (_2) {
+                /**/
+            }
+        }
+    }
+    setTourHelpMicButtonState(false);
+    if (!silent) {
+        /**/
+    }
+}
+
+async function ensureTourHelpMicrophonePermission() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+        return { ok: true };
+    }
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((t) => t.stop());
+        return { ok: true };
+    } catch (err) {
+        const name = String(err?.name || '');
+        if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+            return {
+                ok: false,
+                message:
+                    'Microphone permission denied. Click the lock icon in the address bar and allow microphone access, then try again.'
+            };
+        }
+        if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+            return { ok: false, message: 'No microphone device detected on this computer.' };
+        }
+        if (name === 'NotReadableError' || name === 'TrackStartError') {
+            return {
+                ok: false,
+                message: 'Microphone is in use by another app. Close other apps using the mic and try again.'
+            };
+        }
+        return { ok: false, message: 'Could not access the microphone. Check system privacy settings and retry.' };
+    }
 }
 
 function recordTourHelpMicStartAndCheckLimit() {
@@ -422,8 +544,20 @@ function normalizeView(view) {
 window.__SIGTS_normalizeView = normalizeView;
 
 /** Normalized role string from stored user object. */
+function normalizeAppRole(role) {
+    const raw = String(role || '').trim().toLowerCase();
+    if (raw === 'it-manager' || raw === 'itmanager') return 'it_manager';
+    return raw;
+}
+
 function getEffectiveRole(user) {
-    return String(user?.userType || user?.role || user?.user_type || 'tourist').trim();
+    return normalizeAppRole(user?.userType || user?.role || user?.user_type || 'tourist');
+}
+
+/** IT operations desk: IT managers and system admins. */
+function isITStaffRole(role) {
+    const r = normalizeAppRole(role);
+    return r === 'it_manager' || r === 'admin';
 }
 
 const SHARED_APP_VIEWS = new Set([
@@ -439,7 +573,9 @@ const GUEST_ALLOWED_VIEWS = new Set([
 function canUserAccessView(role, view, user = null) {
     if (PUBLIC_VIEWS.has(view)) return true;
     if (user?.isGuest && !GUEST_ALLOWED_VIEWS.has(view)) return false;
-    if (view === 'it_dashboard' || view === 'it_predictive_analytics' || view === 'it_tour_assignments' || view === 'intranet') return role === 'it_manager';
+    if (view === 'it_dashboard' || view === 'it_predictive_analytics' || view === 'it_tour_assignments' || view === 'intranet') {
+        return isITStaffRole(role);
+    }
     if (view === 'guide_dashboard') return role === 'guide';
     return SHARED_APP_VIEWS.has(view);
 }
@@ -447,9 +583,9 @@ function canUserAccessView(role, view, user = null) {
 /** Default home screen after login / app open when no deep link hash is set. */
 function getLandingViewForUser(user) {
     if (user?.isGuest) return 'dashboard';
-    const role = String(user?.userType || user?.role || user?.user_type || 'tourist').trim();
+    const role = getEffectiveRole(user);
     if (role === 'guide') return 'guide_dashboard';
-    if (role === 'it_manager') return 'it_dashboard';
+    if (isITStaffRole(role)) return 'it_dashboard';
     return 'dashboard';
 }
 
@@ -856,6 +992,7 @@ let liveMapTileLayers = {};
 let measureStartPoint = null;
 let lastTurnAlertAt = 0;
 let adminRealtimeUsersTimer = null;
+let adminRealtimeRefreshMs = 12000;
 let guideDashboardRefreshTimer = null;
 let assignmentDashboardRefreshTimer = null;
 let parkAccessSimulation = (() => {
@@ -1126,6 +1263,383 @@ function renderLivePeersSnapshotRows(peers = [], windowMinutes = 5) {
         .join('');
 }
 
+const IT_USER_VIZ_COLORS = ['#a5ec60', '#419310', '#1c621b', '#487070', '#18333d', '#6B705C'];
+
+function itUserTypeColor(type = 'tourist') {
+    const t = String(type || 'tourist').toLowerCase();
+    if (t === 'guide') return '#487070';
+    if (t === 'it_manager' || t === 'admin') return '#18333d';
+    if (t === 'tourist') return '#419310';
+    return '#6B705C';
+}
+
+function getItUserDisplayName(u = {}) {
+    const n = [u.first_name, u.last_name].filter(Boolean).join(' ').trim();
+    return n || u.username || 'User';
+}
+
+function getItUserInitials(u = {}) {
+    const name = getItUserDisplayName(u);
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return (name.slice(0, 2) || '??').toUpperCase();
+}
+
+function statsFromItUserDirectory(users = [], serverStats = null) {
+    if (serverStats && Array.isArray(serverStats.by_type)) {
+        return {
+            byType: serverStats.by_type.map((r) => ({
+                user_type: r.user_type,
+                count: Number(r.count) || 0
+            })),
+            active: Number(serverStats.active) || 0,
+            inactive: Number(serverStats.inactive) || 0,
+            regRows: (serverStats.registrations_by_month || []).map((r) => ({
+                month: r.month,
+                count: Number(r.count) || 0
+            }))
+        };
+    }
+    return aggregateItUserStats(users);
+}
+
+async function fetchItAdminUserDirectory() {
+    try {
+        return await API.getAdminUserDirectory();
+    } catch (e) {
+        console.warn('[IT dashboard] user directory fetch failed:', e);
+        return {
+            users: [],
+            total: 0,
+            loaded: 0,
+            complete: false,
+            stats: null,
+            error: e?.message || 'Failed to load user directory'
+        };
+    }
+}
+
+function aggregateItUserStats(users = []) {
+    const byType = new Map();
+    let active = 0;
+    let inactive = 0;
+    const regByMonth = new Map();
+    for (const u of users) {
+        const type = String(u.user_type || 'unknown').toLowerCase();
+        byType.set(type, (byType.get(type) || 0) + 1);
+        if (u.is_active !== false) active += 1;
+        else inactive += 1;
+        if (u.created_at) {
+            const key = String(u.created_at).slice(0, 7);
+            regByMonth.set(key, (regByMonth.get(key) || 0) + 1);
+        }
+    }
+    const typeRows = [...byType.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([user_type, count]) => ({ user_type, count }));
+    const regRows = [...regByMonth.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .slice(-8)
+        .map(([month, count]) => ({ month, count }));
+    return { byType: typeRows, active, inactive, regRows };
+}
+
+function buildItUserDonutStyle(typeRows = []) {
+    const total = typeRows.reduce((s, r) => s + Number(r.count || 0), 0) || 1;
+    let acc = 0;
+    const slices = typeRows.map((row, i) => {
+        const pct = (Number(row.count || 0) / total) * 100;
+        const from = acc;
+        acc += pct;
+        const col = IT_USER_VIZ_COLORS[i % IT_USER_VIZ_COLORS.length];
+        return `${col} ${from.toFixed(2)}% ${acc.toFixed(2)}%`;
+    });
+    return slices.length
+        ? `conic-gradient(${slices.join(', ')})`
+        : 'linear-gradient(135deg, #e8ece6, #d4ddd0)';
+}
+
+function renderItUserTypeBars(typeRows = []) {
+    const max = Math.max(1, ...typeRows.map((r) => Number(r.count || 0)));
+    return typeRows
+        .map((row, i) => {
+            const pct = Math.round((Number(row.count || 0) / max) * 100);
+            const col = IT_USER_VIZ_COLORS[i % IT_USER_VIZ_COLORS.length];
+            return `<div class="it-users-bar-row"><span class="it-users-bar-label">${escapeHtml(formatRoleName(row.user_type))}</span><div class="it-users-bar-track" aria-hidden="true"><div class="it-users-bar-fill" style="width:${pct}%;background:${col};"></div></div><strong>${Number(row.count || 0)}</strong></div>`;
+        })
+        .join('');
+}
+
+function renderItUserRegTimeline(regRows = []) {
+    if (!regRows.length) {
+        return '<div class="it-users-empty">No registration dates in database.</div>';
+    }
+    const max = Math.max(1, ...regRows.map((r) => Number(r.count || 0)));
+    return `<div class="it-users-reg-chart" role="img" aria-label="New accounts by month">${regRows
+        .map((r) => {
+            const h = Math.max(10, Math.round((Number(r.count || 0) / max) * 64));
+            const label = r.month && r.month.length >= 7 ? r.month.slice(5) : '?';
+            return `<div class="it-users-reg-col" title="${escapeHtml(r.month || '')}: ${Number(r.count || 0)} accounts"><div class="it-users-reg-bar" style="height:${h}px;"></div><small>${escapeHtml(label)}</small></div>`;
+        })
+        .join('')}</div>`;
+}
+
+function renderItUserCard(u, { online = false, currentUserId } = {}) {
+    const id = escAttrBareUuid(u.user_id);
+    const active = u.is_active !== false;
+    const self = String(u.user_id || '') === String(currentUserId || '');
+    const type = String(u.user_type || 'user').toLowerCase();
+    const ring = itUserTypeColor(type);
+    return `<article class="it-user-card${online ? ' it-user-card--live' : ''}${!active ? ' it-user-card--inactive' : ''}" data-user-id="${id}" title="${escapeHtml(getItUserDisplayName(u))}">
+        <div class="it-user-avatar" style="--ring:${ring};">${escapeHtml(getItUserInitials(u))}${online ? '<span class="it-user-live-dot" aria-label="Online now"></span>' : ''}</div>
+        <div class="it-user-card-body">
+            <strong>${escapeHtml(u.username || '')}</strong>
+            <span class="it-user-card-role">${escapeHtml(formatRoleName(type))}</span>
+            ${self ? '<span class="status-badge warning">You</span>' : ''}
+            ${!active ? '<span class="status-badge neutral">Inactive</span>' : ''}
+        </div>
+    </article>`;
+}
+
+function renderItUserMaintenanceRows(users, currentUserId) {
+    if (!Array.isArray(users) || !users.length) {
+        return '<div class="seasonal-item">No accounts returned.</div>';
+    }
+    return users
+        .slice(0, 100)
+        .map((u) => {
+            const id = escAttrBareUuid(u.user_id);
+            const active = u.is_active !== false;
+            const self = String(u.user_id || '') === String(currentUserId || '');
+            const action = active
+                ? `<button type="button" class="small-btn danger" onclick="adminDeactivateAccountPrompt('${id}'${self ? ',true' : ''})">Deactivate</button>`
+                : '<span class="status-badge neutral">Inactive</span>';
+            return `<div class="seasonal-item it-user-maint-row"><div><strong>${escapeHtml(u.username || '')}</strong> <span class="ui-modal-muted">${escapeHtml(formatRoleName(u.user_type || ''))}</span>${self ? ' <span class="status-badge warning">You</span>' : ''}<br><small>${escapeHtml(u.email || '')}</small></div><div>${action}</div></div>`;
+        })
+        .join('');
+}
+
+/** Graphical database user directory for IT Admin tab. */
+function renderItUserDatabaseGraphic(users = [], opts = {}) {
+    const {
+        total = users.length,
+        loaded = users.length,
+        complete = true,
+        peers = [],
+        currentUserId,
+        serverStats = null,
+        error = null
+    } = opts;
+    const onlineIds = new Set(
+        (peers || []).map((p) => String(p.id || p.user_id || '')).filter(Boolean)
+    );
+    const stats = statsFromItUserDirectory(users, serverStats);
+    const donutStyle = buildItUserDonutStyle(stats.byType);
+    const totalAccounts = Number(total) || users.length;
+    const statusTotal = stats.active + stats.inactive || 1;
+    const activePct = Math.round((stats.active / statusTotal) * 100);
+    const inactivePct = 100 - activePct;
+    const liveOnPage = users.filter((u) => onlineIds.has(String(u.user_id))).length;
+
+    const sorted = [...users].sort((a, b) => {
+        const aOn = onlineIds.has(String(a.user_id)) ? 1 : 0;
+        const bOn = onlineIds.has(String(b.user_id)) ? 1 : 0;
+        if (bOn !== aOn) return bOn - aOn;
+        const aAct = a.is_active !== false ? 1 : 0;
+        const bAct = b.is_active !== false ? 1 : 0;
+        if (bAct !== aAct) return bAct - aAct;
+        return String(a.username || '').localeCompare(String(b.username || ''));
+    });
+
+    const legend = stats.byType
+        .map(
+            (row, i) =>
+                `<div class="it-users-legend-row"><span class="it-users-dot" style="background:${IT_USER_VIZ_COLORS[i % IT_USER_VIZ_COLORS.length]};"></span><span>${escapeHtml(formatRoleName(row.user_type))}</span><strong>${Number(row.count || 0)}</strong></div>`
+        )
+        .join('');
+
+    const showAll = totalAccounts <= 100;
+    const cardLimit = showAll ? Math.max(totalAccounts, users.length) : 60;
+    const cards = sorted
+        .slice(0, cardLimit)
+        .map((u) =>
+            renderItUserCard(u, {
+                online: onlineIds.has(String(u.user_id)),
+                currentUserId
+            })
+        )
+        .join('');
+
+    return `<div class="section-card it-users-viz" id="itUsersVizRoot">
+        <div class="section-header">
+            <h3>${icon('users', 'icon-sm')} Database users</h3>
+            <span id="itUsersVizStamp" class="status-badge neutral">Live · ${new Date().toLocaleTimeString()} · ${totalAccounts} in database</span>
+        </div>
+        <p class="animals-page-blurb it-users-viz-intro">Visual overview of every account stored in PostgreSQL. Green rings show live sessions (last 5 minutes). Charts refresh automatically with the admin dashboard.</p>
+        <p class="${error ? 'it-users-warning it-users-warning--error' : !complete && loaded < totalAccounts ? 'it-users-warning' : 'it-users-load-ok ui-modal-muted'}" id="itUsersLoadWarning">${error ? escapeHtml(error) : !complete && loaded < totalAccounts ? `Showing ${loaded} of ${totalAccounts} accounts.` : `All ${totalAccounts} database account${totalAccounts === 1 ? '' : 's'} loaded.`}</p>
+        <div class="it-users-viz-grid">
+            <div class="it-users-panel">
+                <h4>Role mix</h4>
+                <div class="it-users-donut-wrap">
+                    <div id="itUsersDonut" class="it-users-donut" style="background:${donutStyle};" role="img" aria-label="User roles in database">
+                        <div class="it-users-donut-core"><strong id="itUsersDonutTotal">${totalAccounts}</strong><small>Accounts</small></div>
+                    </div>
+                    <div id="itUsersLegend" class="it-users-legend">${legend || '<div class="it-users-empty">No users in database.</div>'}</div>
+                </div>
+            </div>
+            <div class="it-users-panel">
+                <h4>Account status</h4>
+                <div class="it-users-status-stack" role="img" aria-label="Active versus inactive accounts">
+                    <div class="it-users-status-bar">
+                        <span id="itUsersActiveBar" class="it-users-status-active" style="width:${activePct}%;" title="${stats.active} active"></span>
+                        <span id="itUsersInactiveBar" class="it-users-status-inactive" style="width:${inactivePct}%;" title="${stats.inactive} inactive"></span>
+                    </div>
+                    <div class="it-users-status-labels">
+                        <span><strong id="itUsersActiveCount">${stats.active}</strong> active</span>
+                        <span><strong id="itUsersInactiveCount">${stats.inactive}</strong> inactive</span>
+                        <span class="it-users-live-pill"><span class="it-user-live-dot" aria-hidden="true"></span> <strong id="itUsersLiveCount">${liveOnPage}</strong> online now</span>
+                    </div>
+                </div>
+                <h4>By role (count)</h4>
+                <div id="itUsersTypeBars" class="it-users-bars">${renderItUserTypeBars(stats.byType) || '<div class="it-users-empty">No role data</div>'}</div>
+            </div>
+            <div class="it-users-panel it-users-panel--wide">
+                <h4>New registrations (by month)</h4>
+                <div id="itUsersRegChart">${renderItUserRegTimeline(stats.regRows)}</div>
+            </div>
+        </div>
+        <h4 class="it-users-grid-title">People in database <span class="ui-modal-muted" id="itUsersGridSubtitle">(showing ${showAll ? `all ${totalAccounts}` : `up to ${cardLimit} of ${totalAccounts}`}, online first)</span></h4>
+        <div id="itUsersCardGrid" class="it-users-card-grid">${cards || '<div class="it-users-empty">No user accounts returned from the API.</div>'}</div>
+        <details class="it-users-maint-details">
+            <summary>${icon('shield', 'icon-sm')} Account maintenance (deactivate)</summary>
+            <p class="animals-page-blurb" style="margin:8px 0;">Deactivate blocks sign-in until an IT manager reactivates the account.</p>
+            <div id="itUsersMaintList" class="seasonal-list it-users-maint-list">${renderItUserMaintenanceRows(users, currentUserId)}</div>
+        </details>
+    </div>`;
+}
+
+async function refreshItUserDatabaseGraphic(peers = [], dirPrefetched = null) {
+    if (window.currentView !== 'it_dashboard') return;
+    const root = document.getElementById('itUsersVizRoot');
+    if (!root) return;
+    try {
+        const dir = dirPrefetched || (await fetchItAdminUserDirectory());
+        if (dir?.error) {
+            const warn = document.getElementById('itUsersLoadWarning');
+            if (warn) {
+                warn.className = 'it-users-warning it-users-warning--error';
+                warn.textContent = dir.error;
+            }
+            return;
+        }
+        const users = Array.isArray(dir?.users) ? dir.users : [];
+        const total = Number(dir?.total) || users.length;
+        const loaded = Number(dir?.loaded) || users.length;
+        const complete = dir?.complete !== false;
+        const stats = statsFromItUserDirectory(users, dir?.stats);
+        const onlineIds = new Set(
+            (peers || []).map((p) => String(p.id || p.user_id || '')).filter(Boolean)
+        );
+        const liveOnPage = users.filter((u) => onlineIds.has(String(u.user_id))).length;
+        const statusTotal = stats.active + stats.inactive || 1;
+        const activePct = Math.round((stats.active / statusTotal) * 100);
+
+        const stamp = document.getElementById('itUsersVizStamp');
+        if (stamp) {
+            stamp.textContent = `Live · ${new Date().toLocaleTimeString()} · ${total} in database · ${loaded} loaded`;
+        }
+
+        const loadWarn = document.getElementById('itUsersLoadWarning');
+        if (loadWarn) {
+            if (!complete && loaded < total) {
+                loadWarn.className = 'it-users-warning';
+                loadWarn.textContent = `Showing ${loaded} of ${total} accounts.`;
+            } else {
+                loadWarn.className = 'it-users-load-ok ui-modal-muted';
+                loadWarn.textContent = `All ${total} database account${total === 1 ? '' : 's'} loaded.`;
+            }
+        }
+
+        const gridSub = document.getElementById('itUsersGridSubtitle');
+        if (gridSub) {
+            const showAll = total <= 100;
+            const cardLimit = showAll ? Math.max(total, users.length) : 60;
+            gridSub.textContent = `(showing ${showAll ? `all ${total}` : `up to ${cardLimit} of ${total}`}, online first)`;
+        }
+
+        const donut = document.getElementById('itUsersDonut');
+        if (donut) donut.style.background = buildItUserDonutStyle(stats.byType);
+
+        const donutTotal = document.getElementById('itUsersDonutTotal');
+        if (donutTotal) donutTotal.textContent = String(total);
+
+        const legend = document.getElementById('itUsersLegend');
+        if (legend) {
+            legend.innerHTML =
+                stats.byType
+                    .map(
+                        (row, i) =>
+                            `<div class="it-users-legend-row"><span class="it-users-dot" style="background:${IT_USER_VIZ_COLORS[i % IT_USER_VIZ_COLORS.length]};"></span><span>${escapeHtml(formatRoleName(row.user_type))}</span><strong>${Number(row.count || 0)}</strong></div>`
+                    )
+                    .join('') || '<div class="it-users-empty">No users in database.</div>';
+        }
+
+        const activeBar = document.getElementById('itUsersActiveBar');
+        const inactiveBar = document.getElementById('itUsersInactiveBar');
+        if (activeBar) activeBar.style.width = `${activePct}%`;
+        if (inactiveBar) inactiveBar.style.width = `${100 - activePct}%`;
+
+        const setText = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = String(val);
+        };
+        setText('itUsersActiveCount', stats.active);
+        setText('itUsersInactiveCount', stats.inactive);
+        setText('itUsersLiveCount', liveOnPage);
+
+        const typeBars = document.getElementById('itUsersTypeBars');
+        if (typeBars) {
+            typeBars.innerHTML =
+                renderItUserTypeBars(stats.byType) || '<div class="it-users-empty">No role data</div>';
+        }
+
+        const regChart = document.getElementById('itUsersRegChart');
+        if (regChart) regChart.innerHTML = renderItUserRegTimeline(stats.regRows);
+
+        const grid = document.getElementById('itUsersCardGrid');
+        if (grid) {
+            const sorted = [...users].sort((a, b) => {
+                const aOn = onlineIds.has(String(a.user_id)) ? 1 : 0;
+                const bOn = onlineIds.has(String(b.user_id)) ? 1 : 0;
+                if (bOn !== aOn) return bOn - aOn;
+                const aAct = a.is_active !== false ? 1 : 0;
+                const bAct = b.is_active !== false ? 1 : 0;
+                if (bAct !== aAct) return bAct - aAct;
+                return String(a.username || '').localeCompare(String(b.username || ''));
+            });
+            const showAll = total <= 100;
+            const cardLimit = showAll ? Math.max(total, users.length) : 60;
+            grid.innerHTML =
+                sorted
+                    .slice(0, cardLimit)
+                    .map((u) =>
+                        renderItUserCard(u, {
+                            online: onlineIds.has(String(u.user_id)),
+                            currentUserId: Auth.getCurrentUser()?.user_id
+                        })
+                    )
+                    .join('') || '<div class="it-users-empty">No user accounts returned.</div>';
+        }
+
+        const maint = document.getElementById('itUsersMaintList');
+        if (maint) {
+            maint.innerHTML = renderItUserMaintenanceRows(users, Auth.getCurrentUser()?.user_id);
+        }
+    } catch (e) {
+        console.warn('[IT dashboard] user graphic refresh failed:', e);
+    }
+}
+
 /** IT dashboard: directory rows with per-account deactivation (server-backed). */
 function renderItAccountDirectory(users, currentUserId) {
     if (!Array.isArray(users) || !users.length) {
@@ -1143,9 +1657,30 @@ function renderItAccountDirectory(users, currentUserId) {
     return `<div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Account directory</h3></div><p class="animals-page-blurb" style="margin:0 0 8px;">Deactivate blocks sign-in until an IT manager sets the account active again (user maintenance).</p><div class="seasonal-list" style="max-height:320px;overflow:auto;">${rows}</div></div>`;
 }
 
+function responseIsRateLimited(res) {
+    return res && (res.status === 429 || res.rateLimited === true || res.error === 'Too many requests');
+}
+
 async function refreshAdminRealtimeUsers() {
     if (window.currentView !== 'it_dashboard') return;
-    const liveOps = await ITAPI.getLiveOperations(5);
+    const [liveOps, metrics] = await Promise.all([
+        ITAPI.getLiveOperations(5),
+        ITAPI.getSystemMetrics()
+    ]);
+    if (responseIsRateLimited(liveOps) || responseIsRateLimited(metrics)) {
+        adminRealtimeRefreshMs = Math.min(60000, Math.max(12000, adminRealtimeRefreshMs * 2));
+        stopAdminRealtimeUsersRefresh();
+        startAdminRealtimeUsersRefresh();
+        if (typeof showToast === 'function') {
+            showToast('Server busy — refreshing IT dashboard a little slower.', 'info');
+        }
+        return;
+    }
+    if (adminRealtimeRefreshMs > 12000) {
+        adminRealtimeRefreshMs = 12000;
+        stopAdminRealtimeUsersRefresh();
+        startAdminRealtimeUsersRefresh();
+    }
     const peers = Array.isArray(liveOps?.peers) ? liveOps.peers : [];
     const activeCount = Number(liveOps?.activeCount) || peers.length;
     const windowMinutes = Number(liveOps?.windowMinutes) || 5;
@@ -1162,9 +1697,8 @@ async function refreshAdminRealtimeUsers() {
 
     const stampNode = document.getElementById('adminLiveUsersStamp');
     if (stampNode) {
-        const usersSnapshot = await API.request('/admin/users?limit=1&offset=0');
-        const totalUsers = Number(usersSnapshot?.total || 0);
-        stampNode.textContent = `Live · ${new Date().toLocaleTimeString()} · ${activeCount} active (${windowMinutes}m) / ${totalUsers} registered`;
+        const dbTotal = Number(metrics?.totalRegisteredUsers || 0);
+        stampNode.textContent = `Live · ${new Date().toLocaleTimeString()} · ${activeCount} online (${windowMinutes}m) · ${dbTotal} accounts in database`;
     }
 
     const kpiActive = document.getElementById('itKpiActiveUsers');
@@ -1175,7 +1709,7 @@ async function refreshAdminRealtimeUsers() {
 
     const syncPending = document.getElementById('itSyncPendingValue');
     const kpiPending = document.getElementById('itKpiPendingSync');
-    const pendingVal = String(Number(liveOps?.syncStatus?.pending_items || 0));
+    const pendingVal = String(Number(liveOps?.syncStatus?.pending_items ?? metrics?.syncQueueSize ?? 0));
     if (syncPending) syncPending.textContent = pendingVal;
     if (kpiPending) kpiPending.textContent = pendingVal;
 
@@ -1183,6 +1717,33 @@ async function refreshAdminRealtimeUsers() {
     if (locPulse) {
         locPulse.textContent = String(Number(liveOps?.syncStatus?.location_updates_last_15m || 0));
     }
+
+    const snapStamp = document.getElementById('itAdminSnapshotStamp');
+    if (snapStamp) {
+        const at = metrics?.operationalSnapshotAt
+            ? new Date(metrics.operationalSnapshotAt).toLocaleTimeString()
+            : new Date().toLocaleTimeString();
+        snapStamp.textContent = `Updated ${at} · live from database`;
+    }
+
+    const setSnap = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = String(value ?? 0);
+    };
+    setSnap('itSnapSightings', metrics?.totalSightings ?? 0);
+    setSnap('itSnapStaff', metrics?.totalStaff ?? 0);
+    setSnap('itSnapGuides', metrics?.guidesOnDuty ?? 0);
+    setSnap('itSnapInventory', metrics?.inventoryItems ?? 0);
+
+    const kpiSightings = document.getElementById('itKpiSightings');
+    if (kpiSightings) {
+        const extra =
+            Number(metrics?.sightingsLast24h) > 0 ? ` (+${metrics.sightingsLast24h} last 24h)` : '';
+        kpiSightings.textContent = String(metrics?.totalSightings ?? 0) + extra;
+    }
+
+    const dir = await fetchItAdminUserDirectory();
+    await refreshItUserDatabaseGraphic(peers, dir);
 }
 
 function stopAdminRealtimeUsersRefresh() {
@@ -1197,7 +1758,7 @@ function startAdminRealtimeUsersRefresh() {
     refreshAdminRealtimeUsers();
     adminRealtimeUsersTimer = setInterval(() => {
         refreshAdminRealtimeUsers();
-    }, 8000);
+    }, adminRealtimeRefreshMs);
 }
 
 function stopGuideDashboardRefresh() {
@@ -1234,7 +1795,7 @@ function startAssignmentDashboardRefresh() {
 
 function renderNotificationBell(user) {
     const isGuide = user?.role === 'guide' || user?.userType === 'guide';
-    const isITManager = user?.role === 'it_manager' || user?.userType === 'it_manager';
+    const isITManager = isITStaffRole(getEffectiveRole(user));
     if (isITManager) {
         return `<button type="button" class="icon-btn notif-btn" onclick="navigateTo('it_dashboard')" aria-label="Alerts and admin">${icon('bell', 'icon-md')}<span id="rareAlertBadge" class="notif-badge hidden">0</span></button>`;
     }
@@ -1277,7 +1838,7 @@ function renderMobileTouristTabbar() {
 function renderMainLayout(content) {
     const user = Auth.getCurrentUser() || { name: 'Guest', role: 'tourist' };
     const isGuide = user?.role === 'guide' || user?.userType === 'guide';
-    const isITManager = user?.role === 'it_manager' || user?.userType === 'it_manager';
+    const isITManager = isITStaffRole(getEffectiveRole(user));
     const roleLabel = formatRoleName(user.role ?? user.userType ?? user.user_type ?? 'tourist');
     const avatarIcon = isITManager ? icon('chart', 'icon-md') : (isGuide ? icon('ticket', 'icon-md') : icon('user', 'icon-md'));    
     let navItems = [
@@ -1304,7 +1865,12 @@ function renderMainLayout(content) {
     const accessState = getParkAccessState();
     const isOffline = !accessState.online;
     const pending = OfflineSync?.getPendingCount?.() || 0;
-    const statusText = isOffline ? `Offline mode • ${pending} pending` : (pending ? `Online • ${pending} pending sync` : 'Online');
+    const failed = OfflineSync?.getFailedCount?.() || 0;
+    const statusText = isOffline
+        ? `Offline mode • ${pending} pending${failed ? ` • ${failed} failed` : ''}`
+        : pending || failed
+          ? `Online • ${pending} pending sync${failed ? ` • ${failed} need review` : ''}`
+          : 'Online';
     const mainContainerClass =
         window.currentView === 'ai_chat' ? 'main-container main-container--tour-help' : 'main-container';
     const mobileTabbar = !isGuide && !isITManager ? renderMobileTouristTabbar() : '';
@@ -1396,21 +1962,76 @@ async function paOpsRun(fn) {
     }
 }
 
+async function syncCurrentUserRoleFromProfile() {
+    if (!Auth?.isAuthenticated?.() || typeof API?.request !== 'function') return null;
+    const profile = await API.request('/users/profile');
+    const role = profile?.user_type;
+    if (!role || profile?.error || profile?.status >= 400) return null;
+    const user = Auth.getCurrentUser?.() || {};
+    user.role = role;
+    user.userType = role;
+    user.user_type = role;
+    Auth.user = user;
+    AppState.currentUser = user;
+    const persistLocal = Boolean(localStorage.getItem('token'));
+    const storage = persistLocal ? localStorage : sessionStorage;
+    storage.setItem('user', JSON.stringify(user));
+    return role;
+}
+
 window.refreshPaOperationsStatus = async function () {
     const el = document.getElementById('pa-ops-status');
     if (!el) return;
     el.setAttribute('aria-busy', 'true');
-    const s = await API.getAnalyticsOperationsStatus();
+
+    const loadOps = () =>
+        Promise.all([
+            API.getAnalyticsOperationsStatus(),
+            API.getOperationalSummary(14).catch(() => null),
+        ]);
+
+    let [s, summary] = await loadOps();
+
+    if ((s?.status === 403 || s?.error === 'Access denied') && Auth?.isAuthenticated?.()) {
+        await syncCurrentUserRoleFromProfile();
+        [s, summary] = await loadOps();
+    }
+
     el.removeAttribute('aria-busy');
-    if (s?.status >= 400 || s?.error) {
-        el.innerHTML = `<span class="pa-ops-stat pa-ops-stat--warn">${escapeHtml(s?.error || 'Operations status unavailable')}</span>`;
+
+    if (!Auth?.isAuthenticated?.()) {
+        el.innerHTML =
+            '<span class="pa-ops-stat pa-ops-stat--warn">Sign in with your server account (e.g. demo_it) — offline demo tokens cannot run Operations.</span>';
         return;
     }
-    const stats = [
+
+    if (s?.status >= 400 || s?.error) {
+        const role = getEffectiveRole(Auth.getCurrentUser() || {});
+        const hint =
+            s?.error === 'Access denied'
+                ? ` Your signed-in role is “${role}”; IT Operations needs it_manager or admin.`
+                : '';
+        el.innerHTML = `<span class="pa-ops-stat pa-ops-stat--warn">${escapeHtml(s?.error || 'Operations status unavailable')}${escapeHtml(hint)}</span>`;
+        return;
+    }
+    const stats = [];
+    if (summary && !summary.error) {
+        const sd = summary.sightings?.delta_percent;
+        if (sd != null) {
+            stats.push(`sightings trend: ${sd >= 0 ? '+' : ''}${sd}% vs prior ${summary.window_days || 14}d`);
+        }
+        if (summary.active_users_24h != null) {
+            stats.push(`${summary.active_users_24h} active user(s) (24h)`);
+        }
+        if (summary.satisfaction?.average_rating != null) {
+            stats.push(`avg satisfaction ${summary.satisfaction.average_rating}/5`);
+        }
+    }
+    stats.push(
         `${s.schedules_count ?? 0} schedule(s)`,
         `${s.training_jobs_count ?? 0} training job(s)`,
         `${s.backups_count ?? 0} backup(s)`
-    ];
+    );
     if (s.latest_training_job?.status) {
         stats.push(`latest job: ${s.latest_training_job.status}`);
     }
@@ -2765,9 +3386,23 @@ function renderDashboardShell({
     seasonalActionLabel,
     seasonalAction = 'ai_chat',
     seasonalFootnote = '',
+    seasonalHtml = false,
     animalCount
 }) {
     const seasonalFn = `sigtsRunDashboardAction('${escJsAttr(seasonalAction)}')`;
+    const seasonalListHtml =
+        seasonalItems
+            .map((a) =>
+                seasonalHtml
+                    ? `<div class="seasonal-item">• ${a}</div>`
+                    : `<div class="seasonal-item">• ${escapeHtml(a)}</div>`
+            )
+            .join('') || '<div class="seasonal-item">• No seasonal updates available</div>';
+    const seasonalFootnoteHtml = seasonalFootnote
+        ? seasonalHtml
+            ? `<p class="animals-page-blurb" style="padding:0 18px 12px;margin:0;">${seasonalFootnote}</p>`
+            : `<p class="animals-page-blurb" style="padding:0 18px 12px;margin:0;">${escapeHtml(seasonalFootnote)}</p>`
+        : '';
     return `${renderDashboardQuickGrid(animalCount)}<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon(primaryIcon, 'icon-sm')} ${primaryTitle}</h3></div><div id="recList">${primaryItems
         .map((item, index) => {
             const recClass =
@@ -2779,7 +3414,7 @@ function renderDashboardShell({
             : `<div class="rec-avatar ${item.avatarClass || getRecommendationPhotoClass(item, index)}" aria-hidden="true">${item.iconName ? `<span class="rec-symbol">${icon(item.iconName, 'icon-md')}</span>` : ''}</div>`;
             return `<div class="${recClass}"${act.card}>${iconOnlyAvatar}<div class="rec-info"><div class="rec-title">${escapeHtml(item.title)}</div>${item.match ? `<div class="rec-match"${item.matchId ? ` id="${escapeHtml(item.matchId)}"` : ''}>${escapeHtml(item.match)}</div>` : ''}<div class="rec-reason">${escapeHtml(item.reason)}</div></div><button type="button" class="rec-go" aria-label="Open ${escapeHtml(item.title)}"${act.btn}>${icon(item.goIcon || 'chevronRight', 'icon-sm')}</button></div>`;
         })
-        .join('') || '<div class="empty-state">No items available.</div>'}</div></div><div class="dashboard-quote-card"><blockquote>${escapeHtml(quote)}</blockquote></div></div><div class="section-card seasonal-card"><div class="section-header"><h3>${icon('leaf', 'icon-sm')} Seasonal: ${seasonalTitle}</h3></div><div class="seasonal-list">${seasonalItems.map((a) => `<div class="seasonal-item">• ${escapeHtml(a)}</div>`).join('') || '<div class="seasonal-item">• No seasonal updates available</div>'}</div>${seasonalFootnote ? `<p class="animals-page-blurb" style="padding:0 18px 12px;margin:0;">${escapeHtml(seasonalFootnote)}</p>` : ''}<div class="seasonal-bottom"><div class="seasonal-image-strip photo-leaf" aria-hidden="true"></div><button type="button" class="seasonal-action-btn" onclick="${seasonalFn}">${escapeHtml(seasonalActionLabel || 'View Suggestions')}</button></div></div>`;
+        .join('') || '<div class="empty-state">No items available.</div>'}</div></div><div class="dashboard-quote-card"><blockquote>${escapeHtml(quote)}</blockquote></div></div><div class="section-card seasonal-card"><div class="section-header"><h3>${icon('leaf', 'icon-sm')} Seasonal: ${seasonalTitle}</h3></div><div class="seasonal-list">${seasonalListHtml}</div>${seasonalFootnoteHtml}<div class="seasonal-bottom"><div class="seasonal-image-strip photo-leaf" aria-hidden="true"></div><button type="button" class="seasonal-action-btn" onclick="${seasonalFn}">${escapeHtml(seasonalActionLabel || 'View Suggestions')}</button></div></div>`;
 }
 
 function renderDashboardAiModuleStrip(recommendations, personalized, trending, profile) {
@@ -3914,7 +4549,7 @@ async function renderSightingsContent() {
 
 async function renderProfileContent() {
     const user = Auth.getCurrentUser() || { name: 'Tourist' };
-    const isITManager = user?.role === 'it_manager' || user?.userType === 'it_manager';
+    const isITManager = isITStaffRole(getEffectiveRole(user));
     const isGuide = user?.role === 'guide' || user?.userType === 'guide';
     const isGuest = Boolean(user?.isGuest);
 
@@ -4557,7 +5192,7 @@ function renderAIChatContent() {
             <div class="ai-simy-hero-orb" aria-hidden="true">${icon('sparkle', 'icon-xl')}</div>
             <p class="ai-simy-hero-kicker">Park-aware tour help</p>
             <h2 class="ai-simy-hero-title">Hi, ${firstName}</h2>
-            <p class="ai-simy-hero-sub">Ask about treks, wildlife, culture, and safety — answers stay grounded in SIGTS content for Bwindi.</p>
+            <p class="ai-simy-hero-sub">Ask about treks, wildlife, culture, map POIs, and safety — with an advanced LLM grounded on live SIGTS data when configured on the server.</p>
             <button type="button" class="ai-simy-cta-main" onclick="sigtsFocusAiComposer()">${icon('feather', 'icon-sm')} Start a conversation</button>
         </section>
         <div class="ai-simy-actions-grid">
@@ -4661,13 +5296,12 @@ async function renderGuideDashboard() {
     })}<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('clock', 'icon-sm')} Tour Schedule (Today)</h3></div><div class="seasonal-list">${(dashboard.today || []).length ? dashboard.today.map((t) => `<div class="seasonal-item"><strong>${escapeHtml(t.route_name || 'Tour Route')}</strong> - ${new Date(t.scheduled_start).toLocaleTimeString()} (${t.confirmed_guests || t.group_size || 0} guests) <button class="small-btn" onclick="startTour('${t.tour_session_id}')">Start</button> <button class="small-btn" onclick="openTourPreparation('${t.tour_session_id}')">Prepare</button></div>`).join('') : '<div class="seasonal-item">No tours today.</div>'}</div></div><div class="section-card"><div class="section-header"><h3>${icon('grid', 'icon-sm')} Weekly Assignments</h3></div><div class="seasonal-list">${weeklyRows.length ? weeklyRows.slice(0, 8).map((t) => `<div class="seasonal-item">${new Date(t.scheduled_start).toLocaleDateString()} ${new Date(t.scheduled_start).toLocaleTimeString()} - ${escapeHtml(t.route_name || 'Route')} (${t.confirmed_guests || t.group_size || 0})</div>`).join('') : '<div class="seasonal-item">No weekly assignments.</div>'}</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Guest List Management</h3></div><div class="seasonal-list">${participants.length ? participants.slice(0, 10).map((p) => `<div class="seasonal-item">${escapeHtml(p.first_name || p.username || 'Tourist')} ${escapeHtml(p.last_name || '')} • ${escapeHtml(p.nationality || 'N/A')} <button class="small-btn" onclick="openGuestProfile('${p.tourist_id}')">Profile</button></div>`).join('') : '<div class="seasonal-item">No participants assigned yet.</div>'}</div></div><div class="section-card"><div class="section-header"><h3>${icon('target', 'icon-sm')} Tour Preparation Checklist</h3></div><div class="seasonal-list">${prepChecklist.length ? prepChecklist.map((c) => `<div class="seasonal-item">${c.done ? '✅' : '⬜'} ${escapeHtml(c.label || c.key)}</div>`).join('') : '<div class="seasonal-item">No checklist loaded.</div>'}</div></div></div><div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('map', 'icon-sm')} Active Tour Mode</h3></div><div class="seasonal-list"><div class="seasonal-item">Guide profile: ${profileLine}</div><div class="seasonal-item">Tracked guests: ${activeGuests.length}</div><div class="seasonal-item">Elapsed: ${activeMode?.timer?.elapsed_minutes ?? 0} min • Remaining: ${activeMode?.timer?.remaining_minutes ?? 'N/A'} min</div>${activeGuests.slice(0, 5).map((g) => `<div class="seasonal-item">${escapeHtml(g.name || 'Guest')} - ${g.position ? `${Number(g.position.lat).toFixed(4)}, ${Number(g.position.lng).toFixed(4)}` : 'No GPS'}</div>`).join('') || ''}</div></div><div class="section-card"><div class="section-header"><h3>${icon('phone', 'icon-sm')} Emergency Communication</h3></div><div class="seasonal-list">${emergencyContacts.length ? emergencyContacts.slice(0, 6).map((c) => `<div class="seasonal-item">${escapeHtml(c.contact_type || 'Emergency')} - ${escapeHtml(c.name || 'Contact')} (${escapeHtml(c.phone || 'N/A')})</div>`).join('') : '<div class="seasonal-item">No emergency contacts available.</div>'}</div></div></div><div class="section-card"><div class="section-header"><h3>${icon('bell', 'icon-sm')} Guide-to-guide messages</h3></div><p class="animals-page-blurb">Operational notes to peers (DB migration 011).</p><div class="info-chip-row" style="flex-wrap:wrap;gap:8px;"><select id="guideMsgPeerSelect" class="map-destination" style="flex:1;min-width:180px;"><option value="">Select peer…</option></select></div><div id="guideMsgThread" class="seasonal-list" style="max-height:200px;overflow:auto;margin-top:8px;"><div class="seasonal-item">Loading…</div></div><textarea id="guideMsgBody" class="map-destination" style="margin-top:8px;min-height:72px;width:100%;box-sizing:border-box;" placeholder="Operational note"></textarea><div class="info-chip-row" style="margin-top:8px;"><button type="button" class="login-btn" onclick="sendGuideDeskNote()">${icon('target', 'icon-sm')} Send</button><button type="button" class="small-btn ghost-btn" onclick="refreshGuideDeskInbox()">${icon('grid', 'icon-sm')} Refresh</button></div></div><div class="shift-controls"><button class="login-btn" onclick="clockInOut()">${dashboard.activeShift ? 'Clock Out' : 'Clock In'}</button><button class="small-btn" onclick="addTourNotePrompt()">Add Tour Note</button><button class="small-btn" onclick="viewActiveTourCompletionReport()">Completion Report</button></div><div id="activeTourPanel" style="${guideManager.activeTour ? 'display:block' : 'display:none'}"><div id="tourTimerDisplay" class="tour-timer">00:00:00</div><button onclick="quickSighting()">Log Sighting</button><button onclick="endActiveTour()">End Tour</button></div></div>`;}
 
 function isCurrentUserITManager() {
-    const user = Auth.getCurrentUser?.() || null;
-    return user?.role === 'it_manager' || user?.userType === 'it_manager';
+    return isITStaffRole(getEffectiveRole(Auth.getCurrentUser?.() || {}));
 }
 
 function requireITManagerAccess(actionLabel = 'this module') {
     if (isCurrentUserITManager()) return true;
-    showToast?.(`Only IT managers can access ${actionLabel}.`, 'warning');
+    showToast?.(`Only IT managers and system admins can access ${actionLabel}.`, 'warning');
     return false;
 }
 
@@ -4705,19 +5339,20 @@ async function renderITManagerDashboard() {
     const itKpis = [
         { label: 'Active Users', value: metrics.activeUsers || 0, hint: 'Sessions in last 5 min', kpiId: 'itKpiActiveUsers' },
         { label: 'Pending Sync', value: metrics.syncQueueSize || 0, hint: 'Global sync queue', kpiId: 'itKpiPendingSync' },
-        { label: 'Sightings', value: metrics.totalSightings || 0, hint: 'Recorded entries' },
+        { label: 'Sightings', value: metrics.totalSightings || 0, hint: 'All records in database', kpiId: 'itKpiSightings' },
         { label: 'Avg Rating', value: avgStars.toFixed(1), hint: '/ 5' }
     ];
     const liveUsersHtml = renderLiveUserRows(liveOps.peers || [], Number(liveOps.windowMinutes) || 5);
-    let accountDirHtml = '';
-    try {
-        const dir = await API.request('/admin/users?limit=100&offset=0');
-        const list = Array.isArray(dir?.users) ? dir.users : [];
-        accountDirHtml = renderItAccountDirectory(list, Auth.getCurrentUser()?.user_id);
-    } catch (e) {
-        console.warn('[IT dashboard] account directory failed:', e);
-        accountDirHtml = renderItAccountDirectory([], Auth.getCurrentUser()?.user_id);
-    }
+    const userDir = await fetchItAdminUserDirectory();
+    const usersGraphicHtml = renderItUserDatabaseGraphic(userDir.users || [], {
+        total: Number(userDir?.total) || (userDir.users || []).length,
+        loaded: Number(userDir?.loaded) || (userDir.users || []).length,
+        complete: userDir?.complete !== false,
+        serverStats: userDir?.stats || null,
+        error: userDir?.error || null,
+        peers: liveOps.peers || [],
+        currentUserId: Auth.getCurrentUser()?.user_id
+    });
     return `<div class="it-dashboard">${renderKpiStrip(itKpis)}${renderDashboardShell({
         primaryTitle: 'System Recommendations',
         primaryIcon: 'database',
@@ -4757,22 +5392,24 @@ async function renderITManagerDashboard() {
         quote: '"Reliable systems make better field decisions."',
         seasonalTitle: `${icon('chart', 'icon-sm')} Admin Snapshot`,
         seasonalItems: [
-            `Total sightings: ${metrics.totalSightings || 0}`,
-            `Total staff: ${metrics.totalStaff || 0}`,
-            `Guides on duty: ${metrics.guidesOnDuty || 0}`,
-            `Inventory items: ${metrics.inventoryItems || 0}`
+            `<span id="itSnapSightings">${metrics.totalSightings || 0}</span> total sightings (database)`,
+            `<span id="itSnapStaff">${metrics.totalStaff || 0}</span> active staff accounts`,
+            `<span id="itSnapGuides">${metrics.guidesOnDuty || 0}</span> guides on duty (live or clocked in)`,
+            `<span id="itSnapInventory">${metrics.inventoryItems || 0}</span> inventory line items`
         ],
+        seasonalFootnote: `<span id="itAdminSnapshotStamp" class="ui-modal-muted">Updated ${new Date().toLocaleTimeString()} · refreshes every 8s</span>`,
+        seasonalHtml: true,
         seasonalActionLabel: 'Open predictive analytics',
         seasonalAction: 'it_analytics',
         animalCount: animals.length
-    })}<div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Current Users (Realtime)</h3><span id="adminLiveUsersStamp" class="status-badge neutral">Live · ${new Date().toLocaleTimeString()} · ${Number(liveOps.activeCount ?? (liveOps.peers || []).length)} active (5m) / ${Number(metrics.totalRegisteredUsers ?? 0)} registered</span></div><div id="adminLiveUsersList">${liveUsersHtml}</div></div>${accountDirHtml}${predictiveCtaHtml}<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('building', 'icon-sm')} Intranet Connectivity</h3></div><div class="analytics-list"><div class="analytics-row"><span>Intranet</span><div class="analytics-bar"><div style="width:${liveOps.intranetStatus?.isIntranet ? 100 : 35}%;"></div></div><strong>${liveOps.intranetStatus?.isIntranet ? 'Connected' : 'External'}</strong></div><div class="analytics-row"><span>Device IP</span><span></span><strong>${escapeHtml(liveOps.intranetStatus?.ip || 'Unknown')}</strong></div><div class="analytics-row"><span>Pending Sync (all users)</span><span></span><strong id="itSyncPendingValue">${liveOps.syncStatus?.pending_items ?? liveOps.syncStatus?.pending ?? 0}</strong></div><div class="analytics-row"><span>Location updates (15m)</span><span></span><strong id="itLocationPulseValue">${liveOps.syncStatus?.location_updates_last_15m ?? 0}</strong></div></div></div><div class="section-card"><div class="section-header"><h3>${icon('user', 'icon-sm')} Live Peers / Guests</h3></div><div id="adminLivePeersSnapshot" class="seasonal-list">${renderLivePeersSnapshotRows(liveOps.peers || [], Number(liveOps.windowMinutes) || 5)}</div></div></div>${rareAlertsHtml}${safeZoneHtml}<div class="admin-actions"><button class="admin-action-btn" onclick="handleMFASetup()">${icon('shield', 'icon-sm')} Configure MFA</button><button class="admin-action-btn" onclick="clearAllCache()">Clear Cache</button><button class="admin-action-btn" onclick="exportData()">Export Data</button><button class="admin-action-btn danger" onclick="resetApp()">Reset App</button></div></div>`;}
+    })}${usersGraphicHtml}<div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Current Users (Realtime)</h3><span id="adminLiveUsersStamp" class="status-badge neutral">Live · ${new Date().toLocaleTimeString()} · ${Number(liveOps.activeCount ?? (liveOps.peers || []).length)} online (5m) · ${Number(metrics.totalRegisteredUsers ?? 0)} accounts in database</span></div><div id="adminLiveUsersList">${liveUsersHtml}</div></div>${predictiveCtaHtml}<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('building', 'icon-sm')} Intranet Connectivity</h3></div><div class="analytics-list"><div class="analytics-row"><span>Intranet</span><div class="analytics-bar"><div style="width:${liveOps.intranetStatus?.isIntranet ? 100 : 35}%;"></div></div><strong>${liveOps.intranetStatus?.isIntranet ? 'Connected' : 'External'}</strong></div><div class="analytics-row"><span>Device IP</span><span></span><strong>${escapeHtml(liveOps.intranetStatus?.ip || 'Unknown')}</strong></div><div class="analytics-row"><span>Pending Sync (all users)</span><span></span><strong id="itSyncPendingValue">${liveOps.syncStatus?.pending_items ?? liveOps.syncStatus?.pending ?? 0}</strong></div><div class="analytics-row"><span>Location updates (15m)</span><span></span><strong id="itLocationPulseValue">${liveOps.syncStatus?.location_updates_last_15m ?? 0}</strong></div></div></div><div class="section-card"><div class="section-header"><h3>${icon('user', 'icon-sm')} Live Peers / Guests</h3></div><div id="adminLivePeersSnapshot" class="seasonal-list">${renderLivePeersSnapshotRows(liveOps.peers || [], Number(liveOps.windowMinutes) || 5)}</div></div></div>${rareAlertsHtml}${safeZoneHtml}<div class="admin-actions"><button class="admin-action-btn" onclick="handleMFASetup()">${icon('shield', 'icon-sm')} Configure MFA</button><button class="admin-action-btn" onclick="clearAllCache()">Clear Cache</button><button class="admin-action-btn" onclick="exportData()">Export Data</button><button class="admin-action-btn danger" onclick="resetApp()">Reset App</button></div></div>`;}
 
 // =====================================================
 // PREDICTIVE ANALYTICS (§3.1.1.11) — IT Manager workspace
 // =====================================================
 async function renderITPredictiveAnalyticsDashboard() {
     if (!isCurrentUserITManager()) {
-        return `<div class="pa-shell"><div class="section-card"><div class="section-header"><h3>${icon('shield', 'icon-sm')} Access restricted</h3></div><div class="seasonal-list"><div class="seasonal-item">Only IT managers can open predictive analytics.</div></div></div></div>`;
+        return `<div class="pa-shell"><div class="section-card"><div class="section-header"><h3>${icon('shield', 'icon-sm')} Access restricted</h3></div><div class="seasonal-list"><div class="seasonal-item">Only IT managers and system admins can open predictive analytics. Sign in with demo_it or demo_admin (server password), not offline demo mode.</div></div></div></div>`;
     }
     const filters = readPredictiveAnalyticsFilters();
     let animals = [];
@@ -5457,19 +6094,20 @@ window.sendAIChatMessage = async function () {
         return;
     }
 
+    collapseSigtsChatWelcome();
     messages.querySelector('.ai-chat-starters')?.setAttribute('hidden', '');
 
+    const exchangeId = `ai-ex-${Date.now()}`;
     messages.insertAdjacentHTML(
         'beforeend',
-        `<div class="ai-chat-turn ai-chat-turn--user" role="article"><div class="ai-chat-bubble ai-chat-bubble--user"><div class="ai-chat-bubble-text">${escapeHtml(question)}</div></div></div>`
+        `<div class="ai-chat-exchange" id="${exchangeId}" data-ai-exchange="1" role="group" aria-label="Chat exchange">
+            <div class="ai-chat-turn ai-chat-turn--user" role="article"><div class="ai-chat-bubble ai-chat-bubble--user"><div class="ai-chat-bubble-text">${escapeHtml(question)}</div></div></div>
+            <div data-ai-typing="1" class="ai-chat-turn ai-chat-turn--assistant" aria-live="polite"><span class="ai-chat-turn-label">Bwindi assistant</span><div class="ai-chat-bubble ai-chat-bubble--assistant ai-chat-bubble--typing" aria-busy="true"><span></span><span></span><span></span></div></div>
+        </div>`
     );
     input.value = '';
     aiChatAutosizeTextarea(input);
-
-    messages.insertAdjacentHTML(
-        'beforeend',
-        `<div data-ai-typing="1" class="ai-chat-turn ai-chat-turn--assistant" aria-live="polite"><span class="ai-chat-turn-label">Bwindi assistant</span><div class="ai-chat-bubble ai-chat-bubble--assistant ai-chat-bubble--typing" aria-busy="true"><span></span><span></span><span></span></div></div>`
-    );
+    scrollSigtsChatToLatestExchange('auto');
 
     if (sendBtn) sendBtn.disabled = true;
     input.disabled = true;
@@ -5481,34 +6119,38 @@ window.sendAIChatMessage = async function () {
 
     try {
         const result = await AI.askQuestion(question, { history: apiHistory });
-        messages.querySelector('[data-ai-typing="1"]')?.remove();
+        const exchange = document.getElementById(exchangeId) || messages.querySelector('.ai-chat-exchange:last-of-type');
+        exchange?.querySelector('[data-ai-typing="1"]')?.remove();
         const answerRaw = result?.answer || 'No response available.';
         const presented = formatBwindiChatAssistantPresentation(answerRaw);
         const formattedAnswer = formatTourHelpAnswerHtml(presented);
         const metaBlock = buildTourHelpMetaHtml(result?.meta);
         const feedbackRow = `<div class="ai-chat-feedback-row"><span class="ui-modal-muted">Was this helpful?</span><button type="button" class="small-btn" onclick="submitTourHelpFeedback(true)">${icon('smile', 'icon-sm')} Yes</button><button type="button" class="small-btn ghost-btn" onclick="submitTourHelpFeedback(false)">No</button></div>`;
-        messages.insertAdjacentHTML(
-            'beforeend',
-            `<div class="ai-chat-turn ai-chat-turn--assistant" role="article"><span class="ai-chat-turn-label">Bwindi assistant</span><div class="ai-chat-bubble ai-chat-bubble--assistant"><div class="ai-chat-bubble-text ai-chat-response-block">${formattedAnswer}</div></div>${metaBlock}${feedbackRow}</div>`
-        );
+        const assistantHtml = `<div class="ai-chat-turn ai-chat-turn--assistant" role="article"><span class="ai-chat-turn-label">Bwindi assistant</span><div class="ai-chat-bubble ai-chat-bubble--assistant"><div class="ai-chat-bubble-text ai-chat-response-block">${formattedAnswer}</div></div>${metaBlock}${feedbackRow}</div>`;
+        if (exchange) {
+            exchange.insertAdjacentHTML('beforeend', assistantHtml);
+        } else {
+            messages.insertAdjacentHTML('beforeend', assistantHtml);
+        }
 
         const next = [...priorTurns, { user: question, answerRaw, meta: slimSigtsChatMetaForStorage(result?.meta || {}) }];
         while (next.length > SIGTS_CHAT_HISTORY_MAX_TURNS) next.shift();
         writeSigtsChatTurns(next);
     } catch (err) {
         console.error(err);
-        messages.querySelector('[data-ai-typing="1"]')?.remove();
+        const exchange = document.getElementById(exchangeId) || messages.querySelector('.ai-chat-exchange:last-of-type');
+        exchange?.querySelector('[data-ai-typing="1"]')?.remove();
         const apology = escapeHtml(String(err?.message || 'Something went wrong. Try again, or switch to offline mode from Profile.'));
-        messages.insertAdjacentHTML(
-            'beforeend',
-            `<div class="ai-chat-turn ai-chat-turn--assistant" role="article"><span class="ai-chat-turn-label">Bwindi assistant</span><div class="ai-chat-bubble ai-chat-bubble--assistant ai-chat-bubble--error"><div class="ai-chat-bubble-text"><p>Could not finish that reply. ${apology}</p></div></div></div>`
-        );
+        const errorHtml = `<div class="ai-chat-turn ai-chat-turn--assistant" role="article"><span class="ai-chat-turn-label">Bwindi assistant</span><div class="ai-chat-bubble ai-chat-bubble--assistant ai-chat-bubble--error"><div class="ai-chat-bubble-text"><p>Could not finish that reply. ${apology}</p></div></div></div>`;
+        if (exchange) {
+            exchange.insertAdjacentHTML('beforeend', errorHtml);
+        } else {
+            messages.insertAdjacentHTML('beforeend', errorHtml);
+        }
     } finally {
         if (sendBtn) sendBtn.disabled = false;
         input.disabled = false;
-        requestAnimationFrame(() => {
-            messages.scrollTop = messages.scrollHeight;
-        });
+        requestAnimationFrame(() => scrollSigtsChatToLatestExchange('smooth'));
     }
 };
 
@@ -5557,50 +6199,68 @@ window.toggleSpeciesHeatmapLayer = async function () {
     }
 };
 
-window.startTourHelpVoiceCapture = function () {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+window.startTourHelpVoiceCapture = async function () {
     const input = document.getElementById('aiChatInput');
-    const secureContextOk = window.isSecureContext || /^localhost$|^127\.0\.0\.1$/.test(window.location.hostname);
-    if (!SR) {
-        showToast('Speech recognition is not supported in this browser.', 'warning');
-        return;
-    }
-    if (!secureContextOk) {
-        showToast('Microphone requires a secure context (HTTPS or localhost).', 'warning');
+    const env = tourHelpMicEnvironment();
+    if (!env.ok) {
+        showToast(env.message, 'warning');
         return;
     }
     if (!input) {
         showToast('Chat input is unavailable right now.', 'warning');
         return;
     }
-    if (window.__sigtsTourHelpRecListening) return;
+    if (window.__sigtsTourHelpRecListening) {
+        stopTourHelpVoiceCapture(true);
+        return;
+    }
     if (!recordTourHelpMicStartAndCheckLimit()) {
         showToast('Too many mic requests. Please wait a moment and try again.', 'warning');
         return;
     }
+
+    const micPerm = await ensureTourHelpMicrophonePermission();
+    if (!micPerm.ok) {
+        showToast(micPerm.message, 'warning');
+        return;
+    }
+
+    stopTourHelpVoiceCapture(true);
+
+    const SR = env.SR;
     const rec = new SR();
-    rec.lang = 'en-US';
+    window.__sigtsTourHelpRec = rec;
+    rec.lang = (navigator.language || 'en-US').replace('_', '-');
     rec.continuous = false;
-    rec.interimResults = false;
+    rec.interimResults = true;
     rec.maxAlternatives = 1;
+
+    let finalTranscript = '';
+
     rec.onstart = () => {
         setTourHelpMicButtonState(true);
+        showToast('Listening… speak your question.', 'info');
     };
     rec.onresult = (e) => {
-        window.__sigtsTourHelpRecListening = false;
-        const captured = e.results?.[0]?.[0]?.transcript;
-        const t = sanitizeVoiceTranscript(captured);
-        if (t) {
-            input.value = `${(input.value || '').trim()}${input.value ? ' ' : ''}${t}`.trim();
+        const results = e.results;
+        if (!results?.length) return;
+        let chunk = '';
+        for (let i = e.resultIndex; i < results.length; i += 1) {
+            chunk += results[i][0]?.transcript || '';
         }
-        showToast(t ? 'Speech added to your message box.' : 'No usable speech captured.', t ? 'success' : 'warning');
-        aiChatAutosizeTextarea(input);
+        finalTranscript = sanitizeVoiceTranscript(`${finalTranscript} ${chunk}`.trim());
     };
     rec.onerror = (err) => {
-        window.__sigtsTourHelpRecListening = false;
         const code = String(err?.error || 'unknown');
+        if (code === 'aborted') return;
+        window.__sigtsTourHelpMicHadError = true;
+        window.__sigtsTourHelpRecListening = false;
+        setTourHelpMicButtonState(false);
         if (code === 'not-allowed' || code === 'service-not-allowed') {
-            showToast('Microphone permission denied. Allow mic access in browser settings.', 'warning');
+            showToast(
+                'Microphone blocked for speech. Allow mic access in browser settings (address bar lock icon).',
+                'warning'
+            );
             return;
         }
         if (code === 'no-speech') {
@@ -5611,16 +6271,33 @@ window.startTourHelpVoiceCapture = function () {
             showToast('No microphone device detected.', 'warning');
             return;
         }
-        showToast('Mic capture failed. Please retry.', 'warning');
+        if (code === 'network') {
+            showToast('Speech recognition needs internet (Chrome sends audio to Google). Check your connection.', 'warning');
+            return;
+        }
+        showToast(`Mic capture failed (${code}). Please retry.`, 'warning');
     };
     rec.onend = () => {
         window.__sigtsTourHelpRecListening = false;
+        window.__sigtsTourHelpRec = null;
         if (window.__sigtsTourHelpRecTimeout) {
             clearTimeout(window.__sigtsTourHelpRecTimeout);
             window.__sigtsTourHelpRecTimeout = null;
         }
         setTourHelpMicButtonState(false);
+        const t = sanitizeVoiceTranscript(finalTranscript);
+        if (t) {
+            input.value = `${(input.value || '').trim()}${input.value ? ' ' : ''}${t}`.trim();
+            aiChatAutosizeTextarea(input);
+            input.focus();
+            showToast('Speech added to your message box. Tap Send when ready.', 'success');
+        } else if (!window.__sigtsTourHelpMicHadError) {
+            showToast('No usable speech captured. Try again and speak clearly.', 'warning');
+        }
+        window.__sigtsTourHelpMicHadError = false;
     };
+
+    window.__sigtsTourHelpMicHadError = false;
     window.__sigtsTourHelpRecListening = true;
     try {
         rec.start();
@@ -5631,10 +6308,16 @@ window.startTourHelpVoiceCapture = function () {
                 /**/
             }
         }, SIGTS_MIC_CAPTURE_TIMEOUT_MS);
-    } catch (_) {
+    } catch (err) {
         window.__sigtsTourHelpRecListening = false;
+        window.__sigtsTourHelpRec = null;
         setTourHelpMicButtonState(false);
-        showToast('Could not start speech recognition.', 'warning');
+        const msg = String(err?.message || '');
+        if (/already started/i.test(msg)) {
+            showToast('Mic is already active. Wait a moment and try again.', 'warning');
+        } else {
+            showToast('Could not start speech recognition.', 'warning');
+        }
     }
 };
 
@@ -6506,8 +7189,8 @@ window.submitContentHelpfulness = async function (contentType, contentId, conten
 };
 
 window.ackRareAlertPrompt = async function (alertId) {
-    if (!Auth.hasRole('it_manager')) {
-        showToast('Only IT managers can acknowledge admin alerts.', 'warning');
+    if (!isCurrentUserITManager()) {
+        showToast('Only IT staff can acknowledge admin alerts.', 'warning');
         return;
     }
     const saved = await ITAPI.acknowledgeRareAlert(alertId);
@@ -7688,7 +8371,7 @@ async function renderView(view, options = {}) {
 
     const u = Auth.getCurrentUser() || {};
     const isGuide = u?.role === 'guide' || u?.userType === 'guide';
-    const isITManager = u?.role === 'it_manager' || u?.userType === 'it_manager';
+    const isITManager = isITStaffRole(getEffectiveRole(u));
     document.body.classList.toggle('sigts-has-mobile-tabs', Auth.isAuthenticated() && !PUBLIC_VIEWS.has(safeView) && !isGuide && !isITManager);
     bindAIViewportHooksOnce();
     syncAIComposerViewportOffset();
@@ -7815,9 +8498,16 @@ function refreshNetworkStatusBadge() {
     const state = getParkAccessState();
     const isOffline = !state.online;
     const pending = OfflineSync?.getPendingCount?.() || 0;
+    const failed = OfflineSync?.getFailedCount?.() || 0;
     badge.classList.toggle('offline', isOffline);
     badge.classList.toggle('online', !isOffline);
-    badge.textContent = isOffline ? `Offline mode • ${pending} pending` : (pending ? `Online • ${pending} pending sync` : 'Online');
+    badge.setAttribute('role', 'status');
+    badge.setAttribute('aria-live', 'polite');
+    badge.textContent = isOffline
+        ? `Offline mode • ${pending} pending${failed ? ` • ${failed} failed` : ''}`
+        : pending || failed
+          ? `Online • ${pending} pending sync${failed ? ` • ${failed} need review` : ''}`
+          : 'Online';
 }
 
 window.refreshNetworkStatusBadge = refreshNetworkStatusBadge;

@@ -270,6 +270,9 @@
             }
 
             if (Auth.isAuthenticated()) {
+                if (typeof Auth.syncRoleFromProfile === 'function') {
+                    Auth.syncRoleFromProfile().catch(function () {});
+                }
                 await renderView(requestedView || getLandingViewForUser(Auth.getCurrentUser()), { updateHash: true });
             } else {
                 await renderView(requestedView === 'register' ? 'register' : 'login', { updateHash: true });

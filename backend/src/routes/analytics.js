@@ -7,7 +7,7 @@ const { authenticateJWT, authorize } = require('../middleware/auth');
 const { ensureOpsTables } = require('../utils/opsCapability');
 const { sendActivityNotificationEmail } = require('../services/emailService');
 
-router.use(authenticateJWT, authorize('it_manager'));
+router.use(authenticateJWT, authorize('it_manager', 'admin'));
 
 const ALLOWED_INTERVALS = new Set(['hour', 'day', 'week']);
 const ALLOWED_EXPORT_FORMATS = new Set(['json', 'csv']);
@@ -420,17 +420,29 @@ router.get('/popular-content', async (req, res) => {
             [limit]
         );
 
-        const tourContent = await pool.query(
-            `SELECT tc.title_en AS name,
-                    'tour_content' AS type,
-                    COALESCE(COUNT(tp.touristprog_id), 0)::int AS view_count
-             FROM tour_content tc
-             LEFT JOIN tourist_progress tp ON tp.content_id = tc.content_id
-             GROUP BY tc.content_id, tc.title_en
-             ORDER BY view_count DESC, tc.title_en
-             LIMIT $1`,
-            [limit]
-        );
+        let tourContent = { rows: [] };
+        try {
+            tourContent = await pool.query(
+                `SELECT tc.title_en AS name,
+                        'tour_content' AS type,
+                        COALESCE(COUNT(tp.touristprog_id), 0)::int AS view_count
+                 FROM tour_content tc
+                 LEFT JOIN tourist_progress tp ON tp.content_id = tc.content_id
+                 GROUP BY tc.content_id, tc.title_en
+                 ORDER BY view_count DESC, tc.title_en
+                 LIMIT $1`,
+                [limit]
+            );
+        } catch (tourErr) {
+            if (tourErr.code !== '42P01') throw tourErr;
+            tourContent = await pool.query(
+                `SELECT title_en AS name, 'tour_content' AS type, 0::int AS view_count
+                 FROM tour_content
+                 ORDER BY title_en
+                 LIMIT $1`,
+                [limit]
+            );
+        }
 
         const allContent = [...animals.rows, ...locations.rows, ...stories.rows, ...tourContent.rows]
             .sort((a, b) => (b.view_count || 0) - (a.view_count || 0))
@@ -666,6 +678,95 @@ router.get('/anomalies', async (req, res) => {
     } catch (error) {
         console.error('analytics anomalies', error);
         res.status(500).json({ error: 'Failed to compute anomalies' });
+    }
+});
+
+// =====================================================
+// GET /api/analytics/operational-summary — trend + ops rollup for IT dashboards
+// =====================================================
+router.get('/operational-summary', async (req, res) => {
+    try {
+        const days = Math.min(90, Math.max(7, parseInt(req.query.days, 10) || 14));
+        const end = new Date();
+        const start = new Date(end);
+        start.setDate(start.getDate() - days);
+        const priorStart = new Date(start);
+        priorStart.setDate(priorStart.getDate() - days);
+
+        const [sightCur, sightPrior, flowCur, satCur, activeUsers] = await Promise.all([
+            pool.query(
+                `SELECT COUNT(*)::int AS n FROM sightings
+                 WHERE timestamp >= $1 AND verification_status = 'verified'`,
+                [start.toISOString()]
+            ),
+            pool.query(
+                `SELECT COUNT(*)::int AS n FROM sightings
+                 WHERE timestamp >= $1 AND timestamp < $2 AND verification_status = 'verified'`,
+                [priorStart.toISOString(), start.toISOString()]
+            ),
+            pool.query(
+                `SELECT COUNT(*)::int AS n FROM visitor_flow WHERE arrival_time >= $1`,
+                [start.toISOString()]
+            ),
+            pool.query(
+                `SELECT AVG(rating)::float AS avg_rating, COUNT(*)::int AS n
+                 FROM feedback WHERE created_at >= $1`,
+                [start.toISOString()]
+            ),
+            pool.query(
+                `SELECT COUNT(*)::int AS n FROM users
+                 WHERE is_active = true AND last_login > NOW() - INTERVAL '24 hours'`
+            ),
+        ]);
+
+        const sightingsNow = sightCur.rows[0]?.n ?? 0;
+        const sightingsPrior = sightPrior.rows[0]?.n ?? 0;
+        const sightDeltaPct =
+            sightingsPrior > 0
+                ? Math.round(((sightingsNow - sightingsPrior) / sightingsPrior) * 100)
+                : sightingsNow > 0
+                  ? 100
+                  : 0;
+
+        const trendRows = await pool.query(
+            `SELECT DATE(timestamp) AS day, COUNT(*)::int AS cnt
+             FROM sightings
+             WHERE timestamp >= $1 AND verification_status = 'verified'
+             GROUP BY DATE(timestamp)
+             ORDER BY day`,
+            [start.toISOString()]
+        );
+
+        const opsStatus = { tables_ready: await ensureOpsTables() };
+        if (opsStatus.tables_ready) {
+            const jobs = await pool.query(
+                `SELECT status, COUNT(*)::int AS n FROM ops_training_jobs GROUP BY status`
+            );
+            opsStatus.training_by_status = jobs.rows;
+        }
+
+        res.json({
+            generated_at: new Date().toISOString(),
+            window_days: days,
+            sightings: {
+                verified_count: sightingsNow,
+                prior_window_count: sightingsPrior,
+                delta_percent: sightDeltaPct,
+                daily_trend: trendRows.rows,
+            },
+            visitor_flow_count: flowCur.rows[0]?.n ?? 0,
+            satisfaction: {
+                average_rating: satCur.rows[0]?.avg_rating
+                    ? Number(Number(satCur.rows[0].avg_rating).toFixed(2))
+                    : null,
+                responses: satCur.rows[0]?.n ?? 0,
+            },
+            active_users_24h: activeUsers.rows[0]?.n ?? 0,
+            operations: opsStatus,
+        });
+    } catch (error) {
+        console.error('operational-summary', error);
+        res.status(500).json({ error: 'Failed to build operational summary' });
     }
 });
 

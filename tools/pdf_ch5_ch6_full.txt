@@ -1,0 +1,147 @@
+﻿=== PAGE 78 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+65 
+ 
+CHAPTER FIVE: SYSTEM IMPLEMENTATION, TESTING AND VALIDATION. 
+5.0 Introduction 
+The chapter defines the implementation of the design to meet the requirements of the system 
+as well as testing and validation of the system. 
+ 
+5.1 System Implementation 
+Different technologies were used during the implementation of this application as they are 
+further explained below. 
+ 
+5.1.1  System technologies 
+The Snapskin Info-Teledermatology Application was developed with the aid of React Native 
+which is an open-source user-interface software framework created by Meta Platforms, Inc. It 
+was used to develop applications for Android by enabling developers to use the React 
+framework along with native platform capabilities. 
+ 
+HyperText Markup Language (HTML) was used as a language that specified the structure of 
+the document retrieval across the internet using browser programs on the World Wide Web. 
+JavaScript (JS), which is also an easy -to-use open-source client-side scripting language, was 
+used to develop dynamic functionalities of the system. Its ability to display information in the 
+browsers enables users to use the system. 
+ 
+Firebase is a platform developed by Google for creating mobile and web applications. It  is a 
+Backend-as-a-Service (BaaS) app development platform that provides hosted backend services 
+such as a real-time database, cloud storage, authentication, crash reporting, machine learning, 
+remote configuration, and hosting for your static files.  Most of the software used in the 
+application implementation were chosen because it was cheap, readily available, and supported 
+in rapid development. 
+ 
+5.2 System Functionality 
+5.2.1 Authentication 
+The system allows administrators to log in before accessing the Dashboard page to carry out 
+the administrative roles. On the other hand, the system requires the users, that is the patients 
+and the dermatologists, to login before accessing the system but requires verification of the 
+doctor before he or she logs in. 
+
+=== PAGE 79 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+66 
+ 
+ 5.2.2 Online money Transaction 
+The system allows patients to make payments for their online consultations and the 
+dermatologists can receive their payments as well. 
+ 
+ 5.2. 3  Blogs and Article management 
+The system administrators handle most of the information posted on the application. They 
+upload information about skincare and the dermatologists available. 
+  
+5.2.4 Appointment booking. 
+Patients are in position to make appointments and the dermatologists approve them according 
+to their schedule. 
+ 
+5.3 System Testing 
+The following testing strategies were deployed: 
+ 
+5.3.1 User testing 
+A group of target users was selected to examine the system functionality and gave us feedback 
+as shown in table 5.1 below. 
+ User testing question 1 2 3 4 5 
+1 The system enables patients to make appointments 
+with the dermatologists 
+     
+2 The system enables patients to make consultations      
+3 The system enables patients to make payments      
+4 The system enables administrators to upload 
+information and get reports 
+     
+5 The system enables the dermatologists to approve 
+appointments. 
+     
+6 The system enables dermatologists to receive their 
+payments from patients. 
+     
+7 The system enables administrators to assign account 
+types to the users.  
+     
+Table 5. 1: Shows the target users selected for user testing.   
+ 
+
+=== PAGE 80 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+67 
+ 
+Unit testing 
+System testing was done after the system was coded. Individual units or components of the 
+system were checked to ensure they are fully functional units before integrating them. This was 
+done by examining each unit and that it performed as exactly intended. 
+ 
+5.4 System Validation 
+System validation is concerned with ensuring tha t data entered the systems meets predefined 
+formats with defined input criteria. It was done to ensure that the data entered and retrieved is 
+valid. 
+ 
+  
+
+=== PAGE 81 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+68 
+ 
+CHAPTER SIX: SUMMARY, LIMITATION, CONCLUSION AND 
+RECOMMENDATIONS 
+6.0 Introduction: 
+This chapter provides a summary, limitation, conclusion, and recommendations of the 
+Snapskin Info-teledermatology application. 
+ 
+6.1 Achievements: 
+The Snapskin Info -teledermatology application has ensured easy access to dermatologists, 
+Skincare services, Information about skin diseases and healthy skin follow up by patients. 
+ 
+6.2 Challenges: 
+ The Snapskin Info-teledermatology application is intended to be installed on smartphones and 
+used when there is internet access. As such, it requires an internet connection. The system shall 
+not be able to function if the server stops running. The server should always run when the 
+system is loading. 
+ 
+6.3 Limitation of the study: 
+The project needed a variety of resources that is to say funds to facilitate the data collection 
+and the computer system for developing the application which were not easy to get, and it was 
+difficult for us to get dermatologists to interview due to the limited number of dermatologists 
+and they are always occupied since they have to meet very many patients. 
+ 
+6.4 Recommendations: 
+Snapskin Info-teledermatology application is highly recommended for use by Skin patients and 
+dermatologists because its aim is to reduce the gap between dermatologists and the skin 
+patients. It is also important to train and encourage users to get accustomed to the Snapskin 
+Info-teledermatology application. This being a new application, some of the users (patients) 
+may need to fully understand how the application functions. 
+ 
+6.5 Conclusions:  
+The core reason for the establishment of The Snapskin Info -teledermatology application is to 
+reduce the gap between skin patients and dermatologists within Kampala. Therefore, the 
+technologies used should   support the core objective of the system if it is to remain relevant to 
+the users. A lot still needs to be done in the IT d epartment to make available technology 
+
+=== PAGE 82 ===
+SNAPSKIN INFO-TELEDERMATOLOGY APPLICATION 
+69 
+ 
+effective. The application administration has to keep updating the hardware and software 
+requirements of the system through its panel; Information Technologies and computer systems 
+need to be sustainably upgraded as m ore software is introduced in today's IT market. Our 
+research therefore acknowledges the fact that the system is currently standalone. 
+  
+

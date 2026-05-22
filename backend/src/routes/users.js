@@ -72,7 +72,7 @@ router.get('/profile', authenticateJWT, async (req, res) => {
             if (guideData.rows.length > 0) {
                 profile.role_data = guideData.rows[0];
             }
-        } else if (profile.user_type === 'it_manager') {
+        } else if (profile.user_type === 'it_manager' || profile.user_type === 'admin') {
             const adminData = await pool.query(
                 `SELECT employee_id, department, access_level
                  FROM it_managers WHERE user_id = $1`,

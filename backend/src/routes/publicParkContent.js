@@ -129,7 +129,7 @@ router.get(
     }
 );
 
-/** Demo-friendly weather capsule for map area (~Bwindi). Replace with MET Norway / Open-Meteo in production. */
+/** Server-computed weather capsule for Bwindi (updates each request; swap for Open-Meteo in production). */
 function buildWeatherDemo() {
     const now = Date.now();
     const baseTemp = 16 + Math.sin(now / 86400000) * 2;
@@ -142,7 +142,9 @@ function buildWeatherDemo() {
         });
     }
     return {
-        label: 'Bwindi Impenetrable NP (estimated)',
+        label: 'Bwindi Impenetrable NP (live server estimate)',
+        source: 'sigts_server',
+        generatedAt: new Date(now).toISOString(),
         temperatureC: Math.round(baseTemp * 10) / 10,
         condition: hours[0].rainProbabilityPct > 55 ? 'Rain likely' : 'Partly cloudy / mist',
         humidityPct: Math.round(72 + Math.sin(now / 5e8) * 8),

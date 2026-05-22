@@ -19,7 +19,11 @@
     "backup:clean": "node scripts/backup.js clean",
     "restore": "node scripts/restore.js",
     "health": "node scripts/healthcheck.js",
+    "debug": "node scripts/debug-system.js",
+    "debug:requirements": "node scripts/verify-requirements.js",
+    "debug:all": "node scripts/debug-system.js && node scripts/verify-requirements.js",
     "set-password": "node scripts/setUserPassword.js",
+    "prepare:panel": "node scripts/prepare-panel-demo.js",
     "db:reset": "npm run init-db && npm run migrate && npm run seed"
   },
   "dependencies": {

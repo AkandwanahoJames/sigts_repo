@@ -10,8 +10,8 @@ function readChatEnv() {
         '';
     const baseUrl = (process.env.SIGTS_CHAT_OPENAI_BASE || process.env.OPENAI_BASE_URL || 'https://api.openai.com')
         .replace(/\/$/, '');
-    const model = process.env.SIGTS_CHAT_MODEL || process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini';
-    const maxTokens = Math.min(1600, Math.max(128, Number(process.env.SIGTS_CHAT_MAX_TOKENS || 768) || 768));
+    const model = process.env.SIGTS_CHAT_MODEL || process.env.OPENAI_CHAT_MODEL || 'gpt-4o';
+    const maxTokens = Math.min(2048, Math.max(256, Number(process.env.SIGTS_CHAT_MAX_TOKENS || 1024) || 1024));
     const timeoutMs = Math.min(120000, Math.max(5000, Number(process.env.SIGTS_CHAT_TIMEOUT_MS || 22000) || 22000));
     const tRaw = Number(process.env.SIGTS_CHAT_TEMPERATURE);
     const temperature =

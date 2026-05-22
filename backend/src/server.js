@@ -9,7 +9,11 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
-const rateLimit = require('express-rate-limit');
+const {
+    createGeneralApiLimiter,
+    createAuthLoginLimiter,
+    isRateLimitDisabled,
+} = require('./middleware/apiRateLimit');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -127,21 +131,17 @@ app.use(morgan('combined', {
     skip: (req) => req.url === '/health'
 }));
 
-// Simple rate limiting
-const generalLimiter = rateLimit({
-    windowMs: REQUIREMENTS.performance.generalRateLimitWindowMs,
-    max: REQUIREMENTS.performance.generalRateLimitMax,
-    message: { error: 'Too many requests' }
-});
-app.use('/api/', generalLimiter);
+// General API rate limit (off in development; see middleware/apiRateLimit.js)
+app.use('/api/', createGeneralApiLimiter());
+if (isRateLimitDisabled()) {
+    logger.info('API rate limiter DISABLED (development or DISABLE_API_RATE_LIMIT=true)');
+} else {
+    logger.info('API rate limiter ENABLED for production traffic');
+}
 
 // Auth rate limiter — disabled by default. Set ENABLE_AUTH_RATE_LIMIT=true to turn back on.
 if (String(process.env.ENABLE_AUTH_RATE_LIMIT).toLowerCase() === 'true') {
-    const authLimiter = rateLimit({
-        windowMs: REQUIREMENTS.performance.authRateLimitWindowMs,
-        max: REQUIREMENTS.performance.authRateLimitMax,
-        message: { error: 'Too many authentication attempts, please try again later.' }
-    });
+    const authLimiter = createAuthLoginLimiter();
     app.use('/api/auth/login', authLimiter);
     app.use('/api/auth/login-direct', authLimiter);
     logger.info('Auth rate limiter ENABLED');
@@ -362,7 +362,14 @@ try {
             origin: allowedOrigins,
             credentials: true
         },
-        transports: ['websocket', 'polling']
+        transports: ['websocket', 'polling'],
+        pingInterval: 25000,
+        pingTimeout: 60000,
+        maxHttpBufferSize: 1e6,
+        connectionStateRecovery: {
+            maxDisconnectionDuration: 2 * 60 * 1000,
+            skipMiddlewares: true,
+        },
     });
 
     io.use(async (socket, next) => {
@@ -396,7 +403,23 @@ try {
         socket.on('join-tour', (tourId) => {
             socket.join(`tour:${tourId}`);
         });
-        
+
+        socket.on('join-it-ops', () => {
+            if (socket.user?.user_type === 'it_manager') {
+                socket.join('it:ops');
+            }
+        });
+
+        socket.on('sync:notify', (payload) => {
+            if (socket.user?.user_type === 'it_manager') {
+                io.to('it:ops').emit('sync:update', {
+                    ...payload,
+                    at: new Date().toISOString(),
+                    from: socket.user.user_id,
+                });
+            }
+        });
+
         socket.on('disconnect', () => {
             logger.info(`WebSocket disconnected: ${socket.id}`);
         });
@@ -528,7 +551,11 @@ process.on('SIGINT', () => {
     });
 });
 
-// Start the server
-startServer();
+// Start the server only when this file is executed directly. Serverless
+// platforms such as Vercel import the Express app and provide their own
+// listener.
+if (require.main === module) {
+    startServer();
+}
 
 module.exports = { app, server, io };

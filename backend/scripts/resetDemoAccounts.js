@@ -103,11 +103,28 @@ async function run() {
          VALUES (gen_random_uuid(), $1, $2, '[]'::jsonb, '[]'::jsonb)`,
         [guide.user_id, 'GUIDE-DEMO-001']
     );
+    const adminUser = await pool.query(
+        `SELECT user_id FROM users WHERE username = 'demo_admin' LIMIT 1`
+    );
+    const adminUserId = adminUser.rows[0]?.user_id;
     await pool.query(
         `INSERT INTO it_managers (itmanager_id, user_id, employee_id, access_level)
          VALUES (gen_random_uuid(), $1, $2, 'admin')`,
         [itManager.user_id, 'ITM-DEMO-001']
     );
+    if (adminUserId) {
+        const existingAdminDesk = await pool.query(
+            `SELECT 1 FROM it_managers WHERE user_id = $1 LIMIT 1`,
+            [adminUserId]
+        );
+        if (!existingAdminDesk.rows.length) {
+            await pool.query(
+                `INSERT INTO it_managers (itmanager_id, user_id, employee_id, access_level)
+                 VALUES (gen_random_uuid(), $1, $2, 'super_admin')`,
+                [adminUserId, 'ADM-DEMO-001']
+            );
+        }
+    }
 
     console.log('Demo accounts reset complete.');
 }

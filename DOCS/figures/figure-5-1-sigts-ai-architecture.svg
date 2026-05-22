@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 680" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L9,3 L0,6 Z" fill="#334155"/>
+    </marker>
+    <linearGradient id="clientGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ecfdf5"/>
+      <stop offset="100%" style="stop-color:#d1fae5"/>
+    </linearGradient>
+    <linearGradient id="apiGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#eff6ff"/>
+      <stop offset="100%" style="stop-color:#dbeafe"/>
+    </linearGradient>
+    <linearGradient id="llmGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#faf5ff"/>
+      <stop offset="100%" style="stop-color:#ede9fe"/>
+    </linearGradient>
+    <linearGradient id="dbGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#fff7ed"/>
+      <stop offset="100%" style="stop-color:#ffedd5"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="920" height="680" fill="#f8fafc"/>
+  <text x="460" y="34" text-anchor="middle" font-size="18" font-weight="700" fill="#0f172a">Figure 5.1  SIGTS Tour Help AI Architecture</text>
+  <text x="460" y="54" text-anchor="middle" font-size="11" fill="#64748b">Two-tier design: lexical RAG-lite + optional GPT-4o; rule-based fallback (rule_kb_v1)</text>
+
+  <!-- Layer labels -->
+  <text x="24" y="88" font-size="10" font-weight="600" fill="#94a3b8">CLIENT</text>
+  <text x="24" y="248" font-size="10" font-weight="600" fill="#94a3b8">API</text>
+  <text x="24" y="408" font-size="10" font-weight="600" fill="#94a3b8">PROCESSING</text>
+  <text x="24" y="568" font-size="10" font-weight="600" fill="#94a3b8">DATA / EXTERNAL</text>
+
+  <!-- Client layer -->
+  <rect x="80" y="72" width="760" height="108" rx="8" fill="url(#clientGrad)" stroke="#059669" stroke-width="1.5"/>
+  <text x="460" y="96" text-anchor="middle" font-size="13" font-weight="700" fill="#065f46">Progressive Web App  Tour Help (browser)</text>
+  <rect x="100" y="108" width="200" height="56" rx="6" fill="#fff" stroke="#10b981"/>
+  <text x="200" y="128" text-anchor="middle" font-size="11" font-weight="600" fill="#134e4a">Visitor input</text>
+  <text x="200" y="144" text-anchor="middle" font-size="9" fill="#475569">question, chat history</text>
+  <text x="200" y="156" text-anchor="middle" font-size="9" fill="#475569">GPS (lat/lng), language</text>
+
+  <rect x="330" y="108" width="260" height="56" rx="6" fill="#fff" stroke="#10b981"/>
+  <text x="460" y="128" text-anchor="middle" font-size="11" font-weight="600" fill="#134e4a">buildAppContextForTourHelp()</text>
+  <text x="460" y="144" text-anchor="middle" font-size="9" fill="#475569">catalogue snapshot: animals, themes,</text>
+  <text x="460" y="156" text-anchor="middle" font-size="9" fill="#475569">FAQs, safety, locations, culture</text>
+
+  <rect x="620" y="108" width="200" height="56" rx="6" fill="#fff" stroke="#10b981"/>
+  <text x="720" y="128" text-anchor="middle" font-size="11" font-weight="600" fill="#134e4a">Offline mirror</text>
+  <text x="720" y="144" text-anchor="middle" font-size="9" fill="#475569">sigtsLocalTourHelpCompose()</text>
+  <text x="720" y="156" text-anchor="middle" font-size="9" fill="#475569">same rule_kb_v1 heuristics</text>
+
+  <!-- API layer -->
+  <rect x="80" y="232" width="760" height="88" rx="8" fill="url(#apiGrad)" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="460" y="256" text-anchor="middle" font-size="13" font-weight="700" fill="#1e3a8a">SIGTS Backend  Express REST (JWT authenticated)</text>
+  <rect x="120" y="268" width="280" height="40" rx="6" fill="#fff" stroke="#3b82f6"/>
+  <text x="260" y="286" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">POST /api/ai/chat</text>
+  <text x="260" y="300" text-anchor="middle" font-size="9" fill="#475569">routes/ai.js  orchestration</text>
+  <rect x="520" y="268" width="280" height="40" rx="6" fill="#fff" stroke="#3b82f6"/>
+  <text x="660" y="286" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">GET /api/ai/status</text>
+  <text x="660" y="300" text-anchor="middle" font-size="9" fill="#475569">llm_configured, model, grounding tables</text>
+
+  <!-- Decision diamond area -->
+  <polygon points="460,340 540,380 460,420 380,380" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.5"/>
+  <text x="460" y="376" text-anchor="middle" font-size="10" font-weight="700" fill="#854d0e">API key set</text>
+  <text x="460" y="390" text-anchor="middle" font-size="10" font-weight="700" fill="#854d0e">&amp; in-scope?</text>
+
+  <!-- LLM path (left) -->
+  <rect x="60" y="438" width="380" height="118" rx="8" fill="url(#llmGrad)" stroke="#7c3aed" stroke-width="1.5"/>
+  <text x="250" y="462" text-anchor="middle" font-size="12" font-weight="700" fill="#5b21b6">Path A  llm_grounded_v1 (primary)</text>
+
+  <rect x="78" y="474" width="160" height="68" rx="6" fill="#fff" stroke="#8b5cf6"/>
+  <text x="158" y="494" text-anchor="middle" font-size="10" font-weight="600" fill="#4c1d95">chatGrounding.js</text>
+  <text x="158" y="508" text-anchor="middle" font-size="8.5" fill="#475569">1. tokenise question</text>
+  <text x="158" y="520" text-anchor="middle" font-size="8.5" fill="#475569">2. ILIKE patterns</text>
+  <text x="158" y="532" text-anchor="middle" font-size="8.5" fill="#475569">3. build knowledge pack</text>
+
+  <rect x="258" y="474" width="160" height="68" rx="6" fill="#fff" stroke="#8b5cf6"/>
+  <text x="338" y="494" text-anchor="middle" font-size="10" font-weight="600" fill="#4c1d95">llmChat.js</text>
+  <text x="338" y="508" text-anchor="middle" font-size="8.5" fill="#475569">system prompt + history</text>
+  <text x="338" y="520" text-anchor="middle" font-size="8.5" fill="#475569">POST /v1/chat/completions</text>
+  <text x="338" y="532" text-anchor="middle" font-size="8.5" fill="#475569">GPT-4o (transformer LLM)</text>
+
+  <!-- Rule path (right) -->
+  <rect x="480" y="438" width="360" height="118" rx="8" fill="#f1f5f9" stroke="#64748b" stroke-width="1.5"/>
+  <text x="660" y="462" text-anchor="middle" font-size="12" font-weight="700" fill="#334155">Path B  rule_kb_v1 / rule_kb_v1_fallback</text>
+  <rect x="500" y="474" width="320" height="68" rx="6" fill="#fff" stroke="#94a3b8"/>
+  <text x="660" y="494" text-anchor="middle" font-size="10" font-weight="600" fill="#1e293b">buildRuleBasedAnswer()</text>
+  <text x="660" y="508" text-anchor="middle" font-size="8.5" fill="#475569">regex intents (gorilla, safety, weather, culture, map)</text>
+  <text x="660" y="520" text-anchor="middle" font-size="8.5" fill="#475569">Bwindi scope checks + catalogue substring match</text>
+  <text x="660" y="532" text-anchor="middle" font-size="8.5" fill="#475569">template paragraphs (no neural inference)</text>
+
+  <!-- Data layer -->
+  <rect x="100" y="578" width="300" height="72" rx="8" fill="url(#dbGrad)" stroke="#ea580c" stroke-width="1.5"/>
+  <text x="250" y="602" text-anchor="middle" font-size="11" font-weight="700" fill="#9a3412">PostgreSQL (lexical RAG-lite)</text>
+  <text x="250" y="618" text-anchor="middle" font-size="8.5" fill="#475569">parks, faqs, safety_tips, destination_info,</text>
+  <text x="250" y="630" text-anchor="middle" font-size="8.5" fill="#475569">animals, themes, culture, locations, routes, sightings</text>
+  <text x="250" y="642" text-anchor="middle" font-size="8.5" fill="#475569">+ ai_query_logs (analytics)</text>
+
+  <rect x="520" y="578" width="300" height="72" rx="8" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.5"/>
+  <text x="670" y="602" text-anchor="middle" font-size="11" font-weight="700" fill="#5b21b6">External LLM provider</text>
+  <text x="670" y="618" text-anchor="middle" font-size="8.5" fill="#475569">OpenAI-compatible API (default api.openai.com)</text>
+  <text x="670" y="630" text-anchor="middle" font-size="8.5" fill="#475569">No vector embeddings; no in-repo model training</text>
+  <text x="670" y="642" text-anchor="middle" font-size="8.5" fill="#475569">Temperature ~0.52, max_tokens ~1024</text>
+
+  <!-- Arrows -->
+  <line x1="200" y1="180" x2="260" y2="232" stroke="#334155" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="460" y1="180" x2="460" y2="232" stroke="#334155" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="460" y1="320" x2="460" y2="340" stroke="#334155" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="420" y1="400" x2="250" y2="438" stroke="#334155" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="350" y="418" font-size="9" fill="#16a34a" font-weight="600">yes</text>
+  <line x1="500" y1="400" x2="660" y2="438" stroke="#334155" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="530" y="418" font-size="9" fill="#dc2626" font-weight="600">no / LLM fail</text>
+  <line x1="158" y1="542" x2="200" y2="578" stroke="#334155" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="338" y1="542" x2="620" y2="600" stroke="#334155" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="460" y1="556" x2="460" y2="578" stroke="#334155" stroke-width="1.5" marker-end="url(#arrow)" stroke-dasharray="4,3"/>
+  <line x1="720" y1="164" x2="720" y2="232" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+  <text x="730" y="200" font-size="8" fill="#64748b">offline</text>
+
+  <!-- Response merge -->
+  <rect x="340" y="648" width="240" height="24" rx="4" fill="#dcfce7" stroke="#16a34a"/>
+  <text x="460" y="664" text-anchor="middle" font-size="10" font-weight="600" fill="#166534">JSON response ’ Tour Help UI (+ nlp_mode metadata)</text>
+</svg>
