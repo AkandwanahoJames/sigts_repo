@@ -64,4 +64,5 @@ You can inject `window.__SIGTS_API_BASE__` before app scripts in `frontend/publi
 
 - This project currently contains demo-friendly behaviors and fallbacks for some flows.
 - For production hardening, consider strict environment configuration, complete dialog unification, and expanded E2E coverage.
+- For Vercel + Render + Supabase deployment, see `DOCS/deployment-envs.md` and `render.yaml`.
 - For architecture/flow/ops walkthrough details, see `DOCS/repo-walkthrough.md`.

@@ -7,36 +7,11 @@ const logger = {
     warn: (...args) => console.warn('[WARN]', ...args)
 };
 const { loadEnv } = require('./env');
+const { getPgPoolConfig, validateDatabaseEnv } = require('./pgPoolConfig');
 loadEnv();
 
-// Validate required environment variables for database connection
-function validateDatabaseConfig() {
-    const isProd = process.env.NODE_ENV === 'production';
-    
-    // In production, require explicit configuration
-    if (isProd) {
-        if (!process.env.DB_PASSWORD) {
-            throw new Error('CRITICAL: DB_PASSWORD environment variable must be set in production');
-        }
-        if (!process.env.DB_HOST || process.env.DB_HOST === 'localhost') {
-            throw new Error('CRITICAL: DB_HOST must be explicitly configured in production (not localhost)');
-        }
-    }
-}
-
-// Create connection pool
-validateDatabaseConfig();
-const pool = new Pool({
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 5432,
-    database: process.env.DB_NAME || 'sigts_bwindi',
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || (process.env.NODE_ENV === 'development' ? 'sigts@t' : undefined),
-    max: 20,                    // Maximum connections in pool
-    idleTimeoutMillis: 30000,   // Close idle connections after 30 seconds
-    connectionTimeoutMillis: 2000, // Fail fast if database unavailable
-    maxUses: 7500,              // Recycle connection after 7500 uses
-});
+validateDatabaseEnv();
+const pool = new Pool(getPgPoolConfig());
 
 // Connection event handlers
 pool.on('connect', () => {

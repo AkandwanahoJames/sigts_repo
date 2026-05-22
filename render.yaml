@@ -1,0 +1,25 @@
+# Render Web Service — SIGTS API (use with Vercel frontend + Supabase Postgres)
+# Dashboard: New > Blueprint > connect repo, or New > Web Service and paste these settings.
+services:
+  - type: web
+    name: sigts-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 8000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: CLIENT_URL
+        sync: false
+      - key: PUBLIC_APP_URL
+        sync: false

@@ -44,7 +44,8 @@ function main() {
     const env = {
         ...parseEnvFile(path.join(repoRoot, '.env')),
         ...parseEnvFile(path.join(repoRoot, 'backend', '.env')),
-        ...parseEnvFile(envPath)
+        ...parseEnvFile(envPath),
+        ...process.env
     };
 
     const backendPort = Number.parseInt(env.PORT || '', 10);

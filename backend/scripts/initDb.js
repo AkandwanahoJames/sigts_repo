@@ -6,6 +6,15 @@ const path = require('path');
 const { loadEnv } = require('../src/config/env');
 loadEnv();
 
+function isHostedDatabase() {
+    const host = (process.env.DB_HOST || '').toLowerCase();
+    const url = (process.env.DATABASE_URL || '').toLowerCase();
+    return Boolean(process.env.DATABASE_URL)
+        || host.includes('supabase')
+        || host.includes('amazonaws.com')
+        || host.includes('render.com');
+}
+
 const DB_NAME = process.env.DB_NAME || 'sigts_bwindi';
 const DB_USER = process.env.DB_USER || 'postgres';
 const DB_PASSWORD = process.env.DB_PASSWORD || 'sigts@t';
@@ -160,4 +169,12 @@ async function initDb() {
 }
 
 // Run
+if (isHostedDatabase()) {
+    log('\nHosted PostgreSQL detected (Supabase, etc.).', 'yellow');
+    log('Skipping local CREATE DATABASE. Use:', 'yellow');
+    log('  npm run deploy-prep --workspace=backend', 'yellow');
+    log('  or: npm run migrate --workspace=backend', 'yellow');
+    process.exit(0);
+}
+
 initDb();

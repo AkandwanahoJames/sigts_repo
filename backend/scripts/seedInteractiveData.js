@@ -1,15 +1,10 @@
 const path = require('path');
 const { Pool } = require('pg');
 const { loadEnv } = require('../src/config/env');
+const { getPgPoolConfig } = require('../src/config/pgPoolConfig');
 loadEnv();
 
-const pool = new Pool({
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 5432,
-    database: process.env.DB_NAME || 'sigts_bwindi',
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'sigts@t'
-});
+const pool = new Pool(getPgPoolConfig());
 
 async function getId(query, params = []) {
     const result = await pool.query(query, params);

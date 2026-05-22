@@ -91,7 +91,8 @@ function startServer() {
     const env = {
         ...parseEnvFile(path.join(repoRoot, '.env')),
         ...parseEnvFile(path.join(repoRoot, 'backend', '.env')),
-        ...parseEnvFile(path.join(frontendRoot, '.env'))
+        ...parseEnvFile(path.join(frontendRoot, '.env')),
+        ...process.env
     };
 
     const apiPort = Number.parseInt(env.API_PORT || env.PORT || '', 10) || 8000;
