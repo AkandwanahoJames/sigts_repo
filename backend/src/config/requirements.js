@@ -63,12 +63,18 @@ function ensureSecurityConfiguration() {
         warnings.push('JWT_SECRET is weak or missing. Fine for dev, but replace before production.');
     }
 
-    // Database
-    if (!process.env.DB_HOST) errors.push('DB_HOST is required');
-    if (!process.env.DB_NAME) errors.push('DB_NAME is required');
-    if (!process.env.DB_USER) errors.push('DB_USER is required');
-    if (isProd && (!process.env.DB_PASSWORD || isPlaceholder(process.env.DB_PASSWORD))) {
-        errors.push('DB_PASSWORD must be set to a real value in production');
+    // Database. Production may use either Supabase/hosted Postgres DATABASE_URL
+    // or discrete DB_* variables.
+    const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
+    if (!hasDatabaseUrl) {
+        if (!process.env.DB_HOST) errors.push('DB_HOST is required');
+        if (!process.env.DB_NAME) errors.push('DB_NAME is required');
+        if (!process.env.DB_USER) errors.push('DB_USER is required');
+        if (isProd && (!process.env.DB_PASSWORD || isPlaceholder(process.env.DB_PASSWORD))) {
+            errors.push('DB_PASSWORD must be set to a real value in production');
+        }
+    } else if (isProd && isPlaceholder(process.env.DATABASE_URL)) {
+        errors.push('DATABASE_URL must be set to a real hosted Postgres URI in production');
     }
 
     // Client URL

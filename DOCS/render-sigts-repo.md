@@ -7,6 +7,9 @@
 **Vercel frontend:** https://sigts.vercel.app  
 **Vercel project ID:** `prj_lCk0OiiFYaqnkJAuPguFajCvD5Xf`
 
+**Supabase project:** https://hjculkldwjrsifvnaugy.supabase.co  
+**Supabase ref:** `hjculkldwjrsifvnaugy`
+
 ## Render environment variables
 
 Set in **Render → sigts-repo → Environment**:

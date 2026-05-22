@@ -8,6 +8,7 @@
     "dev": "nodemon src/server.js",
     "init-db": "node scripts/initDb.js",
     "deploy-prep": "node scripts/deploy-prep.js",
+    "supabase:url": "node scripts/supabase-url.js",
     "migrate": "node scripts/migrate.js",
     "migrate:up": "node scripts/migrate.js up",
     "migrate:down": "node scripts/migrate.js down",
