@@ -208,7 +208,7 @@ PUBLIC_APP_URL=https://your-vercel-frontend.vercel.app
 1. Connect the repo — root `vercel.json` is already frontend-only.
 2. **Build Command**: `npm run build:frontend` (or `npm run predev --workspace=frontend`)
 3. **Output Directory**: `frontend/public`
-4. Environment:
+4. Environment. Vercel injects these into `process.env`; `frontend/scripts/generateRuntimeConfig.js` writes them into `frontend/public/runtime-config.js` during the build:
 
 ```env
 NODE_ENV=production
@@ -222,3 +222,4 @@ DEFAULT_LANGUAGE=en
 
 - Frontend: `https://your-app.vercel.app/`
 - API health: `https://sigts-repo.onrender.com/api/health`
+- Browser console on Vercel: `window.__SIGTS_API_BASE__` should equal the Render `/api` URL.

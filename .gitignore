@@ -112,3 +112,4 @@ legacy/
 # Scripts (if not needed)
 scripts/windows/*.bat
 scripts/windows/*.ps1
+.vercel
