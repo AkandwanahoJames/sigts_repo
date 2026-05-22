@@ -33,8 +33,12 @@ After saving, trigger **Manual Deploy**. First request after idle may take 30–
 | `PARK_NAME` | `Bwindi Impenetrable National Park` |
 | `DEFAULT_LANGUAGE` | `en` |
 
-Build command: `npm run build:frontend`  
+Build command: `npm run build --workspace=sigts-frontend`  
 Output directory: `frontend/public`
+
+**Vercel Root Directory:** leave empty (repo root), or set to `frontend`.  
+If it is `backend`, use the included `backend/vercel.json` (builds the static app from the monorepo root).  
+Do **not** use the Express preset — this deploy is static only.
 
 ## Local build pointing at Render
 

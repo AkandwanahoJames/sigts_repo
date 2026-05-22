@@ -5,10 +5,10 @@
   "main": "public/app.js",
   "scripts": {
     "predev": "node scripts/generateRuntimeConfig.js",
+    "build": "node scripts/generateRuntimeConfig.js",
     "dev": "node scripts/devServer.js",
     "prestart": "node scripts/generateRuntimeConfig.js",
-    "start": "node scripts/devServer.js",
-    "build": "echo Build: Copy files to dist && xcopy public dist /E /I /Y"
+    "start": "node scripts/devServer.js"
   },
   "dependencies": {
     "dexie": "^3.2.7",
