@@ -179,7 +179,8 @@ function isBwindiParkContextQuery(q) {
     if (/\b(kanungu|kisoro|kabale)\b/i.test(q)) return true;
     if (/\b(south-?western|southwestern)\s+uganda\b/i.test(q)) return true;
     if (/\bworld\s+heritage\b/i.test(q) && (/\b682\b/.test(q) || /\bbwindi\b/i.test(q))) return true;
-    if (/\balbertine\b/i.test(q) && /\b(forest|rift|gorilla|endemic)\b/i.test(q)) return true;
+    if (/\balbertine\b/i.test(q) && /\b(forest|rift|gorillas?|endemic)\b/i.test(q)) return true;
+    if (/\bgorillas?\b/i.test(q)) return true;
     if (/\b(gorilla\s+trek|gorilla\s+tracking|habituation\s+trek|gorilla\s+habituation)\b/i.test(q)) return true;
     if (/\b(primate\s+trek|forest\s+habituation|nature\s+walk)\b/i.test(q) && /\b(uganda|bwindi|forest)\b/i.test(q)) {
         return true;
@@ -188,7 +189,7 @@ function isBwindiParkContextQuery(q) {
     if (/\b(this\s+park|the\s+park)\b/i.test(q) && /\b(visit|trek|size|rules|animals|here|sigts)\b/i.test(q)) return true;
     if (/\bimpenetrable\s+forest\b/i.test(q)) return true;
     if (/\bwestern\s+uganda\b/i.test(q)) return true;
-    if (/\buganda\b/i.test(q) && /\b(forest|gorilla|trek|rainforest|primate|montane)\b/i.test(q)) return true;
+    if (/\buganda\b/i.test(q) && /\b(forest|gorillas?|trek|rainforest|primate|montane)\b/i.test(q)) return true;
     if (/\bsigts\b/i.test(q)) return true;
     return false;
 }
@@ -358,7 +359,7 @@ function buildRuleBasedAnswer(latestUserOnly, mergedThread, context = {}) {
         return buildSocialGreetingReply(locationName);
     }
 
-    if (/\bgorilla\b/.test(ql)) {
+    if (/\bgorillas?\b/.test(ql)) {
         return `Totally fair—gorillas are why most of us memorize “Bwindi” in the first place. Stay calm, whisper when guides whisper, skip flash forever, keep that ~7 m bubble, and let rangers reposition you if branches narrow the sightline.${locationName ? ` Looks like SIGTS loosely tags you near “${locationName}”—verify with your group’s ranger map.` : ''} Want etiquette for mud & gloves next, or how Culture stories sit alongside trekking briefings?`;
     }
     if (/\bsafety\b/.test(ql) || /\bsafe\b/.test(ql)) {
@@ -370,7 +371,7 @@ function buildRuleBasedAnswer(latestUserOnly, mergedThread, context = {}) {
     if (/\b(culture|cultural|batwa|bakiga)\b/.test(ql)) {
         return `Culture here isn’t garnish—it’s intertwined with stewardship of the ridges. Dive into SIGTS Culture cards for narrator-approved Batwa/Bakiga stories, then treat community visits like listening sessions: ask before recording, honor taboos spelled out inside each card, and defer to interpreters on compensation norms.\n\nCurious where cultural walks meet gorilla-sector logistics? Say the word.`;
     }
-    if (/\b(route|routes|map|direction)\b/.test(ql)) {
+    if (/\b(routes?|maps?|directions?)\b/.test(ql)) {
         return `Map tab is your campfire GPS inside SIGTS: gate labels, lodges, viewpoints, and ranger POIs—but paper park maps still win offline surprises.${locationName ? ` Rough pin: “${locationName}”; please double-check onsite.` : ''} Want sector-by-sector moods (Buhoma vs Rushaga energy) instead?`;
     }
 

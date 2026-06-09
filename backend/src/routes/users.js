@@ -96,8 +96,8 @@ router.get('/profile', authenticateJWT, async (req, res) => {
 // Update user profile
 // =====================================================
 router.put('/profile', authenticateJWT, rejectGuestAccounts, [
-    body('firstName').optional().trim().escape(),
-    body('lastName').optional().trim().escape(),
+    body('firstName').optional().trim(),
+    body('lastName').optional().trim(),
     body('phone').optional().trim(),
     body('nationality').optional().trim(),
     body('interests').optional().isArray(),

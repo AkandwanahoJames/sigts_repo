@@ -7496,6 +7496,22 @@ function openTourAssignmentModal({ mode, guides, routes }) {
     });
 }
 
+function describeTourAssignmentError(out, fallback) {
+    if (!out) return fallback;
+    if (Array.isArray(out.errors) && out.errors.length) {
+        const detail = out.errors
+            .map((e) => e?.msg || e?.message || (e?.param ? `Invalid ${e.param}` : ''))
+            .filter(Boolean)
+            .join('; ');
+        if (detail) return detail;
+    }
+    if (out.error) return out.error;
+    if (out.status === 503) return 'Tour scheduling is unavailable until database migrations are applied.';
+    if (out.status === 404) return 'Selected guide or route was not found (it may be inactive).';
+    if (out.status) return `${fallback} (HTTP ${out.status})`;
+    return fallback;
+}
+
 window.itOpsAssignSingleTourPrompt = async function () {
     if (!requireITManagerAccess('tour assignment operations')) return;
     const [guidesRes, routesRes] = await Promise.all([
@@ -7515,8 +7531,8 @@ window.itOpsAssignSingleTourPrompt = async function () {
         return;
     }
     const out = await API.createTourAssignment(payload);
-    if (out?.status >= 400 || out?.error) {
-        showToast(out?.error || 'Failed to assign tour.', 'danger');
+    if (!out || out.status >= 400 || out.error || (Array.isArray(out.errors) && out.errors.length)) {
+        showToast(describeTourAssignmentError(out, 'Failed to assign tour.'), 'danger');
         return;
     }
     showToast('Tour assigned to guide successfully.', 'success');
@@ -7545,8 +7561,8 @@ window.itOpsAssignWeeklyToursPrompt = async function () {
         return;
     }
     const out = await API.createWeeklyTourAssignments(payload);
-    if (out?.status >= 400 || out?.error) {
-        showToast(out?.error || 'Failed to create weekly assignments.', 'danger');
+    if (!out || out.status >= 400 || out.error || (Array.isArray(out.errors) && out.errors.length)) {
+        showToast(describeTourAssignmentError(out, 'Failed to create weekly assignments.'), 'danger');
         return;
     }
     showToast(`Weekly assignments created: ${out.created_count || 0}.`, 'success');
@@ -8362,10 +8378,10 @@ window.saveProfilePersonalFromPanel = async function () {
             if (localStorage.getItem('token')) localStorage.setItem('user', JSON.stringify(u));
             else sessionStorage.setItem('user', JSON.stringify(u));
         }
-        ['info', 'culture', 'dashboard', 'wildlife', 'saved'].forEach((v) => {
+        ['profile', 'info', 'culture', 'dashboard', 'wildlife', 'saved'].forEach((v) => {
             if (typeof invalidateSigtsViewCache === 'function') invalidateSigtsViewCache(v);
         });
-        if (['info', 'culture', 'wildlife'].includes(window.currentView)) {
+        if (['profile', 'info', 'culture', 'wildlife'].includes(window.currentView)) {
             await renderView(window.currentView, { updateHash: false, suppressAccessToast: true });
         }
     } catch (_) {
@@ -8386,6 +8402,7 @@ window.saveProfilePhotoUrl = async function () {
             return;
         }
         showToast('Image link saved.', 'success');
+        if (typeof invalidateSigtsViewCache === 'function') invalidateSigtsViewCache('profile');
         await renderView('profile', { updateHash: false, suppressAccessToast: true });
     } catch (_) {
         showToast('Could not save photo URL.', 'danger');
@@ -9055,10 +9072,10 @@ function renderAuthMergedScreen(activePanel = 'login') {
                 ` : `
                 <form class="auth-form" onsubmit="event.preventDefault(); handleRegistration();">
                     <div class="auth-grid">
-                        <label class="auth-field"><span class="auth-field-label">Full Name</span><span class="auth-input-shell">${icon('user', 'auth-input-icon')}<input type="text" id="regFullName" class="auth-input auth-input-with-icon" placeholder="Your full name"></span></label>
-                        <label class="auth-field"><span class="auth-field-label">Username</span><span class="auth-input-shell">${icon('user', 'auth-input-icon')}<input type="text" id="regUsername" class="auth-input auth-input-with-icon" placeholder="Choose a username"></span></label>
+                        <label class="auth-field"><span class="auth-field-label">Full Name</span><span class="auth-input-shell">${icon('user', 'auth-input-icon')}<input type="text" id="regFullName" class="auth-input auth-input-with-icon" placeholder="Your full name" autocomplete="name" autocapitalize="words" autocorrect="off" spellcheck="false" lang="en"></span></label>
+                        <label class="auth-field"><span class="auth-field-label">Username</span><span class="auth-input-shell">${icon('user', 'auth-input-icon')}<input type="text" id="regUsername" class="auth-input auth-input-with-icon" placeholder="Choose a username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false"></span></label>
                     </div>
-                    <label class="auth-field"><span class="auth-field-label">Email</span><span class="auth-input-shell">${icon('mail', 'auth-input-icon')}<input type="email" id="regEmail" class="auth-input auth-input-with-icon" placeholder="name@example.com"></span></label>
+                    <label class="auth-field"><span class="auth-field-label">Email</span><span class="auth-input-shell">${icon('mail', 'auth-input-icon')}<input type="email" id="regEmail" class="auth-input auth-input-with-icon" placeholder="name@example.com" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email"></span></label>
                     <label class="auth-field"><span class="auth-field-label">Phone</span><span class="auth-input-shell">${icon('phone', 'auth-input-icon')}<input type="tel" id="regPhone" class="auth-input auth-input-with-icon" placeholder="Include country code" autocomplete="tel"></span></label>
                     ${renderAuthPasswordField('regPassword', 'Password', 'Create a password', 'new-password')}
                     ${renderAuthPasswordField('regConfirmPassword', 'Confirm Password', 'Repeat your password', 'new-password')}
