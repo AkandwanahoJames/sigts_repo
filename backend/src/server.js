@@ -27,6 +27,7 @@ loadEnv();
 const { pool, connectDB } = require('./config/database');
 const { initializeRedis, getRedisClient } = require('./config/redis');
 const { logger } = require('./utils/logger');
+const { getEmailProvider, isEmailConfigured } = require('./services/emailService');
 const { generateToken, verifyToken, hashPassword, verifyPassword } = require('./config/auth');
 const { REQUIREMENTS, ensureSecurityConfiguration } = require('./config/requirements');
 ensureSecurityConfiguration();
@@ -183,7 +184,15 @@ app.get('/api/health', async (req, res) => {
         uptime: process.uptime(),
         environment: process.env.NODE_ENV || 'development',
         database: { status: dbStatus, latency_ms: dbLatency },
-        memory: { heap_used_mb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) }
+        memory: { heap_used_mb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) },
+        notifications: {
+            email: isEmailConfigured() ? getEmailProvider() : 'not_configured',
+            sms: Boolean(
+                process.env.TWILIO_ACCOUNT_SID
+                && process.env.TWILIO_AUTH_TOKEN
+                && process.env.TWILIO_FROM_NUMBER
+            ) ? 'twilio' : 'not_configured'
+        }
     });
 });
 

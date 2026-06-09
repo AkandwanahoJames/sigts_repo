@@ -500,6 +500,9 @@ class AuthManager {
         AppState.currentUser = this.user;
         AppState.authToken = this.token;
         this.failedAttempts = 0;
+        if (typeof Content?.pullBookmarksFromServer === 'function') {
+            Content.pullBookmarksFromServer().catch(() => {});
+        }
         return { success: true, user: this.user };
     }
 
@@ -866,6 +869,19 @@ class GeofenceManager {
                     return;
                 }
                 applyOperationalAlerts(result);
+                if (Array.isArray(result?.proximity_alerts) && result.proximity_alerts.length) {
+                    for (const p of result.proximity_alerts) {
+                        if (typeof window.showToast === 'function') {
+                            window.showToast(`Nearby: ${p.name} (${p.distance_m} m)`, 'info');
+                        }
+                        if (typeof window.maybeSigtsBrowserNotify === 'function') {
+                            window.maybeSigtsBrowserNotify('SIGTS — nearby POI', `${p.name} (~${p.distance_m} m)`);
+                        }
+                    }
+                    if (typeof window.refreshUserNotificationBadge === 'function') {
+                        window.refreshUserNotificationBadge().catch(() => {});
+                    }
+                }
             });
         }
         this.checkProximityAlerts(latitude, longitude);
@@ -922,6 +938,12 @@ class GeofenceManager {
             if (now - last < 600000) return;
             this.proximityCooldown.set(key, now);
             this.showAlert(`Nearby: ${poi.name} (${Math.round(distance)} m)`, 'info');
+            if (typeof window.maybeSigtsBrowserNotify === 'function') {
+                window.maybeSigtsBrowserNotify('SIGTS — nearby POI', `${poi.name} (~${Math.round(distance)} m)`);
+            }
+            if (typeof window.refreshUserNotificationBadge === 'function') {
+                window.refreshUserNotificationBadge().catch(() => {});
+            }
         });
     }
 
@@ -1000,7 +1022,7 @@ class ContentManager {
         }
     }
 
-    persistBookmarks(list) {
+    persistBookmarks(list, opts = {}) {
         const rows = Array.isArray(list) ? list : this.bookmarks;
         this.bookmarks = rows;
         try {
@@ -1012,6 +1034,34 @@ class ContentManager {
             if (typeof window !== 'undefined' && typeof window.invalidateSigtsViewCache === 'function') {
                 window.invalidateSigtsViewCache('dashboard');
                 window.invalidateSigtsViewCache('saved');
+            }
+        } catch (_) {
+            /**/
+        }
+        if (!opts.skipSync) {
+            this.scheduleBookmarkServerSync();
+        }
+    }
+
+    scheduleBookmarkServerSync() {
+        if (!this.useAPI || typeof API?.syncUserBookmarks !== 'function') return;
+        if (this._bookmarkSyncTimer) clearTimeout(this._bookmarkSyncTimer);
+        this._bookmarkSyncTimer = setTimeout(() => {
+            API.syncUserBookmarks(this.bookmarks).catch(() => {});
+        }, 800);
+    }
+
+    async pullBookmarksFromServer() {
+        if (!this.useAPI || typeof API?.getUserBookmarks !== 'function') return;
+        try {
+            const remote = await API.getUserBookmarks();
+            if (!remote || !Array.isArray(remote)) return;
+            if (!remote.length && this.bookmarks.length) {
+                await API.syncUserBookmarks(this.bookmarks);
+                return;
+            }
+            if (remote.length) {
+                this.persistBookmarks(remote, { skipSync: true });
             }
         } catch (_) {
             /**/

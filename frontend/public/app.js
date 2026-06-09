@@ -251,10 +251,15 @@
             }
 
             var requestedView = window.location.hash.replace('#', '').trim();
+            var hashQuery = requestedView.includes('?') ? requestedView.split('?').slice(1).join('?') : '';
+            var hashView = requestedView.includes('?') ? requestedView.split('?')[0] : requestedView;
             var isResetPasswordPath = window.location.pathname.replace(/\/+$/, '') === '/reset-password';
             var isVerifyEmailPath = window.location.pathname.replace(/\/+$/, '') === '/verify-email';
-            if (isResetPasswordPath) {
-                await renderView('reset_password', { updateHash: false });
+            if (isResetPasswordPath || hashView === 'reset_password') {
+                var resetToken = new URLSearchParams(window.location.search).get('token')
+                    || new URLSearchParams(hashQuery).get('token')
+                    || '';
+                await renderView('reset_password', { updateHash: false, resetToken: resetToken });
                 window.__SIGTS_BOOT_OK = true;
                 return;
             }
@@ -272,6 +277,9 @@
             if (Auth.isAuthenticated()) {
                 if (typeof Auth.syncRoleFromProfile === 'function') {
                     Auth.syncRoleFromProfile().catch(function () {});
+                }
+                if (typeof Content?.pullBookmarksFromServer === 'function') {
+                    Content.pullBookmarksFromServer().catch(function () {});
                 }
                 await renderView(requestedView || getLandingViewForUser(Auth.getCurrentUser()), { updateHash: true });
             } else {

@@ -103,7 +103,12 @@ JWT_ACCESS_TTL=24h
 JWT_REFRESH_TTL=7d
 SESSION_IDLE_TIMEOUT_MINUTES=30
 
-SMTP_HOST=smtp.gmail.com
+# Email — pick SendGrid (Twilio) OR SMTP (Brevo/Gmail). SendGrid is tried first.
+SENDGRID_API_KEY=<sendgrid-api-key-SG...>
+SENDGRID_FROM=noreply@your-verified-domain.com
+SENDGRID_FROM_NAME=Bwindi SIGTS
+
+SMTP_HOST=smtp-relay.brevo.com
 SMTP_PORT=587
 SMTP_USER=<smtp-user>
 SMTP_PASSWORD=<smtp-password-or-app-password>
@@ -171,6 +176,22 @@ MAP_TILES_URL=/tiles
 PARK_NAME=Bwindi Impenetrable National Park
 DEFAULT_LANGUAGE=en
 ```
+
+Add email delivery (required for registration welcome, password reset, and IT feedback replies):
+
+```env
+PUBLIC_APP_URL=https://your-vercel-app.vercel.app
+SENDGRID_API_KEY=SG.xxxx
+SENDGRID_FROM=noreply@your-verified-domain.com
+# Or Brevo/SMTP instead:
+# SMTP_HOST=smtp-relay.brevo.com
+# SMTP_USER=...
+# SMTP_PASS=...
+```
+
+Confirm delivery is wired: `GET /api/health` should show `"notifications": { "email": "sendgrid" | "smtp", ... }`.
+
+The **Twilio Cursor plugin** helps the AI write integration code; it does **not** inject credentials into Vercel. You must add `SENDGRID_API_KEY` (or SMTP vars) and Twilio SMS vars in the Vercel project **Settings → Environment Variables**.
 
 The app should respond at:
 

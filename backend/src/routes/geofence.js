@@ -5,6 +5,7 @@ const { pool } = require('../config/database');
 const { authenticateJWT } = require('../middleware/auth');
 const { readCoordinates, isInsidePark } = require('../middleware/parkGeofence');
 const { requireConsent } = require('../middleware/consent');
+const { checkPoiProximityAndNotify } = require('../services/proximityAlerts');
 
 async function evaluateMandatorySafeZones(userId, lat, lng, insidePark) {
     const alerts = [];
@@ -123,7 +124,7 @@ router.post('/location-update', authenticateJWT, requireConsent('location_tracki
 
         await pool.query(
             `UPDATE users
-             SET last_lat = $1, last_lng = $2
+             SET last_lat = $1, last_lng = $2, last_location_time = CURRENT_TIMESTAMP
              WHERE user_id = $3`,
             [coordinates.lat, coordinates.lng, userId]
         );
@@ -149,6 +150,7 @@ router.post('/location-update', authenticateJWT, requireConsent('location_tracki
 
         let operationalAlerts = [];
         let violationRecorded = false;
+        let proximityAlerts = [];
         try {
             const sz = await evaluateMandatorySafeZones(userId, coordinates.lat, coordinates.lng, insidePark);
             operationalAlerts = sz.alerts || [];
@@ -157,12 +159,21 @@ router.post('/location-update', authenticateJWT, requireConsent('location_tracki
             console.warn('Safe zone evaluation skipped:', szErr.message);
         }
 
+        if (insidePark) {
+            try {
+                proximityAlerts = await checkPoiProximityAndNotify(userId, coordinates.lat, coordinates.lng);
+            } catch (proxErr) {
+                console.warn('Proximity notification skipped:', proxErr.message);
+            }
+        }
+
         return res.json({
             success: true,
             insidePark,
             event: previousInside !== undefined && previousInside !== insidePark ? (insidePark ? 'entry' : 'exit') : null,
             operational_alerts: operationalAlerts,
-            safe_zone_violation_logged: violationRecorded
+            safe_zone_violation_logged: violationRecorded,
+            proximity_alerts: proximityAlerts
         });
     } catch (error) {
         console.error('Location update error:', error);

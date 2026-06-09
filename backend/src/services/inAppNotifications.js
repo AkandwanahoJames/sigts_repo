@@ -2,6 +2,8 @@
  * In-app notifications (PostgreSQL `notifications` table — §4.4.3 tourist alerts).
  */
 const { pool } = require('../config/database');
+const { sendActivityNotificationEmail } = require('./emailService');
+const { logger } = require('../utils/logger');
 
 async function createInAppNotification(userId, { type = 'system', title, message, data = null, expiresAt = null }) {
     if (!userId || !title || !message) return null;
@@ -22,20 +24,32 @@ async function createInAppNotification(userId, { type = 'system', title, message
 async function notifyFeedbackResponse(feedbackId, responseText) {
     try {
         const row = await pool.query(
-            `SELECT f.feedback_id, t.user_id
+            `SELECT f.feedback_id, t.user_id, u.email, u.username
              FROM feedback f
              JOIN tourists t ON t.tourist_id = f.tourist_id
+             JOIN users u ON u.user_id = t.user_id
              WHERE f.feedback_id = $1`,
             [feedbackId]
         );
-        const userId = row.rows[0]?.user_id;
+        const { user_id: userId, email, username } = row.rows[0] || {};
         if (!userId) return;
+
+        const preview = String(responseText).slice(0, 500);
         await createInAppNotification(userId, {
             type: 'system',
             title: 'SIGTS replied to your feedback',
-            message: String(responseText).slice(0, 500),
+            message: preview,
             data: { feedback_id: feedbackId, link_view: 'profile' }
         });
+
+        if (email) {
+            sendActivityNotificationEmail(
+                email,
+                username,
+                'SIGTS replied to your feedback',
+                preview
+            ).catch((err) => logger.warn('Feedback response email failed:', err.message));
+        }
     } catch (err) {
         console.warn('notifyFeedbackResponse failed:', err.message);
     }

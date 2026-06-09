@@ -752,6 +752,67 @@ class APIService {
         });
     }
 
+    async updateAdminLocation(locationId, payload) {
+        const id = encodeURIComponent(String(locationId || '').trim());
+        return this.request(`/admin/locations/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async deleteAdminLocation(locationId) {
+        const id = encodeURIComponent(String(locationId || '').trim());
+        return this.request(`/admin/locations/${id}`, { method: 'DELETE' });
+    }
+
+    async getAdminFaqs() {
+        const result = await this.request('/admin/faqs');
+        return Array.isArray(result?.faqs) ? result.faqs : [];
+    }
+
+    async createAdminFaq(payload) {
+        return this.request('/admin/faqs', { method: 'POST', body: JSON.stringify(payload) });
+    }
+
+    async updateAdminFaq(faqId, payload) {
+        return this.request(`/admin/faqs/${encodeURIComponent(faqId)}`, {
+            method: 'PUT',
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async getAdminSafetyTips() {
+        const result = await this.request('/admin/safety-tips');
+        return Array.isArray(result?.tips) ? result.tips : [];
+    }
+
+    async createAdminSafetyTip(payload) {
+        return this.request('/admin/safety-tips', { method: 'POST', body: JSON.stringify(payload) });
+    }
+
+    async updateAdminSafetyTip(tipId, payload) {
+        return this.request(`/admin/safety-tips/${encodeURIComponent(tipId)}`, {
+            method: 'PUT',
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async getAdminAlertRules() {
+        const result = await this.request('/admin/alert-rules');
+        return Array.isArray(result?.rules) ? result.rules : [];
+    }
+
+    async createAdminAlertRule(payload) {
+        return this.request('/admin/alert-rules', { method: 'POST', body: JSON.stringify(payload) });
+    }
+
+    async updateAdminAlertRule(ruleId, payload) {
+        return this.request(`/admin/alert-rules/${encodeURIComponent(ruleId)}`, {
+            method: 'PUT',
+            body: JSON.stringify(payload)
+        });
+    }
+
     /** Wildlife theme tiles: guide session scripts (migration 009 + seed 004). */
     async getWildlifeTourThemes() {
         const result = await this.request('/wildlife-tour-themes');

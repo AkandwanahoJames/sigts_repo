@@ -285,6 +285,104 @@ h2, h3 { font-weight: 600; }
     border: 2px solid var(--surface-1);
 }
 
+.notif-wrap {
+    position: relative;
+}
+
+.user-notif-panel {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: min(320px, calc(100vw - 24px));
+    max-height: min(420px, 60vh);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-1);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+    z-index: 1200;
+}
+
+.user-notif-panel.hidden {
+    display: none;
+}
+
+.user-notif-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+}
+
+.user-notif-list {
+    overflow: auto;
+    padding: 6px;
+}
+
+.user-notif-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 10px;
+    margin-bottom: 4px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    cursor: pointer;
+}
+
+.user-notif-item.is-unread {
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.user-notif-item strong {
+    display: block;
+    font-size: 0.88rem;
+    margin-bottom: 4px;
+}
+
+.user-notif-item span {
+    display: block;
+    font-size: 0.82rem;
+    color: var(--text-muted, #5c6658);
+    line-height: 1.35;
+}
+
+.user-notif-item small {
+    display: block;
+    margin-top: 6px;
+    opacity: 0.72;
+    font-size: 0.72rem;
+}
+
+.user-notif-empty,
+.user-notif-loading {
+    padding: 16px;
+    text-align: center;
+    color: var(--text-muted, #5c6658);
+    font-size: 0.88rem;
+}
+
+.guide-guest-live-map {
+    height: 220px;
+    min-height: 180px;
+    margin: 0 18px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--line);
+}
+
+.it-user-maint-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    justify-content: flex-end;
+}
+
 .header-profile {
     background: var(--surface-1);
     border: 1px solid var(--line);

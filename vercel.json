@@ -11,6 +11,9 @@
   },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
-    { "source": "/health", "destination": "/api" }
+    { "source": "/health", "destination": "/api" },
+    { "source": "/reset-password", "destination": "/index.html" },
+    { "source": "/verify-email", "destination": "/index.html" },
+    { "source": "/((?!api/|js/|css/|icons/|tiles/|images/|fonts/|.*\\..*).*)", "destination": "/index.html" }
   ]
 }

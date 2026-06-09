@@ -12,6 +12,14 @@ function smtpFromAddress() {
     return process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@bwindi.local';
 }
 
+function sendGridFromAddress() {
+    return process.env.SENDGRID_FROM || process.env.SMTP_FROM || smtpFromAddress();
+}
+
+function sendGridFromName() {
+    return process.env.SENDGRID_FROM_NAME || 'Bwindi SIGTS';
+}
+
 function isPlaceholderSecret(value) {
     if (!value) return true;
     const lower = String(value).toLowerCase();
@@ -21,20 +29,38 @@ function isPlaceholderSecret(value) {
         'changeme',
         'replace-me',
         'placeholder',
-        'your_secure_password'
+        'your_secure_password',
+        'your-app-password',
+        'your-email@gmail.com'
     ].some((frag) => lower.includes(frag));
 }
 
-function isEmailConfigured() {
+function isSendGridConfigured() {
+    const key = String(process.env.SENDGRID_API_KEY || '').trim();
+    return key.startsWith('SG.') && key.length > 20 && !isPlaceholderSecret(key);
+}
+
+function isSmtpConfigured() {
     const pass = smtpPassword();
-    return Boolean(process.env.SMTP_USER && pass && !isPlaceholderSecret(pass));
+    const user = String(process.env.SMTP_USER || '').trim();
+    return Boolean(user && pass && !isPlaceholderSecret(pass) && !isPlaceholderSecret(user));
+}
+
+function isEmailConfigured() {
+    return isSendGridConfigured() || isSmtpConfigured();
+}
+
+function getEmailProvider() {
+    if (isSendGridConfigured()) return 'sendgrid';
+    if (isSmtpConfigured()) return 'smtp';
+    return 'none';
 }
 
 let transporter = null;
 let transporterVerified = false;
 
 function getTransporter() {
-    if (!isEmailConfigured()) return null;
+    if (!isSmtpConfigured()) return null;
     if (!transporter) {
         const port = parseInt(process.env.SMTP_PORT, 10) || 587;
         const explicitSecure = String(process.env.SMTP_SECURE || '').trim().toLowerCase();
@@ -54,15 +80,61 @@ function getTransporter() {
     return transporter;
 }
 
-async function sendMail(mailOptions) {
-    const transport = getTransporter();
-    if (!transport) {
-        logger.warn(
-            `Email not sent (SMTP not configured): ${mailOptions.subject} → ${mailOptions.to}`
-        );
+async function sendMailViaSendGrid(mailOptions) {
+    const fromEmail = sendGridFromAddress();
+    const payload = {
+        personalizations: [{ to: [{ email: mailOptions.to }] }],
+        from: { email: fromEmail, name: sendGridFromName() },
+        subject: mailOptions.subject,
+        content: [
+            {
+                type: 'text/html',
+                value: mailOptions.html || mailOptions.text || ''
+            }
+        ]
+    };
+    if (mailOptions.replyTo) {
+        payload.reply_to = { email: mailOptions.replyTo };
+    }
+
+    try {
+        const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(20000)
+        });
+        if (res.status >= 200 && res.status < 300) {
+            return { sent: true, provider: 'sendgrid' };
+        }
+        const body = await res.text().catch(() => '');
+        logger.warn(`SendGrid mail failed (${res.status}): ${body.slice(0, 300)}`);
         return {
             sent: false,
-            reason: 'smtp_not_configured'
+            reason: `sendgrid_http_${res.status}`,
+            provider: 'sendgrid',
+            detail: body.slice(0, 200)
+        };
+    } catch (error) {
+        logger.warn(`SendGrid request error: ${error.message}`);
+        return {
+            sent: false,
+            reason: error.message,
+            provider: 'sendgrid'
+        };
+    }
+}
+
+async function sendMailViaSmtp(mailOptions) {
+    const transport = getTransporter();
+    if (!transport) {
+        return {
+            sent: false,
+            reason: 'smtp_not_configured',
+            provider: 'smtp'
         };
     }
     if (!transporterVerified) {
@@ -70,26 +142,55 @@ async function sendMail(mailOptions) {
             await transport.verify();
             transporterVerified = true;
         } catch (verifyError) {
-            logger.warn(`SMTP verify failed (${process.env.SMTP_HOST || 'smtp.gmail.com'}:${process.env.SMTP_PORT || 587}): ${verifyError.message}`);
+            logger.warn(
+                `SMTP verify failed (${process.env.SMTP_HOST || 'smtp.gmail.com'}:${process.env.SMTP_PORT || 587}): ${verifyError.message}`
+            );
             return {
                 sent: false,
-                reason: 'smtp_verify_failed'
+                reason: 'smtp_verify_failed',
+                provider: 'smtp',
+                detail: verifyError.message
             };
         }
     }
-    const from = mailOptions.from || `"Bwindi SIGTS" <${smtpFromAddress()}>`;
+    const from = mailOptions.from || `"${sendGridFromName()}" <${smtpFromAddress()}>`;
     try {
         await transport.sendMail({ ...mailOptions, from });
-        return {
-            sent: true
-        };
+        return { sent: true, provider: 'smtp' };
     } catch (error) {
-        logger.warn(`Email not sent (${mailOptions.subject} → ${mailOptions.to}): ${error.message}`);
+        logger.warn(`SMTP send failed (${mailOptions.subject} → ${mailOptions.to}): ${error.message}`);
         return {
             sent: false,
-            reason: error.message
+            reason: error.message,
+            provider: 'smtp'
         };
     }
+}
+
+async function sendMail(mailOptions) {
+    if (!mailOptions?.to) {
+        return { sent: false, reason: 'missing_recipient' };
+    }
+
+    if (isSendGridConfigured()) {
+        const sg = await sendMailViaSendGrid(mailOptions);
+        if (sg.sent) return sg;
+        logger.warn(`SendGrid failed (${sg.reason}); trying SMTP fallback if configured.`);
+    }
+
+    if (isSmtpConfigured()) {
+        return sendMailViaSmtp(mailOptions);
+    }
+
+    logger.warn(
+        `Email not sent (no provider): ${mailOptions.subject} → ${mailOptions.to}. ` +
+        'Set SENDGRID_API_KEY + SENDGRID_FROM (Twilio SendGrid) or SMTP_USER + SMTP_PASS (e.g. Brevo).'
+    );
+    return {
+        sent: false,
+        reason: 'email_not_configured',
+        provider: 'none'
+    };
 }
 
 /**
@@ -124,7 +225,7 @@ async function sendVerificationEmail(email, userId, clientOrigin) {
     });
 
     if (result.sent) {
-        logger.info(`Verification email sent to ${email}`);
+        logger.info(`Verification email sent to ${email} via ${result.provider}`);
     }
     return result;
 }
@@ -134,7 +235,7 @@ async function sendVerificationEmail(email, userId, clientOrigin) {
  */
 async function sendPasswordResetEmail(email, token, username) {
     const base = resolvePublicAppBaseUrl();
-    const resetUrl = `${base}/reset-password?token=${token}`;
+    const resetUrl = `${base}/#reset_password?token=${encodeURIComponent(token)}`;
 
     const result = await sendMail({
         to: email,
@@ -142,9 +243,10 @@ async function sendPasswordResetEmail(email, token, username) {
         html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h1 style="color: #2E7D32;">Password Reset Request</h1>
-                <p>Hello ${username},</p>
+                <p>Hello ${username || 'there'},</p>
                 <p>We received a request to reset your password. Click the link below to create a new password:</p>
                 <a href="${resetUrl}" style="background-color: #2E7D32; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Reset Password</a>
+                <p>Or copy this link: ${resetUrl}</p>
                 <p>This link expires in 15 minutes.</p>
                 <p>If you didn't request this, please ignore this email.</p>
                 <hr>
@@ -154,7 +256,7 @@ async function sendPasswordResetEmail(email, token, username) {
     });
 
     if (result.sent) {
-        logger.info(`Password reset email sent to ${email}`);
+        logger.info(`Password reset email sent to ${email} via ${result.provider}`);
     }
     return result;
 }
@@ -182,7 +284,7 @@ async function sendRegistrationWelcomeEmail(email, username, clientOrigin) {
         `
     });
     if (result.sent) {
-        logger.info(`Registration welcome email sent to ${email}`);
+        logger.info(`Registration welcome email sent to ${email} via ${result.provider}`);
     }
     return result;
 }
@@ -209,7 +311,7 @@ async function sendActivityNotificationEmail(email, username, activityTitle, act
     });
 
     if (result.sent) {
-        logger.info(`Activity email sent to ${email}: ${activityTitle}`);
+        logger.info(`Activity email sent to ${email} via ${result.provider}: ${activityTitle}`);
     }
     return result;
 }
@@ -219,5 +321,9 @@ module.exports = {
     sendPasswordResetEmail,
     sendRegistrationWelcomeEmail,
     sendActivityNotificationEmail,
-    isEmailConfigured
+    isEmailConfigured,
+    isSendGridConfigured,
+    isSmtpConfigured,
+    getEmailProvider,
+    sendMail
 };

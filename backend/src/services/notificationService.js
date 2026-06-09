@@ -39,7 +39,7 @@ async function sendSmsMessage(phone, body) {
 
     if (!hasTwilio) {
         if (process.env.NODE_ENV !== 'production') {
-            logger.info(`SMS stub (registration): to=${to} — ${body.slice(0, 120)}`);
+            logger.info(`SMS stub: to=${to} — ${body.slice(0, 120)}`);
         }
         return { sent: false, reason: 'sms_provider_not_configured', to };
     }
@@ -53,12 +53,23 @@ async function sendSmsMessage(phone, body) {
             from: process.env.TWILIO_FROM_NUMBER,
             to
         });
-        logger.info(`Registration SMS sent to ${to}`);
+        logger.info(`SMS sent to ${to}`);
         return { sent: true, to };
     } catch (err) {
-        logger.warn('Registration SMS failed', err.message);
+        logger.warn('SMS failed', err.message);
         return { sent: false, reason: err.message, to };
     }
+}
+
+/**
+ * Password reset link via SMS when email delivery fails or as a backup channel.
+ */
+async function sendPasswordResetSms(phone, resetUrl, username) {
+    const safeName = username || 'SIGTS user';
+    const body =
+        `Bwindi SIGTS password reset for ${safeName}. Link (15 min): ${resetUrl} ` +
+        'If you did not request this, ignore this message.';
+    return sendSmsMessage(phone, body);
 }
 
 /**
@@ -104,7 +115,7 @@ async function notifyUserRegistered({ email, username, phone, userId }) {
 
     if (!channels.email && !channels.sms && !isEmailConfigured()) {
         logger.warn(
-            'Registration notifications not delivered: configure SMTP_USER/SMTP_PASS or Twilio for email/SMS.'
+            'Registration notifications not delivered: configure SENDGRID_API_KEY + SENDGRID_FROM, SMTP_USER/SMTP_PASS, or Twilio SMS.'
         );
     }
 
@@ -115,5 +126,6 @@ module.exports = {
     notifyUserRegistered,
     normalizePhoneE164,
     sendSmsMessage,
+    sendPasswordResetSms,
     clientAppOrigin
 };

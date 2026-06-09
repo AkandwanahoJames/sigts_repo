@@ -10,7 +10,7 @@ const { authenticateJWT } = require('../middleware/auth');
 const { logger } = require('../utils/logger');
 const { audit } = require('../utils/audit');
 const { sendPasswordResetEmail, sendActivityNotificationEmail } = require('../services/emailService');
-const { notifyUserRegistered } = require('../services/notificationService');
+const { notifyUserRegistered, sendPasswordResetSms } = require('../services/notificationService');
 const refreshTokenService = require('../services/refreshTokenService');
 const {
     normalizeUsername,
@@ -566,7 +566,7 @@ router.post('/forgot-password', [
             );
 
             const base = resolvePublicAppBaseUrl();
-            const resetUrl = `${base}/reset-password?token=${rawToken}`;
+            const resetUrl = `${base}/#reset_password?token=${encodeURIComponent(rawToken)}`;
             const emailSent = await sendPasswordResetEmail(user.email, rawToken, user.username);
             sendActivityNotificationEmail(
                 user.email,
@@ -575,13 +575,32 @@ router.post('/forgot-password', [
                 'We received a password reset request for your account. If this was not you, secure your account immediately.'
             ).catch((err) => logger.error('Password-reset-request activity email failed:', err.message));
 
-            if (!emailSent?.sent && process.env.NODE_ENV !== 'production') {
-                logger.info(`Password reset (dev, email not sent): ${resetUrl}`);
-                return res.json({
-                    success: true,
-                    message: 'Password reset link created. Email is not configured in this environment.',
-                    devResetUrl: resetUrl
-                });
+            let smsSent = false;
+            if (!emailSent?.sent) {
+                const phoneRow = await pool.query(
+                    'SELECT phone FROM users WHERE user_id = $1 LIMIT 1',
+                    [user.user_id]
+                );
+                const phone = phoneRow.rows[0]?.phone;
+                if (phone) {
+                    const smsResult = await sendPasswordResetSms(phone, resetUrl, user.username);
+                    smsSent = Boolean(smsResult?.sent);
+                }
+            }
+
+            if (!emailSent?.sent && !smsSent) {
+                logger.error(
+                    `Password reset not delivered for ${user.email}: email=${emailSent?.reason || 'failed'}`
+                );
+                if (process.env.NODE_ENV !== 'production') {
+                    logger.info(`Password reset (dev fallback): ${resetUrl}`);
+                    return res.json({
+                        success: true,
+                        message: 'Password reset link created. Email/SMS not configured in this environment.',
+                        devResetUrl: resetUrl,
+                        delivery: { email: emailSent, sms: smsSent }
+                    });
+                }
             }
         }
 

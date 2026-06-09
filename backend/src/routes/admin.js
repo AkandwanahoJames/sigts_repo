@@ -17,6 +17,7 @@ const { promisify } = require('util');
 const path = require('path');
 const fs = require('fs');
 const execFileAsync = promisify(execFile);
+const { getEmailProvider, isEmailConfigured } = require('../services/emailService');
 
 // IT operations desk: IT managers and system admins (user_type admin)
 router.use(authenticateJWT, authorize('it_manager', 'admin'));
@@ -874,6 +875,12 @@ router.get('/system-health', async (req, res) => {
             syncService: Number(syncQueue.rows[0]?.pending || 0) >= 0 ? 'running' : 'degraded',
             geolocation: Number(geofencePulse.rows[0]?.updates_last_15m || 0) > 0 ? 'active' : 'idle',
             feedbackIngest: Number(feedbackPulse.rows[0]?.feedback_last_24h || 0) >= 0 ? 'active' : 'idle',
+            emailDelivery: isEmailConfigured() ? getEmailProvider() : 'not_configured',
+            smsDelivery: Boolean(
+                process.env.TWILIO_ACCOUNT_SID
+                && process.env.TWILIO_AUTH_TOKEN
+                && process.env.TWILIO_FROM_NUMBER
+            ) ? 'twilio' : 'not_configured',
             checks: {
                 db_time: dbResult.rows[0]?.now || null,
                 pending_sync_items: Number(syncQueue.rows[0]?.pending || 0),
@@ -1271,6 +1278,185 @@ router.put('/safe-zone-violations/:id/ack', async (req, res) => {
         if (error.code === '42P01') return res.status(503).json({ error: 'Migration 014 not applied.' });
         console.error('ack safe zone violation', error);
         return res.status(500).json({ error: 'Failed to acknowledge violation' });
+    }
+});
+
+// =====================================================
+// CMS — FAQs & safety tips (IT manager content management)
+// =====================================================
+async function defaultParkIdForAdmin() {
+    const park = await pool.query('SELECT park_id FROM parks ORDER BY name ASC LIMIT 1');
+    return park.rows[0]?.park_id || null;
+}
+
+router.get('/faqs', async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT faq_id, question_en, question_local, answer_en, answer_local, category, sort_order, is_published, helpful_count
+             FROM faqs ORDER BY sort_order ASC, question_en ASC LIMIT 200`
+        );
+        return res.json({ faqs: result.rows });
+    } catch (error) {
+        console.error('admin list faqs', error);
+        return res.status(500).json({ error: 'Failed to list FAQs' });
+    }
+});
+
+router.post('/faqs', [
+    body('question_en').isString().trim().isLength({ min: 3, max: 2000 }),
+    body('answer_en').isString().trim().isLength({ min: 3, max: 8000 }),
+    body('question_local').optional().isString().isLength({ max: 2000 }),
+    body('answer_local').optional().isString().isLength({ max: 8000 }),
+    body('category').optional().isString().isLength({ max: 50 }),
+    body('sort_order').optional().isInt({ min: 0, max: 9999 })
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    try {
+        const parkId = await defaultParkIdForAdmin();
+        if (!parkId) return res.status(400).json({ error: 'No park configured' });
+        const ins = await pool.query(
+            `INSERT INTO faqs (question_en, question_local, answer_en, answer_local, category, sort_order, park_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
+             RETURNING faq_id, question_en, category`,
+            [
+                req.body.question_en.trim(),
+                req.body.question_local || null,
+                req.body.answer_en.trim(),
+                req.body.answer_local || null,
+                req.body.category || 'general',
+                Number(req.body.sort_order) || 0,
+                parkId
+            ]
+        );
+        await audit(req, { action: 'faq.create', table_name: 'faqs', record_id: ins.rows[0].faq_id, new_value: ins.rows[0] });
+        return res.status(201).json({ success: true, faq: ins.rows[0] });
+    } catch (error) {
+        console.error('admin create faq', error);
+        return res.status(500).json({ error: 'Failed to create FAQ' });
+    }
+});
+
+router.put('/faqs/:id', [
+    body('question_en').optional().isString().trim().isLength({ min: 3, max: 2000 }),
+    body('answer_en').optional().isString().trim().isLength({ min: 3, max: 8000 }),
+    body('question_local').optional().isString(),
+    body('answer_local').optional().isString(),
+    body('category').optional().isString().isLength({ max: 50 }),
+    body('is_published').optional().isBoolean()
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    try {
+        const upd = await pool.query(
+            `UPDATE faqs SET
+                question_en = COALESCE($1, question_en),
+                question_local = COALESCE($2, question_local),
+                answer_en = COALESCE($3, answer_en),
+                answer_local = COALESCE($4, answer_local),
+                category = COALESCE($5, category),
+                is_published = COALESCE($6, is_published),
+                updated_at = CURRENT_TIMESTAMP
+             WHERE faq_id = $7
+             RETURNING faq_id, question_en, category, is_published`,
+            [
+                req.body.question_en || null,
+                req.body.question_local != null ? req.body.question_local : null,
+                req.body.answer_en || null,
+                req.body.answer_local != null ? req.body.answer_local : null,
+                req.body.category || null,
+                req.body.is_published != null ? req.body.is_published : null,
+                req.params.id
+            ]
+        );
+        if (!upd.rows.length) return res.status(404).json({ error: 'FAQ not found' });
+        await audit(req, { action: 'faq.update', table_name: 'faqs', record_id: req.params.id, new_value: upd.rows[0] });
+        return res.json({ success: true, faq: upd.rows[0] });
+    } catch (error) {
+        console.error('admin update faq', error);
+        return res.status(500).json({ error: 'Failed to update FAQ' });
+    }
+});
+
+router.get('/safety-tips', async (_req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT tip_id, title, content, category, priority, is_active
+             FROM safety_tips ORDER BY priority ASC, title ASC LIMIT 200`
+        );
+        return res.json({ tips: result.rows });
+    } catch (error) {
+        console.error('admin list safety tips', error);
+        return res.status(500).json({ error: 'Failed to list safety tips' });
+    }
+});
+
+router.post('/safety-tips', [
+    body('title').isString().trim().isLength({ min: 2, max: 200 }),
+    body('content').isString().trim().isLength({ min: 3, max: 4000 }),
+    body('category').optional().isString().isLength({ max: 50 }),
+    body('priority').optional().isInt({ min: 1, max: 9 })
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    try {
+        const parkId = await defaultParkIdForAdmin();
+        if (!parkId) return res.status(400).json({ error: 'No park configured' });
+        const ins = await pool.query(
+            `INSERT INTO safety_tips (title, content, category, priority, park_id)
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING tip_id, title, category`,
+            [
+                req.body.title.trim(),
+                req.body.content.trim(),
+                req.body.category || 'general',
+                Number(req.body.priority) || 5,
+                parkId
+            ]
+        );
+        await audit(req, { action: 'safety_tip.create', table_name: 'safety_tips', record_id: ins.rows[0].tip_id, new_value: ins.rows[0] });
+        return res.status(201).json({ success: true, tip: ins.rows[0] });
+    } catch (error) {
+        console.error('admin create safety tip', error);
+        return res.status(500).json({ error: 'Failed to create safety tip' });
+    }
+});
+
+router.put('/safety-tips/:id', [
+    body('title').optional().isString().trim().isLength({ min: 2, max: 200 }),
+    body('content').optional().isString().trim().isLength({ min: 3, max: 4000 }),
+    body('category').optional().isString().isLength({ max: 50 }),
+    body('priority').optional().isInt({ min: 1, max: 9 }),
+    body('is_active').optional().isBoolean()
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    try {
+        const upd = await pool.query(
+            `UPDATE safety_tips SET
+                title = COALESCE($1, title),
+                content = COALESCE($2, content),
+                category = COALESCE($3, category),
+                priority = COALESCE($4, priority),
+                is_active = COALESCE($5, is_active),
+                updated_at = CURRENT_TIMESTAMP
+             WHERE tip_id = $6
+             RETURNING tip_id, title, category, is_active`,
+            [
+                req.body.title || null,
+                req.body.content || null,
+                req.body.category || null,
+                req.body.priority != null ? Number(req.body.priority) : null,
+                req.body.is_active != null ? req.body.is_active : null,
+                req.params.id
+            ]
+        );
+        if (!upd.rows.length) return res.status(404).json({ error: 'Safety tip not found' });
+        await audit(req, { action: 'safety_tip.update', table_name: 'safety_tips', record_id: req.params.id, new_value: upd.rows[0] });
+        return res.json({ success: true, tip: upd.rows[0] });
+    } catch (error) {
+        console.error('admin update safety tip', error);
+        return res.status(500).json({ error: 'Failed to update safety tip' });
     }
 });
 
