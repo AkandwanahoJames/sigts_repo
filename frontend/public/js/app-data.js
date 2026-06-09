@@ -631,6 +631,127 @@ class APIService {
         return animals.find((a) => a.animal_id == id || a.id == id);
     }
 
+    async searchAnimals(query, limit = 40) {
+        const q = encodeURIComponent(String(query || '').trim());
+        if (!q) return [];
+        const result = await this.request(`/animals?search=${q}&limit=${limit}`);
+        if (result && Array.isArray(result.animals)) return result.animals;
+        if (Array.isArray(result)) return result;
+        return [];
+    }
+
+    async getAdminPendingContent() {
+        const result = await this.request('/admin/content/pending');
+        return Array.isArray(result?.pending) ? result.pending : [];
+    }
+
+    async approveAdminContent(id, status, notes = '') {
+        const result = await this.request(`/admin/content/${id}/approve`, {
+            method: 'POST',
+            body: JSON.stringify({ status, notes })
+        });
+        return result?.success ? result : null;
+    }
+
+    async verifyCulturalNarrative(id, verified = true) {
+        const result = await this.request(`/cultural/${id}/verify`, {
+            method: 'PUT',
+            body: JSON.stringify({ verified })
+        });
+        return result?.success ? result : null;
+    }
+
+    async publishCulturalNarrative(id) {
+        const result = await this.request(`/cultural/${id}/publish`, { method: 'POST' });
+        return result?.success ? result : null;
+    }
+
+    async getUserBookmarks() {
+        const result = await this.request('/users/bookmarks');
+        return result?.success && Array.isArray(result.bookmarks) ? result.bookmarks : null;
+    }
+
+    async syncUserBookmarks(bookmarks) {
+        const result = await this.request('/users/bookmarks/sync', {
+            method: 'PUT',
+            body: JSON.stringify({ bookmarks })
+        });
+        return result?.success ? result.bookmarks : null;
+    }
+
+    async addUserBookmark(row) {
+        const result = await this.request('/users/bookmarks', {
+            method: 'POST',
+            body: JSON.stringify(row)
+        });
+        return result?.success ? result.bookmark : null;
+    }
+
+    async removeUserBookmark(type, id) {
+        const result = await this.request(`/users/bookmarks/${encodeURIComponent(type)}/${encodeURIComponent(id)}`, {
+            method: 'DELETE'
+        });
+        return result?.success;
+    }
+
+    async getUserNotifications(limit = 40) {
+        const result = await this.request(`/users/me/notifications?limit=${limit}`);
+        if (result?.success) {
+            return { notifications: result.notifications || [], unread: result.unread_count || 0 };
+        }
+        return { notifications: [], unread: 0 };
+    }
+
+    async markNotificationRead(id) {
+        return this.request(`/users/me/notifications/${id}/read`, { method: 'PUT' });
+    }
+
+    async markAllNotificationsRead() {
+        return this.request('/users/me/notifications/read-all', { method: 'PUT' });
+    }
+
+    async getWalkingRoute(fromLat, fromLng, toLat, toLng) {
+        const q = `from_lat=${fromLat}&from_lng=${fromLng}&to_lat=${toLat}&to_lng=${toLng}`;
+        return this.request(`/geo/walking-route?${q}`);
+    }
+
+    async saveTourCompletionReport(tourId, guideNotes, status = 'draft') {
+        return this.request(`/tours/${tourId}/completion-report`, {
+            method: 'PUT',
+            body: JSON.stringify({ guide_notes: guideNotes, status })
+        });
+    }
+
+    async createAdminUser(payload) {
+        return this.request('/admin/users', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async updateAdminUser(userId, payload) {
+        return this.request(`/admin/users/${userId}`, {
+            method: 'PUT',
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async getAdminAuditLogs(limit = 50) {
+        const result = await this.request(`/admin/audit-logs?limit=${limit}`);
+        return result?.logs || [];
+    }
+
+    async getAdminSystemHealth() {
+        return this.request('/admin/system-health');
+    }
+
+    async createAdminLocation(payload) {
+        return this.request('/admin/locations', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    }
+
     /** Wildlife theme tiles: guide session scripts (migration 009 + seed 004). */
     async getWildlifeTourThemes() {
         const result = await this.request('/wildlife-tour-themes');

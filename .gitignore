@@ -41,6 +41,8 @@ jspm_packages/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.vercel.production
+backend/.env.supabase
 frontend/public/runtime-config.js
 
 # parcel-bundler cache (https://parceljs.org/)

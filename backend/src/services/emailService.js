@@ -31,14 +31,20 @@ function isEmailConfigured() {
 }
 
 let transporter = null;
+let transporterVerified = false;
 
 function getTransporter() {
     if (!isEmailConfigured()) return null;
     if (!transporter) {
+        const port = parseInt(process.env.SMTP_PORT, 10) || 587;
+        const explicitSecure = String(process.env.SMTP_SECURE || '').trim().toLowerCase();
+        const secure =
+            explicitSecure === 'true'
+            || (explicitSecure !== 'false' && port === 465);
         transporter = nodemailer.createTransport({
             host: process.env.SMTP_HOST || 'smtp.gmail.com',
-            port: parseInt(process.env.SMTP_PORT, 10) || 587,
-            secure: false,
+            port,
+            secure,
             auth: {
                 user: process.env.SMTP_USER,
                 pass: smtpPassword()
@@ -54,15 +60,35 @@ async function sendMail(mailOptions) {
         logger.warn(
             `Email not sent (SMTP not configured): ${mailOptions.subject} → ${mailOptions.to}`
         );
-        return false;
+        return {
+            sent: false,
+            reason: 'smtp_not_configured'
+        };
+    }
+    if (!transporterVerified) {
+        try {
+            await transport.verify();
+            transporterVerified = true;
+        } catch (verifyError) {
+            logger.warn(`SMTP verify failed (${process.env.SMTP_HOST || 'smtp.gmail.com'}:${process.env.SMTP_PORT || 587}): ${verifyError.message}`);
+            return {
+                sent: false,
+                reason: 'smtp_verify_failed'
+            };
+        }
     }
     const from = mailOptions.from || `"Bwindi SIGTS" <${smtpFromAddress()}>`;
     try {
         await transport.sendMail({ ...mailOptions, from });
-        return true;
+        return {
+            sent: true
+        };
     } catch (error) {
         logger.warn(`Email not sent (${mailOptions.subject} → ${mailOptions.to}): ${error.message}`);
-        return false;
+        return {
+            sent: false,
+            reason: error.message
+        };
     }
 }
 
@@ -82,7 +108,7 @@ async function sendVerificationEmail(email, userId, clientOrigin) {
     const base = clientOrigin || resolvePublicAppBaseUrl();
     const verificationUrl = `${base}/verify-email?token=${verificationToken}`;
 
-    const sent = await sendMail({
+    const result = await sendMail({
         to: email,
         subject: 'Verify Your Email - Bwindi Smart Tour Guide',
         html: `
@@ -97,10 +123,10 @@ async function sendVerificationEmail(email, userId, clientOrigin) {
         `
     });
 
-    if (sent) {
+    if (result.sent) {
         logger.info(`Verification email sent to ${email}`);
     }
-    return sent;
+    return result;
 }
 
 /**
@@ -110,7 +136,7 @@ async function sendPasswordResetEmail(email, token, username) {
     const base = resolvePublicAppBaseUrl();
     const resetUrl = `${base}/reset-password?token=${token}`;
 
-    const sent = await sendMail({
+    const result = await sendMail({
         to: email,
         subject: 'Reset Your Password - Bwindi Smart Tour Guide',
         html: `
@@ -127,10 +153,10 @@ async function sendPasswordResetEmail(email, token, username) {
         `
     });
 
-    if (sent) {
+    if (result.sent) {
         logger.info(`Password reset email sent to ${email}`);
     }
-    return sent;
+    return result;
 }
 
 /**
@@ -140,7 +166,7 @@ async function sendRegistrationWelcomeEmail(email, username, clientOrigin) {
     const safeUsername = username || 'there';
     const base = clientOrigin || resolvePublicAppBaseUrl();
     const signInUrl = `${base}/#login`;
-    const sent = await sendMail({
+    const result = await sendMail({
         to: email,
         subject: 'Your Bwindi SIGTS account is ready',
         html: `
@@ -155,10 +181,10 @@ async function sendRegistrationWelcomeEmail(email, username, clientOrigin) {
             </div>
         `
     });
-    if (sent) {
+    if (result.sent) {
         logger.info(`Registration welcome email sent to ${email}`);
     }
-    return sent;
+    return result;
 }
 
 /**
@@ -167,7 +193,7 @@ async function sendRegistrationWelcomeEmail(email, username, clientOrigin) {
 async function sendActivityNotificationEmail(email, username, activityTitle, activityDetails = '') {
     const safeUsername = username || 'User';
     const safeDetails = activityDetails || 'No additional details were provided.';
-    const sent = await sendMail({
+    const result = await sendMail({
         to: email,
         subject: `${activityTitle} - Bwindi Smart Tour Guide`,
         html: `
@@ -182,10 +208,10 @@ async function sendActivityNotificationEmail(email, username, activityTitle, act
         `
     });
 
-    if (sent) {
+    if (result.sent) {
         logger.info(`Activity email sent to ${email}: ${activityTitle}`);
     }
-    return sent;
+    return result;
 }
 
 module.exports = {

@@ -66,21 +66,32 @@ async function sendSmsMessage(phone, body) {
  * Never throws — registration should not fail if notifications fail.
  */
 async function notifyUserRegistered({ email, username, phone, userId }) {
-    const channels = { email: false, sms: false, verificationEmail: false };
+    const channels = {
+        email: false,
+        sms: false,
+        verificationEmail: false,
+        details: {}
+    };
 
     if (email && userId) {
         try {
-            channels.verificationEmail = await sendVerificationEmail(email, userId, clientAppOrigin());
+            const verification = await sendVerificationEmail(email, userId, clientAppOrigin());
+            channels.verificationEmail = Boolean(verification?.sent);
+            channels.details.verificationEmail = verification?.reason || (verification?.sent ? 'sent' : 'unknown');
         } catch (err) {
             logger.error('Verification email failed:', err.message);
+            channels.details.verificationEmail = err.message;
         }
     }
 
     if (email) {
         try {
-            channels.email = await sendRegistrationWelcomeEmail(email, username, clientAppOrigin());
+            const welcome = await sendRegistrationWelcomeEmail(email, username, clientAppOrigin());
+            channels.email = Boolean(welcome?.sent);
+            channels.details.email = welcome?.reason || (welcome?.sent ? 'sent' : 'unknown');
         } catch (err) {
             logger.error('Registration welcome email failed:', err.message);
+            channels.details.email = err.message;
         }
     }
 
@@ -89,6 +100,7 @@ async function notifyUserRegistered({ email, username, phone, userId }) {
         + 'Your account was created. Sign in at the app and check your email to verify your address.';
     const smsResult = await sendSmsMessage(phone, smsBody);
     channels.sms = Boolean(smsResult.sent);
+    channels.details.sms = smsResult.reason || (smsResult.sent ? 'sent' : 'unknown');
 
     if (!channels.email && !channels.sms && !isEmailConfigured()) {
         logger.warn(

@@ -1,0 +1,458 @@
+/* =====================================================
+   SIGTS - CROSS-DEVICE CLARITY & RESPONSIVE HARDENING
+   Loaded LAST so it reinforces (not replaces) the
+   existing design. Goal: clear, smooth UX on phones,
+   tablets, and desktops without horizontal scroll,
+   focus-zoom, or unreadable text.
+   ===================================================== */
+
+/* Stop mobile browsers from inflating/shrinking text unpredictably
+   (especially iOS Safari and Chrome on Android in landscape). */
+html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+/* Use dynamic viewport height where supported so the app shell is not
+   hidden behind the mobile address bar / toolbar. */
+@supports (min-height: 100dvh) {
+    body {
+        min-height: 100dvh;
+    }
+}
+
+/* ---------------------------------------------------------------
+   1. RESPONSIVE MEDIA — never let images/maps/embeds overflow.
+   --------------------------------------------------------------- */
+img,
+video {
+    max-width: 100%;
+    height: auto;
+}
+
+svg,
+canvas,
+iframe,
+embed,
+object {
+    max-width: 100%;
+}
+
+/* ---------------------------------------------------------------
+   2. LONG TEXT / URLS — wrap instead of forcing horizontal scroll.
+   --------------------------------------------------------------- */
+p,
+li,
+td,
+th,
+dd,
+dt,
+figcaption,
+blockquote,
+.announcement-content,
+.sighting-comment,
+.story-body,
+.animal-description,
+.map-guidance-text,
+.ai-chat-message,
+.ui-modal,
+.empty-state {
+    overflow-wrap: break-word;
+    word-break: normal;
+}
+
+/* Preformatted/code: keep formatting but allow horizontal scroll. */
+pre {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+}
+
+code {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+/* ---------------------------------------------------------------
+   3. WIDE TABLES — scroll horizontally inside their own box rather
+   than stretching the whole page. Add class "table-scroll" (or use
+   the auto-applied behavior below) around any wide <table>.
+   --------------------------------------------------------------- */
+.table-scroll,
+.responsive-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+table {
+    max-width: 100%;
+}
+
+/* ---------------------------------------------------------------
+   4. PREVENT iOS FOCUS-ZOOM — any form control under ~16px makes
+   iOS Safari zoom in on focus and jump the layout. Force >= 16px
+   on touch/small screens. Desktop sizing is left untouched.
+   --------------------------------------------------------------- */
+@media (max-width: 768px) {
+    input,
+    select,
+    textarea,
+    .auth-input,
+    .auth-select,
+    .login-input,
+    .register-input,
+    .map-destination,
+    #mapSearchInput,
+    .ui-modal-input,
+    .ui-modal-select,
+    .wildlife-search__input,
+    .ai-chat-textarea {
+        font-size: 16px !important;
+    }
+}
+
+/* ---------------------------------------------------------------
+   5. COMFORTABLE TAP TARGETS on touch devices (Apple/Material guidance
+   is ~44px). Scoped to coarse pointers so mouse/desktop is unaffected.
+   --------------------------------------------------------------- */
+@media (pointer: coarse) {
+    button,
+    a.nav-item,
+    .nav-item,
+    .small-btn,
+    .login-btn,
+    .add-btn,
+    .auth-primary-btn,
+    .auth-link-btn,
+    .admin-action-btn,
+    .bottom-nav a,
+    .bottom-nav button {
+        min-height: 44px;
+    }
+
+    /* Give icon-only controls width too, without distorting text buttons. */
+    .icon-btn,
+    .small-btn.icon-only,
+    .auth-password-toggle {
+        min-width: 44px;
+    }
+}
+
+/* ---------------------------------------------------------------
+   6. PHONE LEGIBILITY — bump the shared typography scale slightly on
+   small screens so secondary/meta text stays readable. Because the
+   whole app uses these tokens, this lifts detail text everywhere at
+   once. Desktop/tablet keep the original calmer scale.
+   --------------------------------------------------------------- */
+@media (max-width: 560px) {
+    :root {
+        --text-xs: 0.80rem;   /* ~12.8px (was ~11.8px) */
+        --text-sm: 0.90rem;   /* ~14.4px (was ~13.4px) */
+        --text-md: 1.00rem;   /* ~16px   (was ~15.2px) */
+        --text-lg: 1.10rem;
+        --text-xl: 1.30rem;
+        --text-2xl: 1.50rem;
+    }
+
+    /* Tighten outer gutters a touch so larger text still fits cleanly. */
+    .content-area,
+    .view-slot,
+    #sigtsViewSlot {
+        padding-left: max(12px, env(safe-area-inset-left, 0px));
+        padding-right: max(12px, env(safe-area-inset-right, 0px));
+    }
+}
+
+/* ---------------------------------------------------------------
+   7. SAFE-AREA FALLBACK for notched phones in landscape (the meta tag
+   now sets viewport-fit=cover; this keeps fixed/floating UI clear of
+   the notch and home indicator if a component missed it).
+   --------------------------------------------------------------- */
+@media (max-width: 900px) {
+    .ai-chat-composer-float,
+    .ai-simy-composer-float,
+    .bottom-nav {
+        padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
+    }
+}
+
+/* ---------------------------------------------------------------
+   8. GRID/FLEX SAFETY — common cause of mobile horizontal scroll is a
+   flex/grid child that refuses to shrink. Allow shrinking by default.
+   --------------------------------------------------------------- */
+.dashboard-feature-grid > *,
+.admin-actions > *,
+.auth-grid > *,
+.section-card > * {
+    min-width: 0;
+}
+
+/* Final guard: nothing should push the page wider than the screen. */
+html,
+body {
+    max-width: 100%;
+}
+
+/* ---------------------------------------------------------------
+   9. MOBILE HOME / DASHBOARD — single column + readable side text
+   (theme-modern had a late 2-column grid rule that squeezed the left
+   panel on phones, breaking "Interest signal" / "Browse Wildlife…"
+   into vertical letter stacks.)
+   --------------------------------------------------------------- */
+@media (max-width: 900px) {
+    .dashboard-feature-grid,
+    .dashboard-main-grid {
+        grid-template-columns: 1fr !important;
+        gap: 14px !important;
+    }
+
+    .main-content {
+        margin-left: 0 !important;
+        width: 100% !important;
+        max-width: 100vw;
+        overflow-x: hidden;
+    }
+
+    .main-container {
+        padding-left: max(12px, env(safe-area-inset-left, 0px));
+        padding-right: max(12px, env(safe-area-inset-right, 0px));
+    }
+
+    .sigts-dash-editorial {
+        margin-left: 0;
+        margin-right: 0;
+    }
+
+    /* Closed drawer must not peek on the left edge */
+    .sidebar:not(.open) {
+        transform: translateX(-105%) !important;
+        visibility: hidden;
+        pointer-events: none;
+    }
+
+    .sidebar.open {
+        visibility: visible;
+        pointer-events: auto;
+    }
+}
+
+/* Undo per-letter wrapping from collision hotfix on UI labels */
+.seasonal-item,
+.animals-page-blurb,
+.rec-reason,
+.rec-title,
+.sigts-feed-row,
+.nav-label-vertical,
+.status-badge,
+.header-status-badge,
+.tour-focus-title,
+.tour-focus-sub,
+.section-header h3 {
+    overflow-wrap: break-word !important;
+    word-break: normal !important;
+    white-space: normal !important;
+}
+
+/* ---------------------------------------------------------------
+   10. MOBILE LOGOUT — always reachable (drawer footer + profile)
+   --------------------------------------------------------------- */
+@media (max-width: 960px) {
+    .sidebar {
+        height: 100dvh;
+        max-height: 100dvh;
+    }
+
+    .sidebar-footer {
+        flex-shrink: 0;
+        padding-top: 8px;
+        border-top: 1px solid rgba(255, 255, 255, 0.12);
+        background: linear-gradient(180deg, transparent, rgba(8, 30, 16, 0.55));
+        padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+    }
+
+    body.sigts-has-mobile-tabs .sidebar.open .sidebar-footer {
+        padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .sidebar-logout {
+        margin-bottom: 0;
+        min-height: 48px;
+    }
+
+    .profile-mobile-logout-bar {
+        display: flex;
+        position: fixed;
+        left: 0;
+        right: 0;
+        z-index: 840;
+        bottom: calc(58px + env(safe-area-inset-bottom, 0px));
+        padding: 8px 12px;
+        justify-content: center;
+        pointer-events: none;
+    }
+
+    .profile-mobile-logout-btn {
+        pointer-events: auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: min(100%, 420px);
+        min-height: 48px;
+        padding: 12px 18px;
+        border: 1px solid rgba(180, 35, 24, 0.28);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.97);
+        color: #b42318;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 800;
+        cursor: pointer;
+        box-shadow: 0 8px 24px rgba(15, 42, 28, 0.12);
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    .profile-mobile-logout-btn:hover {
+        background: rgba(180, 35, 24, 0.08);
+    }
+}
+
+.dashboard-insights {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 16px;
+}
+
+.dashboard-insights-card .section-header {
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.dashboard-insights-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 0 16px 16px;
+}
+
+.sigts-dash-insight-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0 8px 8px;
+}
+
+.sigts-dash-insight-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    padding: 12px 10px;
+    border: none;
+    border-bottom: 1px solid rgba(24, 51, 61, 0.08);
+    background: transparent;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 10px;
+    transition: background 0.15s ease;
+}
+
+.sigts-dash-insight-row:last-child {
+    border-bottom: none;
+}
+
+.sigts-dash-insight-row:hover {
+    background: rgba(65, 147, 16, 0.08);
+}
+
+.sigts-dash-insight-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.sigts-dash-insight-main strong {
+    font-size: 14px;
+    color: var(--text-900);
+}
+
+.sigts-dash-insight-meta {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-500);
+}
+
+.dashboard-insights-note {
+    padding: 0 16px 14px;
+    margin: 0;
+}
+
+.sigts-detail-media {
+    margin: 0 0 12px;
+}
+
+.sigts-media-player {
+    width: 100%;
+    max-width: 100%;
+    margin-top: 6px;
+}
+
+@media (max-width: 960px) {
+    .net-status-full {
+        display: none;
+    }
+
+    .net-status-compact {
+        display: inline;
+    }
+
+    .net-status {
+        max-width: 108px;
+        padding: 6px 8px;
+        font-size: 11px;
+    }
+
+    .header-right {
+        gap: 8px;
+    }
+
+    #networkStatusBadge:not([title]) {
+        max-width: 72px;
+    }
+}
+
+@media (min-width: 961px) {
+    .profile-mobile-logout-bar {
+        display: none !important;
+    }
+}
+
+@media (max-width: 640px) {
+  .info-chip-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .info-chip-row .small-btn {
+    width: 100%;
+    justify-content: flex-start;
+    text-align: left;
+    white-space: normal;
+  }
+
+  .tour-focus-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  body.ai-chat-view .ai-simy-actions-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+

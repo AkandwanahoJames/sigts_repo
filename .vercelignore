@@ -1,0 +1,10 @@
+# Trim upload size; keep api/ and backend/ for full-stack Vercel deploy.
+/database/
+/infra/
+/tools/
+/scripts/
+/DOCS/
+*.md
+FINAL PROJECT*.docx
+backups/
+node_modules/

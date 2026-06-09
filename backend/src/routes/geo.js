@@ -67,4 +67,44 @@ router.get(
     }
 );
 
+router.get(
+    '/walking-route',
+    [
+        query('from_lat').isFloat({ min: -90, max: 90 }),
+        query('from_lng').isFloat({ min: -180, max: 180 }),
+        query('to_lat').isFloat({ min: -90, max: 90 }),
+        query('to_lng').isFloat({ min: -180, max: 180 })
+    ],
+    async (req, res) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+        const { from_lat: a1, from_lng: o1, to_lat: a2, to_lng: o2 } = req.query;
+        const url =
+            `https://router.project-osrm.org/route/v1/foot/${o1},${a1};${o2},${a2}` +
+            '?overview=full&geometries=geojson&steps=true';
+        try {
+            const osrm = await fetch(url, { signal: AbortSignal.timeout(10000) });
+            if (!osrm.ok) throw new Error(`OSRM ${osrm.status}`);
+            const data = await osrm.json();
+            const route = data.routes?.[0];
+            if (!route) return res.status(404).json({ error: 'No walking route found' });
+            const steps = (route.legs?.[0]?.steps || []).map((s, i) => ({
+                index: i + 1,
+                instruction: s.maneuver?.instruction || s.name || 'Continue on trail',
+                distance_m: Math.round(s.distance || 0),
+                duration_s: Math.round(s.duration || 0)
+            }));
+            return res.json({
+                distance_m: Math.round(route.distance || 0),
+                duration_s: Math.round(route.duration || 0),
+                geometry: route.geometry,
+                steps
+            });
+        } catch (err) {
+            console.warn('OSRM route failed:', err.message);
+            return res.status(502).json({ error: 'Walking route service unavailable', fallback: true });
+        }
+    }
+);
+
 module.exports = router;

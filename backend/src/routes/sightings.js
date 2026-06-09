@@ -7,8 +7,11 @@ const path = require('path');
 const { pool } = require('../config/database');
 const { authenticateJWT, authorize } = require('../middleware/auth');
 const { idempotency } = require('../middleware/idempotency');
+const { isServerlessRuntime } = require('../middleware/upload');
 
-const upload = multer({ dest: 'uploads/sightings/' });
+const upload = isServerlessRuntime()
+    ? multer({ storage: multer.memoryStorage() })
+    : multer({ dest: 'uploads/sightings/' });
 let commentsTableEnsured = false;
 let rareAlertsTableEnsured = false;
 

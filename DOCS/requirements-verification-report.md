@@ -1,8 +1,8 @@
 # SIGTS Requirements Verification Report
 
-**Document:** `FINAL PROJECT_backup_revised - 2.docx` (Chapter 4.3.4 functional requirements)  
-**Date:** 2026-05-22  
-**Environment:** Backend `http://127.0.0.1:8001`, Frontend `http://127.0.0.1:3000`, PostgreSQL (30 users)
+**Document:** `FINAL PROJECT_backup_revised.docx` (Chapter 4.4.4 / twelve functional areas)  
+**Date:** 2026-05-26  
+**Environment:** Backend `http://127.0.0.1:8001`, Frontend `http://127.0.0.1:3000`, PostgreSQL local `sigts_bwindi` (30 users)
 
 ## Automated checks
 
@@ -13,7 +13,8 @@ node scripts/debug-system.js
 node scripts/verify-requirements.js
 ```
 
-**Last run:** 23 pass, 0 partial, 0 fail (all twelve requirement areas exercised).
+**Last run:** 23 pass, 0 partial, 0 fail (all twelve requirement areas exercised).  
+**Database:** `backend/.env` switched to local Postgres (`127.0.0.1:5432`) because Supabase host timed out on this network.
 
 ## Results by document area (§4.3.4)
 

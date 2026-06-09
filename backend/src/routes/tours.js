@@ -1089,7 +1089,7 @@ router.get('/:id/completion-report', authenticateJWT, authorize('guide'), async 
         const resolved = await getTourForGuideOrThrow(req.params.id, req.user.user_id);
         if (resolved.error) return res.status(resolved.error.status).json(resolved.error.payload);
         const { tour } = resolved;
-        const [sightings, feedback] = await Promise.all([
+        const [sightings, feedback, notesRow] = await Promise.all([
             pool.query(
                 `SELECT COUNT(*)::int AS total_sightings,
                         COUNT(DISTINCT animal_id)::int AS unique_species
@@ -1103,7 +1103,11 @@ router.get('/:id/completion-report', authenticateJWT, authorize('guide'), async 
                  FROM tour_participants tp
                  WHERE tp.tour_session_id = $1`,
                 [req.params.id]
-            )
+            ),
+            pool.query(
+                `SELECT guide_notes, status FROM tour_completion_reports WHERE tour_session_id = $1`,
+                [req.params.id]
+            ).catch(() => ({ rows: [] }))
         ]);
         const duration = (tour.actual_start && tour.actual_end)
             ? Math.round((new Date(tour.actual_end) - new Date(tour.actual_start)) / 60000)
@@ -1114,11 +1118,49 @@ router.get('/:id/completion-report', authenticateJWT, authorize('guide'), async 
             duration_minutes: duration,
             distance_km: tour.distance_km,
             sightings: sightings.rows[0],
-            feedback_summary: feedback.rows[0]
+            feedback_summary: feedback.rows[0],
+            guide_notes: notesRow.rows[0]?.guide_notes || '',
+            report_status: notesRow.rows[0]?.status || 'draft'
         });
     } catch (error) {
         console.error('completion report', error);
         return res.status(500).json({ error: 'Failed to build completion report' });
+    }
+});
+
+// PUT /api/tours/:id/completion-report (Guide only) — save/submit notes
+router.put('/:id/completion-report', authenticateJWT, authorize('guide'), [
+    body('guide_notes').optional().isString().isLength({ max: 8000 }),
+    body('status').optional().isIn(['draft', 'submitted'])
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    try {
+        const resolved = await getTourForGuideOrThrow(req.params.id, req.user.user_id);
+        if (resolved.error) return res.status(resolved.error.status).json(resolved.error.payload);
+
+        const status = req.body.status === 'submitted' ? 'submitted' : 'draft';
+        const notes = req.body.guide_notes != null ? String(req.body.guide_notes) : null;
+
+        await pool.query(
+            `INSERT INTO tour_completion_reports (tour_session_id, guide_notes, status, submitted_at, updated_at)
+             VALUES ($1, $2, $3, CASE WHEN $3 = 'submitted' THEN CURRENT_TIMESTAMP ELSE NULL END, CURRENT_TIMESTAMP)
+             ON CONFLICT (tour_session_id) DO UPDATE SET
+                guide_notes = COALESCE($2, tour_completion_reports.guide_notes),
+                status = $3,
+                submitted_at = CASE WHEN $3 = 'submitted' THEN CURRENT_TIMESTAMP ELSE tour_completion_reports.submitted_at END,
+                updated_at = CURRENT_TIMESTAMP`,
+            [req.params.id, notes, status]
+        );
+
+        return res.json({ success: true, status, message: status === 'submitted' ? 'Report submitted' : 'Draft saved' });
+    } catch (error) {
+        if (error.code === '42P01') {
+            return res.status(503).json({ error: 'Run migration 016 for tour completion reports' });
+        }
+        console.error('PUT completion report', error);
+        return res.status(500).json({ error: 'Failed to save completion report' });
     }
 });
 

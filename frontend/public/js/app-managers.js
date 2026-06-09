@@ -127,6 +127,16 @@ class AuthManager {
             };
         }
 
+        if (result.code === 'DATABASE_UNAVAILABLE' || result.status === 503 || result.status === 504) {
+            return {
+                success: false,
+                error:
+                    result.error
+                    || 'The server database is unavailable right now, so new accounts cannot be created. Demo accounts may still work offline, but live registration needs the hosted database restored.',
+                code: result.code || 'DATABASE_UNAVAILABLE',
+            };
+        }
+
         if (result.error) {
             const detail = result.detail ? ` (${result.detail})` : '';
             const suggestLogin = ['USERNAME_TAKEN', 'EMAIL_TAKEN', 'CREDENTIALS_TAKEN'].includes(result.code);
@@ -1179,9 +1189,19 @@ class ContentManager {
     async getWeather() {
         if (this.useAPI) {
             const result = await API.request('/weather');
-            if (result && result.success) return result.data;
+            if (result && result.success && result.data) {
+                const d = result.data;
+                return {
+                    temperature: d.temperatureC ?? d.temperature ?? 22,
+                    temperatureC: d.temperatureC ?? d.temperature ?? 22,
+                    condition: d.condition || 'Partly cloudy',
+                    humidity: d.humidityPct ?? d.humidity ?? 78,
+                    source: d.source || 'api',
+                    forecastSlices: d.forecastSlices || []
+                };
+            }
         }
-        return { temperature: 22, condition: 'Partly Cloudy', humidity: 78 };
+        return { temperature: 22, temperatureC: 22, condition: 'Partly Cloudy', humidity: 78 };
     }
 
     async downloadOfflineContent() {

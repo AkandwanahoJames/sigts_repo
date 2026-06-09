@@ -4,7 +4,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
-const { pool } = require('../config/database');
+const { pool, withDatabaseTimeout, isDatabaseConnectivityError } = require('../config/database');
 const { REQUIREMENTS } = require('../config/requirements');
 const { authenticateJWT } = require('../middleware/auth');
 const { logger } = require('../utils/logger');
@@ -202,7 +202,21 @@ router.post('/register', [
         return res.status(400).json({ error: 'This email domain is reserved for temporary guest sessions', field: 'email' });
     }
 
-    const client = await pool.connect();
+    let client;
+    try {
+        client = await withDatabaseTimeout(pool.connect());
+    } catch (connectErr) {
+        logger.error('Registration database connect failed:', connectErr.message);
+        const isProd = process.env.NODE_ENV === 'production';
+        return res.status(503).json({
+            error: isProd
+                ? 'Registration is temporarily unavailable because the database is unreachable. Please try again shortly or contact park IT support.'
+                : 'Database connection failed during registration.',
+            code: 'DATABASE_UNAVAILABLE',
+            ...(isProd ? {} : { detail: connectErr.message }),
+        });
+    }
+
     try {
         const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
         const phoneNorm = String(phone || '').trim();
@@ -247,7 +261,7 @@ router.post('/register', [
 
         await client.query('COMMIT');
 
-        let notifications = { email: false, sms: false, verificationEmail: false };
+        let notifications = { email: false, sms: false, verificationEmail: false, details: {} };
         try {
             notifications = await notifyUserRegistered({
                 email: user.email,
@@ -265,7 +279,7 @@ router.post('/register', [
         if (notifications.sms) noticeParts.push('SMS');
         const noticeHint = noticeParts.length
             ? ` We sent ${noticeParts.join(' and ')}.`
-            : ' You can sign in now.';
+            : ' Account created, but notification delivery is not configured or failed.';
 
         return res.status(201).json({
             success: true,
@@ -287,6 +301,13 @@ router.post('/register', [
         const unique = mapUniqueViolation(error);
         if (unique) {
             return res.status(unique.status).json(unique.body);
+        }
+        if (isDatabaseConnectivityError(error)) {
+            logger.error('Registration database error:', error.message);
+            return res.status(503).json({
+                error: 'Registration is temporarily unavailable because the database is unreachable.',
+                code: 'DATABASE_UNAVAILABLE',
+            });
         }
         logger.error('Registration error:', error);
         const detail = process.env.NODE_ENV !== 'production' ? error.message : undefined;
@@ -428,21 +449,25 @@ router.post('/login', [
 
         const coordinates = getRequestCoordinates(req);
         const bypassGeofence = GEOFENCE_BYPASS_ROLES.has(user.user_type);
+        let parkAccess = {
+            geofenceEnforced: ENFORCE_PARK_GEOFENCE && !bypassGeofence,
+            coordinatesProvided: Boolean(coordinates),
+            insidePark: null,
+            warning: null
+        };
 
-        if (ENFORCE_PARK_GEOFENCE && !coordinates && !bypassGeofence) {
-            return res.status(400).json({
-                error: 'Location required',
-                message: 'Latitude and longitude are required for park access validation'
-            });
-        }
-
-        if (coordinates && ENFORCE_PARK_GEOFENCE && !bypassGeofence) {
-            const insidePark = await isInsidePark(coordinates.lat, coordinates.lng);
-            if (!insidePark) {
-                return res.status(403).json({
-                    error: 'Access denied',
-                    message: 'You must be within park boundaries to access SIGTS'
-                });
+        // Do not block successful authentication simply because GPS is unavailable
+        // or the user is currently outside the park boundary. Route-level guards
+        // continue to enforce park-bound restrictions for sensitive features.
+        if (ENFORCE_PARK_GEOFENCE && !bypassGeofence) {
+            if (!coordinates) {
+                parkAccess.warning = 'Location unavailable at sign-in. In-park protected features may remain restricted.';
+            } else {
+                const insidePark = await isInsidePark(coordinates.lat, coordinates.lng);
+                parkAccess.insidePark = insidePark;
+                if (!insidePark) {
+                    parkAccess.warning = 'Signed in outside park boundaries. In-park protected features remain restricted.';
+                }
             }
         }
 
@@ -490,6 +515,7 @@ router.post('/login', [
             token: accessToken,
             accessToken,
             refreshToken,
+            parkAccess,
             user: {
                 id: user.user_id,
                 username: user.username,
@@ -501,6 +527,12 @@ router.post('/login', [
 
     } catch (error) {
         console.error('Login error:', error);
+        if (isDatabaseConnectivityError(error)) {
+            return res.status(503).json({
+                error: 'Sign-in is temporarily unavailable because the database is unreachable.',
+                code: 'DATABASE_UNAVAILABLE',
+            });
+        }
         res.status(500).json({ error: 'Login failed' });
     }
 });
@@ -543,7 +575,7 @@ router.post('/forgot-password', [
                 'We received a password reset request for your account. If this was not you, secure your account immediately.'
             ).catch((err) => logger.error('Password-reset-request activity email failed:', err.message));
 
-            if (!emailSent && process.env.NODE_ENV !== 'production') {
+            if (!emailSent?.sent && process.env.NODE_ENV !== 'production') {
                 logger.info(`Password reset (dev, email not sent): ${resetUrl}`);
                 return res.json({
                     success: true,

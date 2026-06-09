@@ -1,8 +1,9 @@
 {
   "version": 2,
-  "installCommand": "cd .. && npm install",
-  "buildCommand": "cd .. && npm run build --workspace=sigts-frontend",
+  "installCommand": "npm install --prefix ..",
+  "buildCommand": "npm run build --prefix ../frontend",
   "outputDirectory": "../frontend/public",
+  "framework": null,
   "routes": [
     {
       "src": "/(.*\\.(?:html|js|css|json|webmanifest|svg|png|jpg|jpeg|webp|ico|woff|woff2))",

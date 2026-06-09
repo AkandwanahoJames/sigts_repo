@@ -55,6 +55,7 @@ const intranetRoutes = require('./routes/intranet');
 const feedbackRoutes = require('./routes/feedback');
 const geoRoutes = require('./routes/geo');
 const guideMessagesRoutes = require('./routes/guideMessages');
+const bookmarkRoutes = require('./routes/bookmarks');
 const publicParkContentRoutes = require('./routes/publicParkContent');
 
 // Initialize Express app
@@ -334,6 +335,7 @@ app.use('/api', publicParkContentRoutes);
 
 // Protected routes - route modules already enforce auth/roles.
 app.use('/api/users', userRoutes);
+app.use('/api/users/bookmarks', bookmarkRoutes);
 app.use('/api/animals', animalRoutes);
 app.use('/api/wildlife-tour-themes', wildlifeTourThemesRoutes);
 app.use('/api/locations', locationRoutes);
@@ -438,7 +440,7 @@ app.set('pool', pool);
 // =====================================================
 const FRONTEND_PUBLIC_DIR = path.join(__dirname, '../../frontend/public');
 const RUNTIME_CONFIG_GENERATOR = path.join(__dirname, '../../frontend/scripts/generateRuntimeConfig.js');
-if (fs.existsSync(RUNTIME_CONFIG_GENERATOR)) {
+if (!process.env.VERCEL && fs.existsSync(RUNTIME_CONFIG_GENERATOR)) {
     try {
         require(RUNTIME_CONFIG_GENERATOR);
     } catch (e) {

@@ -16,6 +16,18 @@ See **[functional-requirements-tracker.md](./functional-requirements-tracker.md)
 
 Inspect `backend/src/config/requirements.js` for production guards (JWT secret, limits, rate limits, CORS). Keep those aligned with deployment policy.
 
+## Verification (local)
+
+```powershell
+cd backend
+# Use local Postgres in backend/.env when Supabase is unreachable
+$env:PORT='8001'; npm start
+# other terminal:
+npm run debug:all
+```
+
+Last run: **2026-05-26** — 23/23 automated checks pass on `sigts_bwindi` (30 users).
+
 ## Maintenance
 
-After meaningful feature work, update **functional-requirements-tracker.md** so it stays aligned with §3.1 wording from the specification document.
+After meaningful feature work, update **functional-requirements-tracker.md** so it stays aligned with §3.1 / §4.4.4 wording. Regenerate or patch the Word report with `scripts/patch_doc_alignment.py` when API paths or stack descriptions change.

@@ -4,6 +4,7 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticateJWT, authorize } = require('../middleware/auth');
 const { idempotency } = require('../middleware/idempotency');
+const { notifyFeedbackResponse } = require('../services/inAppNotifications');
 
 async function resolveTouristId(userId) {
     const result = await pool.query(
@@ -290,6 +291,7 @@ router.put(
             if (!result.rows.length) {
                 return res.status(404).json({ error: 'Feedback not found' });
             }
+            notifyFeedbackResponse(req.params.id, req.body.response_text).catch(() => {});
             return res.json({ success: true, feedback: result.rows[0] });
         } catch (error) {
             console.error('Feedback response error:', error);

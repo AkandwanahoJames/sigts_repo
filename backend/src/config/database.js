@@ -36,6 +36,35 @@ async function connectDB() {
     }
 }
 
+function isDatabaseConnectivityError(error) {
+    const message = String(error?.message || error || '').toLowerCase();
+    return (
+        message.includes('enotfound')
+        || message.includes('econnrefused')
+        || message.includes('etimedout')
+        || message.includes('timeout')
+        || message.includes('tenant or user')
+        || message.includes('password authentication failed')
+        || message.includes('connection terminated')
+        || message.includes('server closed the connection')
+    );
+}
+
+/** Fail fast instead of hanging until the serverless function times out. */
+async function withDatabaseTimeout(promise, timeoutMs = 12000) {
+    let timer;
+    try {
+        return await Promise.race([
+            promise,
+            new Promise((_, reject) => {
+                timer = setTimeout(() => reject(new Error('Database connection timed out')), timeoutMs);
+            }),
+        ]);
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
+}
+
 // Query helper with logging
 async function query(text, params) {
     const start = Date.now();
@@ -68,4 +97,11 @@ async function transaction(callback) {
     }
 }
 
-module.exports = { pool, connectDB, query, transaction };
+module.exports = {
+    pool,
+    connectDB,
+    query,
+    transaction,
+    withDatabaseTimeout,
+    isDatabaseConnectivityError,
+};

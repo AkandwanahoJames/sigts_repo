@@ -264,6 +264,9 @@ svg {
     min-height: 0;
     overflow-y: auto;
     padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
 }
 
 .nav-item-vertical {
@@ -276,6 +279,12 @@ svg {
     border-radius: 14px;
     color: rgba(255, 255, 255, 0.88);
     transition: background 0.2s ease, color 0.2s ease;
+    width: 100%;
+    border: none;
+    background: transparent;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
 }
 
 .nav-item-vertical:hover {
@@ -316,10 +325,27 @@ svg {
     background: rgba(255, 255, 255, 0.05);
     font-weight: 850;
     transition: background 0.2s ease;
+    width: calc(100% - 32px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    font: inherit;
+    font-weight: 850;
+    cursor: pointer;
 }
 
 .sidebar-logout:hover {
     background: rgba(255, 255, 255, 0.11);
+}
+
+.sidebar-footer {
+    flex: 0 0 auto;
+    flex-shrink: 0;
+    margin-top: auto;
+    position: relative;
+    z-index: 2;
+}
+
+.profile-mobile-logout-bar {
+    display: none;
 }
 
 .sidebar-toggle {
@@ -434,6 +460,14 @@ svg {
     border: 1px solid rgba(27, 94, 32, 0.25);
     background: #eef7ef;
     color: #1b5e20;
+    max-width: min(100%, 280px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.net-status-compact {
+    display: none;
 }
 
 .net-status.offline {
@@ -7165,6 +7199,12 @@ body.sigts-park-locked .nav-item-vertical:not(.nav-item-vertical--logout) {
     pointer-events: none;
 }
 
+body.sigts-park-locked .sidebar-logout,
+body.sigts-park-locked .nav-item-vertical--logout {
+    opacity: 1;
+    pointer-events: auto;
+}
+
 body.sigts-park-locked .sigts-mobile-tab {
     opacity: 0.55;
     pointer-events: none;
@@ -7965,6 +8005,10 @@ body.sigts-park-locked .sigts-mobile-tab {
 
     body.sigts-has-mobile-tabs .main-container {
         padding-bottom: calc(74px + env(safe-area-inset-bottom, 0px));
+    }
+
+    body.sigts-has-mobile-tabs.sigts-view-profile .main-container {
+        padding-bottom: calc(132px + env(safe-area-inset-bottom, 0px));
     }
 
     body.sigts-has-mobile-tabs .sigts-mobile-tabbar {

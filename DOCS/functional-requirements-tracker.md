@@ -1,6 +1,8 @@
 # SIGTS Functional Requirements Tracker (§3.1)
 
-This maps **section 3.1** functional components to the **current codebase**. It is the checklist for product and engineering; not every row is fully implemented.
+This maps **section 3.1 / §4.4.4** functional components to the **current codebase**. It is the checklist for product and engineering; not every row is fully implemented.
+
+**Last API verification:** 2026-05-26 — `cd backend && npm run debug:all` → **23 pass, 0 fail** (local PostgreSQL `sigts_bwindi`, port 8001).
 
 **Status key**
 
@@ -120,7 +122,7 @@ This maps **section 3.1** functional components to the **current codebase**. It 
 | Guide profile | partial | Profile routes + UI fragments. |
 | Guide performance stats | partial | Ratings/feedback aggregates possible; dashboard polish varies. |
 | Emergency communication | partial | Info / contacts in content; dedicated **panic** channel not universal. |
-| Guide-to-guide messaging | missing | No dedicated inbox module located. |
+| Guide-to-guide messaging | implemented | `GET/POST /api/guides/messages`, inbox UI in `app-views.js` (migration 011 `guide_messages`). |
 | Tour completion report | partial | Export patterns (`exportData`) — formal PDF report generator not standard. |
 
 ---
@@ -213,15 +215,15 @@ This maps **section 3.1** functional components to the **current codebase**. It 
 | Role assignment | implemented | `user_type` updates via admin/users. |
 | Content approval queue | partial | AI generation review counts in stats; workflow depth varies. |
 | Content creation | partial | Seeds + admin; in-app CMS completeness varies. |
-| Bulk content upload | missing | Dedicated CSV/JSON bulk importer not verified. |
+| Bulk content upload | implemented | `POST /api/admin/animals/bulk-json` in `admin.js`. |
 | Park boundary configuration | partial | Stored in DB; admin UI for editing polygon may be partial — use migrations/SQL scripts. |
 | POI management | partial | Locations admin patterns. |
 | Animal catalog management | partial | Animals updates typically via seed/SQL unless admin endpoints extended. |
 | Cultural narrative curation | implemented | Verify/publish in `cultural` + IT flows. |
 | System configuration | partial | Environment-driven (`requirements.js`, env vars). |
 | Audit logs | partial | `audit` utility used in sensitive actions — full viewer TBD. |
-| Backup management | missing | Automated backup UI not in app (ops concern). |
-| Alert configuration | missing | Alert rules engine not verified. |
+| Backup management | partial | `POST /api/admin/backup/create`, `GET /api/admin/backup/list`; CLI `npm run backup`; IT UI exposure varies. |
+| Alert configuration | partial | `GET/POST/PUT /api/admin/alert-rules` in `admin.js`; full ops UI may be partial. |
 | Guide management | partial | Overlaps users + tours assignments. |
 | Report generation | partial | Export helpers; PDF report builder not standard. |
 

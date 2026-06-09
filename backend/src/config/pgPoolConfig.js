@@ -2,7 +2,7 @@
 
 function resolveDatabaseUrl() {
     if (process.env.DATABASE_URL) {
-        return process.env.DATABASE_URL;
+        return adaptDatabaseUrlForServerless(process.env.DATABASE_URL);
     }
 
     let supabaseUrl = (process.env.SUPABASE_URL || '').trim();
@@ -25,6 +25,40 @@ function resolveDatabaseUrl() {
     return `postgresql://postgres:${encoded}@db.${ref}.supabase.co:5432/postgres`;
 }
 
+/** Vercel is IPv4-only; Supabase direct `db.*.supabase.co:5432` is IPv6-only. Use transaction pooler. */
+function adaptDatabaseUrlForServerless(url) {
+    if (!url || !process.env.VERCEL) {
+        return url;
+    }
+    if (url.includes('pooler.supabase.com')) {
+        return url;
+    }
+
+    const directMatch = url.match(
+        /^postgres(?:ql)?:\/\/([^:@/]+)(?::([^@/]*))?@db\.([a-z0-9]+)\.supabase\.co:5432\/([^?]+)(\?.*)?$/i
+    );
+    if (!directMatch) {
+        return url;
+    }
+
+    const [, user, password, ref, dbName, query = ''] = directMatch;
+    const poolUser = user.includes('.') ? user : `postgres.${ref}`;
+    const authPart = password !== undefined && password !== '' ? `${poolUser}:${password}` : poolUser;
+    const poolQuery = query.includes('pgbouncer=') ? query : `${query ? `${query}&` : '?'}pgbouncer=true`;
+
+    // Shared pooler on the same project host (IPv4) — works on many Supabase projects.
+    const sharedPoolerUrl = `postgresql://${authPart}@db.${ref}.supabase.co:6543/${dbName}${poolQuery}`;
+    if (process.env.SUPABASE_POOLER_MODE === 'shared') {
+        return sharedPoolerUrl;
+    }
+
+    const generation = (process.env.SUPABASE_POOLER_AWS_GENERATION || '0').trim();
+    const region = (process.env.SUPABASE_POOLER_REGION || 'us-east-1').trim();
+    const port = process.env.SUPABASE_POOLER_MODE === 'session' ? '5432' : '6543';
+
+    return `postgresql://${authPart}@aws-${generation}-${region}.pooler.supabase.com:${port}/${dbName}${poolQuery}`;
+}
+
 function requiresSsl() {
     if (process.env.DB_SSL === 'true') return true;
     if (process.env.DB_SSL === 'false') return false;
@@ -39,11 +73,13 @@ function requiresSsl() {
 }
 
 function getPgPoolConfig() {
+    const isServerless = Boolean(process.env.VERCEL);
     const poolSizing = {
-        max: Number.parseInt(process.env.DB_MAX_CONNECTIONS, 10) || 20,
-        idleTimeoutMillis: Number.parseInt(process.env.DB_IDLE_TIMEOUT_MS, 10) || 30000,
-        connectionTimeoutMillis: Number.parseInt(process.env.DB_CONNECTION_TIMEOUT_MS, 10) || 2000,
-        maxUses: 7500,
+        max: Number.parseInt(process.env.DB_MAX_CONNECTIONS, 10) || (isServerless ? 1 : 20),
+        idleTimeoutMillis: Number.parseInt(process.env.DB_IDLE_TIMEOUT_MS, 10) || (isServerless ? 10000 : 30000),
+        connectionTimeoutMillis:
+            Number.parseInt(process.env.DB_CONNECTION_TIMEOUT_MS, 10) || (isServerless ? 12000 : 2000),
+        maxUses: isServerless ? 1 : 7500,
     };
 
     const useSupabase = String(process.env.USE_SUPABASE || '').toLowerCase() === 'true';
@@ -98,4 +134,4 @@ function validateDatabaseEnv() {
     }
 }
 
-module.exports = { getPgPoolConfig, validateDatabaseEnv, requiresSsl, resolveDatabaseUrl };
+module.exports = { getPgPoolConfig, validateDatabaseEnv, requiresSsl, resolveDatabaseUrl, adaptDatabaseUrlForServerless };

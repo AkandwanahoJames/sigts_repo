@@ -2,17 +2,29 @@
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 
-// Ensure upload directories exist
+const uuidv4 = () => crypto.randomUUID();
+
+function isServerlessRuntime() {
+    return Boolean(
+        process.env.VERCEL ||
+        process.env.AWS_LAMBDA_FUNCTION_NAME ||
+        process.env.NOW_REGION
+    );
+}
+
+// Ensure upload directories exist (local / Render only)
 const createDirectory = (dir) => {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
     }
 };
 
-// Configure storage
-const storage = multer.diskStorage({
+// Configure storage (memory on Vercel/serverless — disk is read-only)
+const storage = isServerlessRuntime()
+    ? multer.memoryStorage()
+    : multer.diskStorage({
     destination: (req, file, cb) => {
         let uploadPath = 'uploads/';
         
@@ -104,6 +116,7 @@ const getFileUrl = (req, filename) => {
 };
 
 module.exports = {
+    isServerlessRuntime,
     upload,
     uploadSingle,
     uploadMultiple,

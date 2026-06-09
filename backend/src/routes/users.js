@@ -40,7 +40,7 @@ router.get('/profile', authenticateJWT, async (req, res) => {
         const userResult = await pool.query(
             `SELECT user_id, username, email, phone, first_name, last_name, 
                     user_type, created_at, last_login, profile_pic_url,
-                    email_verified
+                    email_verified, language_pref
              FROM users WHERE user_id = $1`,
             [userId]
         );
@@ -100,7 +100,8 @@ router.put('/profile', authenticateJWT, rejectGuestAccounts, [
     body('lastName').optional().trim().escape(),
     body('phone').optional().trim(),
     body('nationality').optional().trim(),
-    body('interests').optional().isArray()
+    body('interests').optional().isArray(),
+    body('language_pref').optional().isIn(['en', 'fr', 'local'])
 ], async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -108,7 +109,7 @@ router.put('/profile', authenticateJWT, rejectGuestAccounts, [
     }
 
     const userId = req.user.user_id;
-    const { firstName, lastName, phone, profile_pic_url, nationality, interests } = req.body;
+    const { firstName, lastName, phone, profile_pic_url, nationality, interests, language_pref } = req.body;
 
     try {
         // Update base user info
@@ -131,6 +132,10 @@ router.put('/profile', authenticateJWT, rejectGuestAccounts, [
         if (profile_pic_url !== undefined) {
             updates.push(`profile_pic_url = $${paramIndex++}`);
             values.push(profile_pic_url);
+        }
+        if (language_pref !== undefined) {
+            updates.push(`language_pref = $${paramIndex++}`);
+            values.push(language_pref);
         }
 
         if (updates.length > 0) {
@@ -459,6 +464,68 @@ router.get('/:id', authenticateJWT, authorize('it_manager', 'admin'), async (req
     } catch (error) {
         console.error('Get user error:', error);
         res.status(500).json({ error: 'Failed to get user' });
+    }
+});
+
+// =====================================================
+// GET /api/users/me/notifications — in-app notification centre
+// =====================================================
+router.get('/me/notifications', authenticateJWT, rejectGuestAccounts, async (req, res) => {
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 40));
+    try {
+        const result = await pool.query(
+            `SELECT notification_id, type, title, message, data, is_read, created_at
+             FROM notifications
+             WHERE user_id = $1
+               AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+             ORDER BY created_at DESC
+             LIMIT $2`,
+            [req.user.user_id, limit]
+        );
+        const unread = await pool.query(
+            `SELECT COUNT(*)::int AS count FROM notifications
+             WHERE user_id = $1 AND is_read = false
+               AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)`,
+            [req.user.user_id]
+        );
+        res.json({
+            success: true,
+            notifications: result.rows,
+            unread_count: unread.rows[0]?.count || 0
+        });
+    } catch (error) {
+        if (error.code === '42P01') {
+            return res.json({ success: true, notifications: [], unread_count: 0 });
+        }
+        console.error('Get notifications error:', error);
+        res.status(500).json({ error: 'Failed to load notifications' });
+    }
+});
+
+router.put('/me/notifications/:id/read', authenticateJWT, rejectGuestAccounts, async (req, res) => {
+    try {
+        await pool.query(
+            `UPDATE notifications SET is_read = true
+             WHERE notification_id = $1 AND user_id = $2`,
+            [req.params.id, req.user.user_id]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Mark notification read error:', error);
+        res.status(500).json({ error: 'Failed to update notification' });
+    }
+});
+
+router.put('/me/notifications/read-all', authenticateJWT, rejectGuestAccounts, async (req, res) => {
+    try {
+        await pool.query(
+            `UPDATE notifications SET is_read = true WHERE user_id = $1 AND is_read = false`,
+            [req.user.user_id]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Mark all notifications read error:', error);
+        res.status(500).json({ error: 'Failed to update notifications' });
     }
 });
 

@@ -1,0 +1,1837 @@
+MAKERERE               UNIVERSITY
+SMART INFORMATION GUIDE TOUR SYSTEM
+By
+Group 2.
+DEPARTMENT OF INFORMATION SYSTEMS SCHOOL OF COMPUTING AND INFORMATICS TECHNOLOGY
+A Report Submitted to the College of Computing and Information Sciences in Partial fulfillment of the Requirements for the Award of a Degree of Bachelors of Information Systems and Technology of Makerere University.
+Option: Information Technology Security
+Supervisor: Dr. Annabella Basaza-EjiriDepartment of Information Technology School of Computing and Informatics TechnologyEmail: annabella.habinka@cit.ac.ug
+MAY, 2026
+DECLARATION:
+As Group 2, we hereby declare that the information presented in this project report is our original work and that to the best of our knowledge, no similar study has been conducted nor has the same report ever been presented to another university for the award of Bachelor of Information Systems and Technology of Makerere University.
+GROUP MEMBERS:
+#
+NAME
+REGISTRATION NUMBER
+EMAIL & CONTACT
+SIGNATURE
+1
+AINEBYONA EMMANUEL
+23/U/05291/PS
+ainebyona.manuel15@gmail.com
+0757540385/0780270710
+2
+AKANDWANAHO JAMES
+23/U/05543/PS
+jamesfocus133@gmail.com
+0709950760/0786918789
+3
+NTAMBI DAVID
+23/U/16170/PS
+davidkntambi48@gmail.com
+0706337550/0781072434
+4
+MUCUNGUZI BENARD
+23/U/11430/PS
+benard.mucunguzi.72@gmail.com
+0742382837/0785246022
+5
+NKURUNZIZA PRECIOUS
+23/U/16059/PS
+preciousnkuru@gmail.com
+0778001907/0756762490
+Date:…………………….
+APPROVAL:
+This is to certify that I have read, supervised, and approved the report for the final year project undertaken by Group 2 in partial fulfillment of the requirements for the award of the Degree of Bachelor of Information Systems and Technology of Makerere University.
+Signature: ………………………..                           Date: ….../……./…….
+Dr. Annabella Basaza-Ejiri
+annabella.habinka@cit.ac.ug, 
+Department of Information Technology, 
+School of Computing and Informatics Technology, 
+Makerere University.
+DEDICATION:
+It is with sincere gratitude and deep appreciation that we dedicate this project to all those who have supported and encouraged us throughout our academic journey and the successful completion of this project study.
+We especially dedicate this work to our parents and guardians for their unwavering moral, financial, and emotional support, as well as their continuous encouragement throughout the course of our education.
+Special appreciation goes to our supervisor, Dr. Annabella Basaza-Ejiri, for her guidance, mentorship, patience, and invaluable academic support during the development of this project.
+We also dedicate this work to our friends, classmates, and all stakeholders in the tourism sector who contributed ideas, information, and encouragement towards the successful development of the Smart Information Guide Tour System.
+Above all, we thank the Almighty God for granting us wisdom, strength, knowledge, and good health throughout this project journey.
+ACKNOWLEDGEMENT:
+The successful completion of this project would not have been possible without the support, guidance, and contribution of many individuals and institutions whose efforts are sincerely appreciated.
+First and foremost, we express our heartfelt gratitude to our supervisor, Dr. Annabella Basaza-Ejiri, for her invaluable guidance, patience, constructive criticism, and continuous academic support throughout the development of this project. Her expertise and encouragement greatly contributed to the successful completion of this study.
+We also extend our sincere appreciation to the project coordinator, lecturers, and the entire staff of the School of Computing and Informatics Technology at Makerere University for the knowledge, skills, and support they provided throughout our academic journey.
+Special appreciation goes to the Uganda Tourism Board (UTB) and the management of Bwindi Impenetrable National Park for providing valuable information, guidance, and insights during the data collection and system requirements gathering process for the Smart Information Guide Tour System (SIGTS).
+We further appreciate the contributions of tourists, tour guides, park staff, IT personnel at Bwindi Impenetrable National Park, friends, and classmates who participated in interviews, questionnaires, and discussions that greatly supported this research.
+Finally, we thank our families and friends for their encouragement, financial support, and motivation throughout the entire project period.
+LIST OF TABLES:
+Contents
+DECLARATION:ii
+DEDICATION:iv
+ACKNOWLEDGEMENT:v
+LIST OF TABLES:vi
+LIST OF FIGURES:xii
+LIST OF ACRONYMS:xiv
+ABSTRACT:xvii
+CHAPTER ONE: INTRODUCTION1
+1.0 Introduction:1
+1.1 Background:1
+1.2 STATEMENT OF THE PROBLEM3
+1.3 OBJECTIVES4
+1.3.1 GENERAL OBJECTIVE4
+1.3.2 SPECIFIC OBJECTIVES4
+1.4 RESEARCH SIGNIFICANCE5
+1.5 RESEARCH SCOPE5
+1.5.1 Geographical Scope5
+1.5.2 Content Scope6
+1.5.3 Time Scope6
+1.6 JUSTIFICATION OF THE STUDY7
+CHAPTER TWO: LITERATURE REVIEW9
+2.0 Introduction:9
+2.1 General Issues Around Tourism/E-Governance10
+2.1.1 Developed Countries10
+2.1.2 Developing Countries12
+2.1.3 AFRICA13
+2.1.4 EAST AFRICA14
+2.2 TYPES AND CLASSIFICATION OF THE PROPOSED SYSTEM16
+2.2.1 Types of Information Systems16
+2.2.2 Existing Tourism Information Systems18
+2.2.3 The Proposed System24
+2.   Artificial Intelligence (AI) Integration25
+2.2.4 Research Gap Analysis28
+2.3 Summary28
+CHAPTER THREE: RESEARCH METHODOLOGY30
+3.0 Introduction30
+3.1 Research Design30
+3.2 Data Collection Methods and Procedures31
+3.3 Data Analysis34
+3.4 System Development35
+3.4.2 System Implementation37
+3.5 System Testing39
+3.6 Validation40
+3.7 Summary41
+CHAPTER FOUR: SYSTEM ANALYSIS AND DESIGN42
+4.1 Introduction42
+4.2 System Study42
+4.2.1 Current Study43
+4.3 Data Analysis and Findings44
+4.4 System Requirements54
+4.4.1 Software Requirements54
+4.4.2 Hardware Requirements55
+4.4.3 User Requirements55
+4.4.4 Functional Requirements56
+4.4.5 Non-Functional Requirements58
+4.5 SYSTEM DESIGN61
+4.5.1.2 Design for Smart Information Guide Tour System61
+4.6 Logical Database Design75
+4.7 Physical Database Design76
+CHAPTER FIVE: SYSTEM IMPLEMENTATION, TESTING AND VALIDATION85
+5.1 System Implementation85
+5.1.1 System technologies85
+5.2 System Functionality85
+5.3 System Testing86
+5.4 System Validation89
+5.5 System Evaluation and Results91
+CHAPTER SIX: SUMMARY, LIMITATIONS, CONCLUSION AND RECOMMENDATIONS91
+6.0 Introduction91
+6.1 Achievements92
+6.2 Challenges92
+6.3 Limitations of the study92
+6.4 Recommendations92
+6.5 Conclusion93
+REFERENCES93
+5. APPENDICES102
+5.1 Appendix A102
+5.2 Appendix B103
+5.3 Appendix C: Data Collection Instruments104
+Table 2.1: Strengths and weaknesses of related park-guide applications
+Table 2.2: Related visitor-information applications
+Table 3.1: Summary of techniques and tools used
+Table 4.1: Age distribution of respondents
+Table 4.2: Gender distribution of respondents
+Table 4.3: Years of experience of respondents
+Table 4.4: Information gaps experienced by tourists
+Table 4.5: Perceptions of a web-based guide tour system
+Table 4.6: Impact and integration
+Table 4.7: Digital system needs
+Table 4.8: Final assessment
+Table 4.9: Summary of software requirements
+Table 4.10: Summary of hardware requirements
+Table 4.11: Requirements traceability matrix
+Table 4.12: Physical design for tourists
+Table 4.13: Physical design for tour guides
+Table 4.14: Physical design for wildlife sightings
+Table 4.15: Physical design for notifications
+Table 4.16: Core physical database relations for SIGTS
+Table 4.17: REST API endpoint catalogue for SIGTS
+Table 5.1: User testing questionnaire (Likert scale 1–5)
+Table 5.2: System test cases and outcomes
+LIST OF FIGURES:
+Figure 4.4: Challenges and gaps experienced by tourists
+Figure 4.5: Perceptions of system features
+Figure 4.6: Area accuracy
+Figure 4.7: Use of digital system
+Figure 4.8: System rating
+Figure 4.11: System architecture for SIGTS.
+Figure 4.11 shows the three-tier layout: browser clients for tourists, guides, and IT staff; the SIGTS application server handling REST and AI proxy calls; and PostgreSQL with PostGIS plus Redis cache. Arrows indicate HTTPS requests and database read/write paths used during a typical tour-help query.
+Figure 4.12: EERD diagram for SIGTS.
+Figure 4.12 maps entities such as User, Tourist, TourGuide, Species, Location, and Sighting with specialization for roles and relationships to treks. The diagram informed Table 4.16 and ensured each fact type is stored once under third normal form.
+Figure 4.13: Context diagram (Level 0 DFD) of the Smart Information Guide Tour System
+Figure 4.13 places SIGTS between external actors (tourist, guide, IT manager, content manager) and data stores. It defines system boundaries before Level 1 decomposition in Figure 4.14.
+Figure 4.14: DFD Level 1
+Figure 4.14 decomposes SIGTS into processes for authentication, content retrieval, map services, sighting capture, AI query handling, and analytics reporting, showing how data flows from user input to PostgreSQL and back to the interface.
+Figure 4.15: Tourist app workflow
+Figure 4.15 traces the tourist journey from login through species browse, map view, optional tour-help query, and feedback submission, including offline cache and sync steps.
+Figure 4.16: Tour guide workflow
+Figure 4.16 covers guide login, schedule review, sighting registration with GPS, and alert handling linked to the sightings and tour_sessions tables.
+Figure 4.17: IT manager workflow
+Figure 4.17 shows how managers authenticate, publish cultural content, review AI query logs, read analytics dashboards fed by predictive SQL jobs, and trigger backups.
+Figure 4.20: Tourist dashboard (home screen) for SIGTS
+Figure 4.21: Wildlife information page for SIGTS
+Figure 4.22: Interactive map view for SIGTS
+Figure 4.23: Wildlife sightings page for SIGTS
+Figure 4.24: Tour guide dashboard for SIGTS
+Figure 4.25: Cultural narratives page for SIGTS
+Figure 4.26: IT manager dashboard for SIGTS
+LIST OF ACRONYMS:
+AI:Artificial Intelligence
+API:Application Programming Interface
+AR:Augmented Reality
+BCNF:Boyce-Codd Normal Form
+CMS:Content Management System
+CORS:Cross-Origin Resource Sharing
+CSV:Comma-Separated Values
+CSS:Cascading Style Sheets
+DFD:Data Flow Diagram
+Docker:Container Platform for Application Deployment
+DOI:Digital Object Identifier
+DSS:Decision Support System
+EAC:East African Community
+EER:Enhanced Entity-Relationship
+EERD:Enhanced Entity-Relationship Diagram
+EIS:Executive Information System
+ERD:Entity Relationship Diagram
+ES:Expert System
+FK:Foreign Key
+GDP:Gross Domestic Product
+GPS:Global Positioning System
+GSTC:Global Sustainable Tourism Council
+HTTPS:Hypertext Transfer Protocol Secure
+ICT:Information and Communication Technology
+IST:Information Systems and Technology
+IT:Information Technology
+JSON:JavaScript Object Notation
+JWT:JSON Web Token
+LAN:Local Area Network
+LLM:Large Language Model
+MIS:Management Information System
+NDPIV:National Development Plan IV (Uganda)
+Nginx:Reverse Proxy and Web Server
+NITA-U:National Information Technology Authority-Uganda
+OAS:Office Automation System
+ORM:Object-Relational Mapping
+PDF:Portable Document Format
+PK:Primary Key
+POI:Point of Interest
+PostGIS:PostgreSQL Spatial Database Extension
+PWA:Progressive Web Application
+RAG:Retrieval-Augmented Generation
+RBAC:Role-Based Access Control
+RDB:Rwanda Development Board
+Redis:In-Memory Data Store
+REST:Representational State Transfer
+SCB:Spain Convention Bureau
+SDG:Sustainable Development Goal
+SDGs:Sustainable Development Goals
+SDLC:System Development Life Cycle
+SIGTS:Smart Information Guide Tour System
+SQL:Structured Query Language
+TAM:Technology Acceptance Model
+TPS:Transaction Processing System
+TTM:Travel Trade Marketing
+UAT:User Acceptance Testing
+UI:User Interface
+UML:Unified Modelling Language
+UNESCO:United Nations Educational, Scientific and Cultural Organization
+UNWTO:United Nations World Tourism Organization
+URL:Uniform Resource Locator
+US:United States
+USD:United States Dollar
+UTB:Uganda Tourism Board
+UWA:Uganda Wildlife Authority
+WTTC:World Travel and Tourism Council
+ABSTRACT:
+Visitors to Bwindi Impenetrable National Park often rely on tour guides and lodge staff for facts about trails, fees, wildlife, and local culture. When those sources disagree or age without update, tourists leave uncertain about what is accurate. This project built the Smart Information Guide Tour System (SIGTS) to host Uganda Wildlife Authority–reviewed content on a park intranet that smartphones can reach before and during a visit, including short periods without mobile data.
+The work pursued one general objective: to deliver a tested prototype that stores organised, verifiable information for tourists and guides. Tasks covered requirements from interviews and questionnaires, database and screen design, coding with Next.js, Express.js, PostgreSQL/PostGIS, and Redis, and validation with park stakeholders.
+The team followed Agile sprints from January to June 2026. Field data showed that half of surveyed visitors ranked information accuracy as their main difficulty, with smaller groups citing weak online material, pricing confusion, and language limits. Acceptance testing produced a mean usability rating of 4.2 on a five-point scale, and every case in Table 5.2 passed on the release candidate.
+SIGTS can support Bwindi operations if content editors refresh facts each season and guides treat the tool as a backup to spoken explanation, not a replacement. The authors advise a longer pilot with Uganda Safari Guides Association members, fuller Luganda material, and better signal at park gates.
+CHAPTER ONE: INTRODUCTION
+1.0 Introduction: 
+Tourism today is no longer just about visiting new places; it is about experiencing them through the power of technology. Around the world, Information Systems and Technology (IST) are redefining how travelers explore destinations, connect with cultures, and access information. From smart tour guide applications and digital mapping tools to Artificial Intelligence powered travel assistants and virtual heritage tours, technology has become the invisible companion of every modern tourist (Al-Okaily, 2021, Varotsis & Mylonas, 2024). Researchers and innovators in the tourism industry have increasingly turned to these tools to enhance visitor satisfaction, improve accessibility, and promote sustainable tourism experiences. Chakraborty from National Aerospace Science and Technology Park (NASTP) Institute of Information Technology (NIIT) University has attempted to provide an autonomous virtual tour guide system for tourists which requires only an application to be installed on the tourist’s mobile phone through which the tourist can gather all available information about the place (Chakraborty, 2022). This section presents the background of the study, the statement of the problem, objectives of the study, the scope of the study, research significance and justification.
+1.1 Background: 
+Tourism globally is handled by two main international bodies which are United Nations World Tourism Organization (UNWTO) and the Global Sustainable Tourism Council (GSTC). Research shows that the UNWTO is the United Nations specialized agency for responsible, sustainable and universally accessible tourism” (UN Tourism, 2025). Study still indicates that the “Global Sustainable Tourism Council (GSTC) manages global standards for sustainable travel and tourism. The GSTC Standards form the foundation for international accreditation of certification bodies that certify accommodations, tours operators, and destinations as having sustainable policies and practices in place” (GSTC, 2025). Tourism contains the ability to contribute, directly or indirectly to all of the Sustainable Developmental Goals (SDG’s). Tourism targets SDG 8 (Decent work and economic growth), 12 (Responsible consumption and production) and 14 (Life below water) on inclusive and sustainable economic growth (Tourism and SDG’s, 2025). The tourism’s Gross Domestic Product (GDP) globally is 10% of the global economy which is about US$ 10.9 trillion (Travel and Tourism Economic Impact Research, 2025).
+According to the latest data, the top three developed countries in tourism are France, Spain, and the United States. France topped the list, welcoming 102.0 million international tourist arrivals in 2023, which injected a substantial 8.8% into the country's economy (UN Tourism Data Dashboard, 2025 France’s Travel & Tourism Broke All Records Last Year, WTTC Research Reveals, 2024). Spain followed closely, attracting 93.8 million international tourists and generating €260.5 billion in GDP, equivalent to 16% of the national economy (UN Tourism Data Dashboard, 2025 & Spain’s tourism sector could exceed €260 billion by 2025, according to WTTC). The United States rounded up the top three, hosting 72.4 million tourists and earning a staggering $2.36 trillion in economic contribution in 2023 (UN Tourism Data Dashboard, 2025 & U.S. Remains the World’s Most Powerful Travel & Tourism Market, 2024). These numbers underscore the immense value of tourism to these nations' economies, highlighting its potential for growth and development. With such impressive statistics, it's clear that tourism was designed to continue to play a vital role in shaping the economic landscapes of these countries.
+Among developing destinations, Thailand, Mexico, and India have expanded digital booking and on-site apps, yet remote parks still depend on face-to-face briefings. Uganda's gorilla tourism at Bwindi faces the same pattern: visitors expect modern tools, but most facts still arrive through whichever guide they meet at the gate.
+Lastly, South Africa's tourism industry remained a significant contributor to its economy, with 10.2 million international tourists in 2019 and a contribution of $8.4 billion to the country's Gross Domestic Product. These countries leveraged their unique cultural and natural resources to drive tourism growth and boost their economies.
+Africa's tourism industry had been on a steady growth trajectory, with 67 million international tourist arrivals in 2019, generating a substantial $67 billion in revenue. The Africa’s top-performing countries in tourism are leading the charge, with notable figures including South Africa, which welcomed 10.2 million international tourists and earned $8.4 billion in revenue. Egypt topped the list in terms of revenue generation, attracting 13.6 million international tourists and raking in $13.1 billion. Morocco followed closely, hosting 12.9 million international tourists and generating $8.1 billion in revenue. Kenya's tourism industry also thrived, with 2.4 million international tourists contributing $2.4 billion to the economy. Meanwhile, Tanzania's tourism sector earned $2.2 billion from 1.5 million international tourists, showcasing the continent's vast and diverse tourism potential.
+East Africa stood out with top destinations like Kenya, Tanzania, Rwanda, and Uganda driving the resurgence. Kenya welcomed about 2.4 million international tourists in 2024, earning $3.5 billion, a 15% year-on-year growth. Tanzania's tourism industry expanded consistently, with 1.81 million international arrivals in 2023 and $3.26 billion in revenue in 2024. Rwanda attracted 1.36 million visitors, generating $647 million, while Uganda's international arrivals rose to 1.37 million, earning $1.28 billion. The region's recovery was driven by wildlife, cultural, and conference tourism, improved air connectivity, and regional marketing efforts under the East African Community framework.
+Uganda is a home to over 50% of the world’s mountain gorilla population, found in Bwindi Impenetrable National Park and Mgahinga Gorilla National Park. In 2019, the United Nations World Tourism Organization (UNWTO) provided data for a Travel and Competitiveness Index where Uganda ranked 112th out of 140 countries. 
+Nestled in the heart of southwestern Uganda, on the edge of the Rift Valley, lies Bwindi Impenetrable National Park, one of Africa's most ancient and biologically diverse rainforests. This natural wonder has garnered international acclaim, being listed among the 25 most beautiful places in the world by CNN, as reported by Daily Monitor in 2023.
+1.2 STATEMENT OF THE PROBLEM
+Tourists in Uganda reported receiving inconsistent, shallow, or contradictory information from their guides during their visits (Mbago, 2024). This has led to widespread tourist confusion and dissatisfaction, which diminishes the overall visitor experience and appreciation of the country's tourism products (Mbago, 2024). The root cause of this problem is the lack of proper training and professional development among tour guides, many of whom lack the knowledge and ethical principles required for their role (Mbago, 2024). Other contributing causes include the absence of a standardized national certification system for guides, limited access to up-to-date informational resources, and insufficient continuous learning opportunities. 
+While sector associations like the Uganda Safari Guides Association (USAGA) have emphasized this issue, their efforts have been insufficient to create sector-wide professionalism (Mbago, 2024). The lack of reliable information has also resulted in a decline in Uganda's international tourism image, a reduction in repeat visits, and ultimately, lower revenue generation for the sector (Mbago, 2024). 
+However, even if a tour guide possesses certified training and authentic information resources, the integrity of the information delivered to the tourist was no longer guaranteed at the point of interaction. This was because guides often relied on personal, outdated information where information could be easily misinterpreted or sourced from unverified platforms.  Existing systems such as SmartGuide, TripAdvisor and MakeMyTrip provide digital tourism information, they largely rely on generalized content and lack site-specific validation and offline support. Therefore, it was critical to develop an integrated smart information guide tour system that delivers verified, standardized and context-aware information ensuring information accuracy and consistency when accessed through common consumer devices in the field.
+1.3 OBJECTIVES
+1.3.1 GENERAL OBJECTIVE
+To develop the Smart Information Guide Tour System integrated within an intranet that can assist both tour guides and tourists. This proposed system was designed to provide detailed, accurate and well-organized information about tourist attractions and activities to be done during the tour.
+1.3.2 SPECIFIC OBJECTIVES 
+To gather and analyze system and user requirements needed for developing a Smart Information Guide Tour System. 
+To design the Smart Information Guide Tour System.
+To implement the Smart Information Guide Tour System. 
+To test and validate the Smart Information Guide Tour System.
+1.4 RESEARCH SIGNIFICANCE
+This research benefited tourists, tour guides, and the tourism industry. 
+The system provided tourists with quick access to accurate and well-organized information, improving their knowledge and overall experience at attractions. 
+Tour guides benefited by using the system as a support tool that reduced information delivery gaps and kept them updated with reliable details. 
+The tourism industry benefited through improved service delivery, enhanced professionalism, and increased competitiveness, ultimately boosting Uganda’s image as a modern and tourist-friendly destination.
+The study extended ICT connectivity to the Bwindi Impenetrable National Game Park which was our geographical scope thus improving the ICT infrastructure of this tourism destination.
+The president of the Uganda Safari Guides Association (USAGA), emphasized the urgent need to train tour guides to ensure they provide consistent and accurate information to tourists, noting that professionalism and standardized knowledge are essential for improving visitors’ appreciation of Uganda’s tourism products (Mbago, 2024). According to NDPIV (2025), Uganda is positioning its tourism sector at the forefront of national economic growth, having surpassed coffee as the country’s leading revenue generator with $1.28 billion in earnings in 2024, officials said at a tourism development forum. 
+1.5 RESEARCH SCOPE
+1.5.1 Geographical Scope
+This study primarily focused on Bwindi Impenetrable National Park since “there have been efforts to extend Information and Communication Technology (ICT) connectivity to tourist sites such as Bwindi and Murchison Falls” (NDPIV, 2025), located in southwestern Uganda, on the edge of the Rift Valley. Bwindi is a United Nations Educational, Scientific and Cultural Organization (UNESCO) World Heritage Site and one of the country’s most iconic tourist destinations, renowned globally for its rich biodiversity and as a sanctuary for nearly half of the world’s remaining mountain gorillas (MoTWA, 2023). The Park covers approximately 321 square kilometres of dense montane and lowland forest, providing a unique ecological setting that attracts thousands of local and international tourists each year (MoTWA, 2023).
+1.5.2 Content Scope
+This study systematically developed and validated a Smart Information Guide Tour System prototype. First, requirements were gathered through stakeholder surveys and interviews. These requirements informed us of the design of a client-server architecture optimized for intranet use. The implementation focused on core modules: a content management system for verified information and a tourist interface with intelligent offline search. The prototype was rigorously tested and validated for functionality and usability to demonstrate improved information access.
+1.5.3 Time Scope
+This study was executed within a seven-month timeframe (January–June 2026) using an Agile software development methodology. Work was organized into iterative sprints with continuous stakeholder feedback, not a rigid sequential (Waterfall) lifecycle.
+Sprint 0 (Month 1 — Discovery and Requirements): Structured interviews, tourist questionnaires, and document review were conducted to gather and document system specifications for the product backlog.
+Sprints 1–2 (Months 2–3 — Design): The client-server architecture, PostgreSQL database schema, UML diagrams (DFDs, EERD, flowcharts), and Figma prototypes were developed and refined through sprint reviews.
+Sprints 3–5 (Months 3–5 — Development): Core modules were built iteratively, including the content management system, tourist interface, offline search, authentication, and AI-assisted query features.
+Sprint 6 (Month 6 — Testing, Validation, and Release): Unit, integration, usability, and user acceptance testing were conducted. The integrated prototype was validated for functionality, usability, and improved information access before documentation and deployment.
+1.6 JUSTIFICATION OF THE STUDY
+Globally, tourism remained a key driver of sustainable economic growth and cultural exchange, contributing nearly 10% of global Gross Domestic Product and supporting one in every ten jobs worldwide (UNWTO, 2024). However, the United Nations Sustainable Development Goals (SDGs), particularly Goal 8 (Decent Work and Economic Growth), Goal 9 (Industry, Innovation and Infrastructure), and Goal 11 (Sustainable Cities and Communities), emphasize the need to harness digital innovation to enhance tourist experiences and promote sustainable tourism. The Smart Information Guide Tour System (SIGTS) directly aligned with these goals by leveraging information technology to bridge knowledge gaps at tourist sites, improving tourist satisfaction and ensuring inclusive, sustainable growth in the tourism industry. The United Nations Environment Programme (UNEP, 2024) and UNWTO (2024) have also highlighted that more than 60% of global tourists seek destinations offering digital support tools for planning and on-site engagement, an expectation many developing countries still struggle to meet.
+At the continental level, Agenda 2063: “The Africa We Want” envisions a prosperous Africa based on inclusive growth, sustainable development, and strong cultural identity. The First Aspiration advocates for a “prosperous Africa based on inclusive growth,” while Aspiration 5 promotes “an Africa with a strong cultural identity, common heritage, values, and ethics.” Smart tourism technologies are instrumental in achieving this vision by driving digital transformation and promoting knowledge accessibility at heritage and natural sites. According to the African Union Commission (2023), digital innovations in tourism could increase Africa’s annual tourism revenue by up to 35%, primarily through enhanced visitor experiences and better information dissemination. The Smart Information Guide Tour System contributed to this agenda by offering a locally relevant, technologically advanced solution that enhanced visitor engagement, promoted cultural appreciation, and strengthened Africa’s competitiveness in the global tourism landscape.
+Regionally, the East African Community (EAC) Tourism Strategy (2025) emphasized the adoption of innovative digital solutions to improve regional tourism competitiveness and elevate the quality of visitor experiences. Nationally, Uganda’s NDPIV (NDPIV, 2025) identified tourism as a key driver of socio-economic transformation, with strategic focus on digital innovation and sustainable resource utilization. Despite Uganda’s immense tourism potential, recent findings by the Ministry of Tourism, Wildlife and Antiquities (MoTWA, 2023) indicated that over 52% of tourists expressed dissatisfaction due to limited or outdated information at tourism sites. Therefore, the Smart Information Guide Tour System is both timely and essential to support Uganda’s digital transformation agenda, aligned with NDPIV priorities, and directly addressed the information gap that undermines tourist satisfaction and revenue generation within the nation’s tourism sector.
+CHAPTER TWO: LITERATURE REVIEW
+2.0 Introduction:
+This review is guided by the Technology Acceptance Model (TAM) and information systems success dimensions (information quality, system quality, service quality) to evaluate how verified digital content improves tourist experience. It engages Uganda's NDPIV (2025), the Uganda Tourism Master Plan, and NITA-U digital service standards as the national policy context for SIGTS.
+This review is guided by the Technology Acceptance Model (TAM) and information systems success dimensions (information quality, system quality, service quality) to evaluate how verified digital content improves tourist experience. It engages Uganda's NDPIV (2025), the Uganda Tourism Master Plan, and NITA-U digital service standards as the national policy context for SIGTS.
+The rapid growth of Information and Communication Technologies (ICTs) has transformed various industries, including tourism (Lee et al., 2021). The increasing demand for personalized and immersive experiences has driven the development of smart tourism systems, leveraging technologies such as artificial intelligence, Internet of Things (IoT), and big data analytics. (Zhang, Sotiriadis, and Shen, 2022). These systems aim to enhance the tourist experience, improve destination management, and drive economic growth (Zhang, Sotiriadis, and Shen, 2022). According to the World Travel and Tourism Council, tourism accounts for approximately 10% of global GDP, generating significant revenue and employment opportunities worldwide (WTTC, 2024).
+Globally, tourism is a thriving industry, with countries like France, Spain, the United States, and Italy being among the most visited destinations. Developing countries like Thailand, Mexico, India, and Brazil are also experiencing significant growth in tourism. In Africa, countries like South Africa and Morocco are popular tourist destinations, while in East Africa, Kenya and Tanzania are well-known for their wildlife and natural beauty. Uganda's tourism sector has also grown significantly, attracting over 1.5 million tourists in recent years (UNWTO, 2023).
+This literature review explored the current state of tourism and the role of technology in shaping industry. Specifically, it examined existing smart tour information systems, such as smart guides, travel apps, and online platforms, analyzing their strengths, weaknesses, and key features. By comparing systems like Explore Uganda, TripAdvisor, and MakeMyTrip, this review aimed to inform the development of a smart tour information system tailored to Uganda's tourism needs, leveraging internet-based infrastructure, artificial intelligence, predictive analytics, and other cutting-edge technologies to provide a personalized experience for tourists.
+The proposed system featured smart navigation, indoor information and mapping, cultural narratives and storytelling, general destination information and recommendations, customization and personalization, as well as feedback mechanisms and ratings, all designed to provide a seamless and engaging experience for tourists. By harnessing the power of technology, Uganda's tourism industry could increase visitor satisfaction, improve destination management, and ultimately drive economic growth.
+2.1 General Issues Around Tourism/E-Governance 
+2.1.1 Developed Countries
+2.1.1.1 France 
+France remained the world's leading tourist destination, attracting 89.4 million visitors in 2024 (GoWithGuide, 2025). Tourism significantly contributed to the country's economy, generating €254.7 billion, which accounted for about 9% of its GDP. Paris is a major tourism hub, drawing over 30 million visitors annually, with the wider Île-de-France region welcoming over 44 million visitors in 2022 (GoWithGuide, 2025). Popular attractions like Disneyland Paris drew 10.4 million visitors in 2023, and France's rich cultural heritage is reflected in its 49 UNESCO World Heritage Sites (GoWithGuide, 2025).
+However, the French tourism sector faced challenges in meeting new consumer expectations and leveraging digital technologies. Travelers sought personalized and authentic experiences, favoring tailor-made stays that reflect their preferences and values (Dydu, 2024). Emerging technologies like artificial intelligence (AI), chatbots, and augmented reality (AR) were increasingly being integrated into tourism services to meet these demands (Dydu, 2024). France's pleasant summer climate, averaging around 25°C, continued to enhance its appeal to international travelers.
+2.1.1.2 Spain
+Spain was the second-strongest tourism brand globally and the third most visited country in the world. Its airports handled over 230 million passengers annually, and its ports receive about 8.6 million cruise travelers each year (SCB, 2025). Spain's prominent role in international tourism is further underscored by hosting the World Tourism Organization (UNWTO) headquarters (SCB, 2025).
+Spain was a pioneer in the development of the Tourism Ontology, which promoted digital transformation in the sector by enabling system interoperability, collaboration, and data sharing between public and private players (Segittur, 2023). The benefits of ontology include common understanding, interoperability, smart application development, knowledge reuse, improved data quality, and effective human-machine interaction (Segittur, 2023). Spain's SEGITTUR "Smart Destination Platform" project aimed to integrate public and private data, build a digital ecosystem, and enable visitors to interact digitally with local companies before, during, and after their trip (SEGITTUR, 2025).
+2.1.1.3 United Kingdom
+The tourism industry in the United Kingdom is rapidly expanding, projected to reach a value of approximately $46.68 billion by 2090, and currently employs over 4 million people across Britain (GoWithGuide, 2025). Mobile technology has significantly enhanced the tourist experience, with mobile apps and platforms making it easier for visitors to explore the UK's diverse destinations, from London's historic streets to the Scottish Highlands' scenic landscapes (TTM, 2024). GPS-enabled maps, augmented reality guides, and location-based services have transformed the way tourists navigate and interact with their surroundings (TTM, 2024).
+However, the integration of mobile technology and tourism also presented challenges. One primary concern was digital security, as the increased reliance on mobile devices for booking and payments raises the risk of cyberattacks and data breaches (TTM, 2024). Another challenge was the digital divide, particularly in rural and remote areas where access to high-speed internet and mobile networks is limited, despite mobile technology becoming ubiquitous in urban areas (TTM, 2024).
+2.1.2 Developing Countries
+2.1.2.1 Brazil
+Brazil has reached a historic milestone in international tourism, becoming the most visited country in South America in 2025, surpassing Argentina (WhereInRio, 2025). The country welcomed 6.8 million foreign tourists in 2024 and was maintaining a strong growth trend in 2025, exceeding targets set out in the National Tourism Plan (WhereInRio, 2025). Brazil is establishing itself as a global benchmark for hospitality, culture, and distinctive experiences.
+To enhance tourist experiences and residents' quality of life, Brazil is adopting digital tools, guided by the DTI Brazil Model, a national program led by the Ministry of Tourism and the Institute Ciudades del Futuro (ICF) (Mason, 2024). The DTI Model, originally developed in Spain and adapted for Brazil, helped cities make attractions more accessible through technology (Mason, 2024). Brazilian cities are implementing digital systems, such as São Luís' Atenas system, which collects real-time information about tourists, and Porto Velho's AI chatbot MarIA, which provides personalized travel suggestions (Mason, 2024).
+2.1.2.2 Colombia
+Colombia's tourism industry has become the country's second-largest economic sector, driven by strategic efforts to position it as a global destination. The Colombian Association of Travel and Tourism Agencies (ANATO) plays a key role in this transformation, promoting the country's diverse offerings and facilitating business opportunities. The 44th Vitrina Turística ANATO, held in Bogotá in 2025, attracted over 27,000 participants from 46 countries and 5,000 companies, fostering 13,000 scheduled meetings and generating roughly $130 million in deals (Cardin, 2025). The event featured initiatives like "Anato Capacita Tech," which focuses on integrating technology into tourism practices (Cardin, 2025).
+Colombia is leveraging technology to enhance visitor experiences, such as Bogotá's AI-powered chatbot, Candelaria, which provides personalized itineraries and recommendations (Tourism Review, 2025). This supports ProColombia's goal of positioning the country as a global leader in forward-thinking tourism. The rise of tourist housing, including private homes and apartments rented to visitors, has become a significant part of the tourism sector, with 63,676 registered tourist homes, surpassing hotels (18,945) and travel agencies (16,208) (Tourism Review, 2025).
+2.1.2.3 Mexico
+Mexico’s tourism industry is undergoing rapid transformation, driven by growing visitor numbers and advances in technology. The government has launched a plan to modernize 62 airports by 2030, with an investment of over MX$134 billion (US$7.5 billion), to handle an additional 32 million travelers and meet the demands of the growing international tourism market (TTW, 2025).
+Technology is transforming the tourism experience in Mexico, with Artificial Intelligence (AI) 
+being used to provide personalized recommendations for accommodations, activities, and dining options. Nearly 80% of tourism companies in Mexico are expected to incorporate AI into their operations by 2025 (TTW, 2025). Additionally, Mexico is investing in smart transportation, such as the Tren Maya rail system, which began partial operation in 2023 and is expected to be fully completed by 2025, connecting key locations across the Yucatán Peninsula more efficiently and sustainably (TTW, 2025).
+2.1.3 AFRICA
+2.1.3.1 Egypt
+The Egyptian tourism industry is undergoing a technological transformation fueled by advancements in artificial intelligence (AI) (TTW, 2025). AI-driven tools are being introduced to enhance visitor experiences, optimize operations, and improve tourism infrastructure, leveraging Egypt's rich historical and cultural heritage. The government, guided by the National Council for Artificial Intelligence (NCAI), has launched the National Artificial Intelligence (AI) Strategy 2025–2030, demonstrating a strong commitment to using AI in various sectors, especially tourism (TTW, 2025).
+By 2030, the ICT sector is projected to contribute 7.7% to Egypt's GDP, with around 30,000 AI professionals working across different industries (TTW, 2025). AI is expected to play a key role in Egypt's tourism growth, offering smarter digital tools for travelers, businesses, and cultural institutions. However, the industry faces challenges in fully adopting AI, particularly the high costs of AI infrastructure, which can be a barrier for small and medium-sized tourism businesses to invest in advanced technologies (TTW, 2025).
+2.1.3.2 Morocco
+Morocco has become the most-visited country in Africa, welcoming 17.4 million international tourists in 2024, a 20% increase from 2023. The Minister of Tourism, Ms. Fatim-Zahra Ammor, shared this data and highlighted the country's future prospects, including co-hosting the 2030 FIFA World Cup and the 35th edition of the African Cup of Nations.
+Technology is playing a significant role in Morocco's tourism industry. Online platforms like Airbnb, Expedia are being used to promote and book travel, while virtual and augmented reality experiences are also being utilized. However, rural areas face challenges due to limited access to reliable communication. Satellite technology is being explored to address this issue, with companies like Global Satellite Group working to transform the tourism sector by providing reliable communication in remote regions.
+2.1.4 EAST AFRICA
+2.1.4.1 Kenya
+According to a 2023 report by the World Travel & Tourism Council, 82% of travelers use digital platforms to plan trips, and 72% prefer booking experiences online (CSM, 2024). This shift presents both a challenge and opportunity for Kenya's tourism sector. Digital Experience Platforms (DXPs) can provide a solution by offering a centralized system for managing and delivering personalized, seamless experiences across digital touchpoints, enhancing the tourist journey from research to post-trip engagement (CSM, 2024).
+Kenya's tourism sector faces issues like fragmented information and inconsistent service quality. Tourists struggle to access complete and reliable details about attractions, and experiences vary depending on operators or locations (CSM, 2024). A DXP could address these issues by bringing information together in one place and setting quality standards for service providers, ensuring consistently high-quality experiences for visitors. This would make trip planning easier and improve overall tourist satisfaction (CSM, 2024).
+2.1.4.2 Tanzania
+In recent years, Tanzania has made significant investments in roads, airports, railways, and hospitality services (Kilisa Tours, 2025). These developments have improved accessibility, enhanced visitor experiences, and created new opportunities for both tourists and local communities. But while infrastructure advancements offer many benefits, they also present challenges, such as environmental concerns and potential over-tourism (Kilisa Tours, 2025).
+Despite these advancements, infrastructure development brings certain challenges. Expanding roads and airports can harm the environment through deforestation and habitat destruction. Popular destinations like Zanzibar and the Serengeti risk overcrowding, which threatens wildlife and the visitor experience (Kilisa Tours, 2025). High development costs and uneven investment between northern and southern regions also create imbalances, with some communities not benefiting directly from tourism growth (Kilisa Tours, 2025).
+2.1.4.3 Uganda
+In 2024, Uganda welcomed 1,371,895 international visitors, recovering to 89.2% of pre-pandemic levels, courtesy of strategic marketing efforts, improved partnerships and continued investments in tourism infrastructure and conservation (Ministry of Tourism, 2025). According to the Report, International tourism receipts grew to UGX 4.8 trillion (approximately USD 1.28 billion), up from USD 1.025 billion in 2023, contributing 16% of Uganda’s total exports. (Ministry of Tourism, 2025).
+Uganda’s tourism sector is set for a major leap forward, as the National Information Technology Authority-Uganda (NITA-U) and the Uganda Tourism Board (UTB) have joined forces with the Uganda Wildlife Authority (UWA) to launch a new, digitally driven era for the industry (The Publicist, 2025). By integrating technology into the tourism sector, the partnership directly supports the National Development Plan IV, which prioritizes strategic sectors like tourism and ICT to drive economic growth and job creation (NDP, 2024). This synergy between government agencies is a powerful signal of a unified national commitment to a digital future (The Publicist, 2025).
+2.2 TYPES AND CLASSIFICATION OF THE PROPOSED SYSTEM
+2.2.1 Types of Information Systems
+Information systems are classified based on the level of management they support, the nature of tasks they perform, and the kind of information they process. The major types include Transaction Processing Systems (TPS), Decision Support Systems (DSS), Executive Information Systems (EIS), Office Automation Systems (OAS), Expert Systems (ES), and Management Information Systems (MIS) (Laudon & Laudon, 2023).
+Transaction Processing Systems (TPS)
+These systems handle and record the day-to-day business transactions of an organization such as sales, bookings, payments, or registrations. They provide accurate, timely data that serves as input for higher-level systems (O’Brien and Marakas, 2021).Example: Hotel booking systems and point-of-sale systems.
+Decision Support Systems (DSS)
+DSS assist managers in making complex, semi-structured decisions by analyzing large data sets and providing simulations or projections (Power, 2021).Example: A system that helps tourism managers forecast visitor demand based on past data and environmental conditions.
+Executive Information Systems (EIS)
+These systems are designed for senior executives to monitor organizational performance and strategic goals. They offer visual dashboards and summary reports for quick decision-making (Laudon and Laudon, 2023).Example: A tourism authority dashboard showing national park performance indicators.
+Office Automation Systems (OAS)
+OAS support routine office functions such as document management, scheduling, communication, and coordination among staff members (O’Brien and Marakas, 2021).Example: An email and document-sharing platform for a tourism department.
+Expert Systems (ES)
+Expert Systems use artificial intelligence to mimic human expertise in specialized domains, helping users make informed decisions (Turban et al., 2022).Example: An Artificial Intelligent system recommending tourism packages based on traveller preferences.
+Management Information Systems (MIS)
+Management Information Systems (MIS) are designed to collect, process, and present information that supports middle-level management in planning, monitoring, and controlling operations. MIS provide summarized and structured reports derived from raw data generated by Transaction Processing Systems (Laudon and Laudon, 2023).They improve managerial efficiency by supplying accurate, timely, and relevant information for decision-making, performance monitoring, and strategic adjustments.
+2.2.1.1 Classification of the Proposed System
+The Smart Information Guide Tour System falls under the Management Information System (MIS) category. It gathers and manages data related to tourist activities, destinations, and feedback, and then processes it to generate useful insights for park managers and tour administrators. The system’s predictive analytics and reporting features align with Management Information System (MIS) functions transforming operational data into meaningful reports that guide decisions on visitor management, tour planning, and resource allocation.
+Moreover, the integration of Artificial Intelligence (AI) enhances the traditional Management Information System (MIS) capabilities by automating data analysis, generating reports, and supporting adaptive decision-making within the park’s management framework. Thus, Smart Information Guide Tour System operates as a Tourism-Oriented Management Information System, designed to enhance both managerial oversight and visitor experience.
+2.2.2 Existing Tourism Information Systems
+2.2.2.1 SmartGuide
+This is a comprehensive digital solution that offers destinations, tourist attractions, and travel businesses the tools to create engaging digital guides quickly and easily (SmartGuide, 2024).
+ The system features an open self-service Artificial Intelligence powered content management system (CMS) to effortlessly craft tailored visitor experiences that engage specific target audiences (SmartGuide, 2024). This platform provides a complete suite for creating and managing digital guide content, covering the essential functions required for modern, self-guided tourism (SmartGuide, 2024)
+Link: https://www.smartguide.app/create-digital-audio-guide
+Strengths
+It covers over 100,000 places worldwide.
+Guides can be created in 102 different languages including but not limited to Chinese, French, German, Spanish, English, Hindi, Slovak, Croatian, Italian, Japanese, Portuguese, Russian, Afrikaans, Dutch and Finnish. 
+The complimentary CMS equipped with AI can auto-translate into 30 languages and automatically convert text-to-speech. is provided for easy content localization.
+Supports augmented reality experiences in guide content.
+Tours can be set as public/private, and free/paid.
+Destinations and travel businesses can operate digital guides without incurring additional maintenance costs.
+Offers destination marketing services and expert consultations, helping tourism entities promote their destinations effectively.
+Weaknesses
+While it currently supports certain integrations such as GetYourGuide ticket sales, the number of integrations is on the lower side. However, more are being implemented to enhance functionality.
+The spread of content geographically is largely dependent on the preferences of the individual content creators, given that it is an open platform where anyone can create a digital travel guide.
+The app is not available on the Windows Phone Store.
+2.2.2.2 TripAdvisor (US/Global)
+TripAdvisor is a major tourism review and booking platform offering hotel, restaurant, and attraction reviews and user photos. It aggregates millions of user reviews, ratings, and photos for accommodation, attractions, and tours globally. It is a go-to source for travelers seeking social proof or feedback before booking. The platform also links users to external vendors for booking tours.
+Source: https://www.tripadvisor.com/
+Strengths
+Massive, crowdsourced review and photo database.
+Widely used for travel planning and decision making.
+Offers tour booking through viator integration.
+Weakness
+Reviews can be biased or manipulated.
+Focused on pre-trip planning and lacks detailed on-site information.
+Weak in providing structured interpretive content during tours.
+2.2.2.3 MakeMyTrip (India)
+MakeMyTrip is India’s leading online travel agency that integrates booking services for flights, hotels, and holiday packages. It includes destination information and user reviews, mainly for pre-trip planning. 
+Source: https://www.makemytrip.global/? 
+Strengths
+Broad travel inventory and payment options for local users.
+Good for trip planning and logistics.
+Weaknesses
+Minimal interpretive information during tours.
+Focused on booking, not guiding experiences.
+2.2.2.4 Explore Uganda (Uganda Tourism Board)
+Explore Uganda 
+Explore Uganda is the official digital tourism promotion platform developed by the Uganda Tourism Board to enhance destination visibility and traveller engagement through technology-driven tools (UTB, 2024). The platform offers centralized access to tourism information, including attractions, accommodation, events, tour operators, and travel advisory resources, helping visitors plan and explore the country efficiently (UTB, 2024).
+It features a mobile application and online content hub, providing interactive maps and real-time updates to support seamless and informative travel experiences while promoting Uganda as a competitive global tourism destination (Soft Power News, 2024).
+Source: https://exploreuganda.com/
+Strengths
+Centralized and official tourism data.
+Includes maps, destination guides, and operator listings.
+Promotes community tourism initiatives.
+Weaknesses
+Limited real-time, location-based interpretive content.
+Still developing coverage of all regions and parks.
+A TABLE SUMMARIZING THE STRENGTHS AND WEAKNESSES OF EXISTING TOURISM SYSTEMS
+App
+Strengths
+Weakness
+SmartGuide
+The complimentary CMS equipped with AI can auto-translate into 30 languages and automatically convert text-to-speech. is provided for easy content localization.
+The spread of content geographically is largely dependent on the preferences of the individual content creators, given that it is an open platform where anyone can create a digital travel guide.
+The app is not available on the Windows and then Phone Store.
+TripAdvisor
+Massive, crowdsourced review and photo database.
+Widely used for travel planning and decision making.
+Offers tour booking through viator integration.
+Reviews can be biased or manipulated.
+Focused on pre-trip planning and lacks detailed on-site information.
+Weak in providing structured interpretive content during tours.
+MakeMyTrip
+Broad travel inventory and payment options for local users.
+Good for trip planning and logistics.
+Minimal interpretive information during tours.
+Focused on booking, not guiding experiences.
+Explore Uganda
+Centralized and official tourism data.
+Includes maps, destination guides, and operator listings.
+Promotes community tourism initiatives.
+Limited real-time, location-based interpretive content.
+Still developing coverage of all regions and parks.
+A TABLE SHOWING COMPARISON OF FEATURES
+Application
+Navigation
+General Destination Information
+In-Tour/Park-Level Information
+Cultural Narratives
+SmartGuide
+X
+X
+TripAdvisor
+X
+X
+MakeMyTrip
+X
+X
+Explore Uganda
+Proposed System
+      X   - Not supported
+- Partially supported
+- Fully supported
+2.2.3 The Proposed System
+The Smart Information Guide Tour System is an intelligent, intranet-based tourism information platform designed to revolutionize how tourists access and experience information within Bwindi Impenetrable National Park. Built to bridge the persistent information gap between tour guides and tourists the system ensures that tourists receive accurate, up-to-date, and context-rich knowledge about attractions, wildlife, cultural heritage, and park activities in real-time.
+Unlike traditional guiding methods that depend heavily on human narration and printed brochures, Smart Information Guide Tour System harnesses the power of artificial intelligence, predictive analytics and smart navigation to deliver a personalized, data-driven experience even in remote areas with limited internet connectivity. Operating on a secure intranet environment, it guarantees continuous functionality, offline data access, and local content verification, making it a dependable digital companion for both tourists and guides.
+By seamlessly integrating modules for artificial intelligence content generation, predictive visitor insights, cultural storytelling, and customized feedback loops, the system transforms Bwindi into a smart destination hub a model of how Information Systems and Technology can sustainably enhance tourism, education, and conservation in Uganda and beyond (UNWTO, 2024 and Jamshidi et al., 2023).
+2.2.3.1 Detailed Description of the proposed system features 
+1.  Intranet-Based Infrastructure
+The system operates on a secure intranet, ensuring uninterrupted access even in areas with limited or no internet connectivity. This local network architecture allows all guides, kiosks, and tourist devices within the park to connect and share data seamlessly.According to Al-Okaily (2021), intranet systems enhance information reliability and security by restricting access to authorized users while maintaining high data transfer speeds. This ensures that tourists can still browse maps, cultural data, and narratives without relying on external internet providers, a crucial feature for remote destinations like Bwindi Impenetrable.Key benefit: Real-time local connectivity, faster data retrieval, and guaranteed availability of verified park content.
+2.   Artificial Intelligence (AI) Integration
+The system integrates AI capabilities through a chatbot to enhance information processing, user engagement, and system adaptability. This artificial intelligence component was implemented as follows:
+Natural language queries, allowing tourists to ask questions and receive instant responses.
+The tour-help feature is implemented as a Next.js page (ask the AI chatbot) that is designed to call POST /api/tourist/ai-query once the backend route is completed. In the pilot, tourists receive answers from curated FAQs and animals/cultural_narratives content through existing GET routes; the AI assistant screen demonstrates the intended chat workflow. Park-approved rows in PostgreSQL remain the authoritative knowledge base; a future release will add retrieval-augmented prompting once the Express handler is wired.
+Studies show that Artificial Intelligence (AI)-driven systems increase personalization, reduce decision fatigue, and improve satisfaction (Chakraborty et al., 2022). In Smart Information Guide Tour System, AI ensures that information is not only available but also context-aware and adaptive to tourist needs.
+3.  Predictive Analysis and Reporting
+Predictive analytics in the pilot build did not use an opaque black-box model. Inputs are anonymized rows from tour_sessions, sightings, and feedback tables. Peak-hour congestion is forecast with a seven-day moving average of hourly gate check-ins per sector, computed nightly in PostgreSQL using window functions (AVG() OVER (PARTITION BY sector_id ORDER BY hour_bucket)). An alert is raised when the forecast exceeds 85% of the capacity value stored in park_sectors. Route popularity ranks use COUNT(*) on sightings grouped by location_id for the IT dashboard. Satisfaction trends aggregate Likert scores from the tourist questionnaire linked in Chapter 4. These SQL-based metrics feed the analytics API (GET /api/admin/analytics) and exportable CSV reports for park managers.
+This feature assists park management in:
+Predicting peak visiting hours.
+Identifying areas of tourist congestion.
+Generating dynamic reports on visitor satisfaction and site performance.
+According to Seraj et al. (2025), predictive tourism analytics improve decision-making by transforming raw visitor data into actionable insights, promoting better planning and resource allocation.Key benefit: Enhances operational efficiency, supports conservation management, and enables data-driven decision-making.
+4.  Smart Navigation
+The system integrates an intelligent navigation module that provides both map-based route assistance within the park. Using geolocation technologies (operating offline through the intranet), tourists can view routes and receive directional guidance.This feature improves visitor safety and orientation while reducing dependence on physical tour maps or constant guide supervision. Kang et al. (2020) emphasize that smart navigation systems significantly enhance user autonomy and confidence in unfamiliar destinations.Key benefit: Improves accessibility, safety, and independence in tourist movement within the park.
+5.  In-Tour Information
+At the core of the Smart Information Guide Tour System is in-tour information delivery providing tourists with accurate, site-specific data as they explore various park zones.This includes dynamic facts about flora, fauna, conservation history, and ongoing projects displayed on devices or interactive kiosks. According to Mbago (2024), inadequate in-tour information remains a major source of tourist dissatisfaction in Uganda’s parks. By delivering structured and multimedia-supported content (text, images, and voice notes), the system ensures tourists remain informed, engaged, and educated throughout the journey.Key benefit: Enhances learning, engagement, and satisfaction during the actual tour experience.
+6.  Cultural Narratives
+Recognizing Bwindi’s deep cultural details, the system includes a cultural narratives feature. This is a digital storytelling module that shares indigenous traditions, myths, and heritage linked to the local communities surrounding the park for example the Batwa. This feature supports cultural preservation and tourism education, aligning with the UNWTO (2024) call for technology-driven cultural inclusion in tourism. 
+Key benefit: Promotes cultural appreciation, supports local identity, and enriches the visitor experience through immersive storytelling.
+7.  General Destination Information
+The General Destination Information section serves as a digital encyclopedia for Bwindi and its surroundings, covering topics such as park entry fees, accommodation, weather updates, conservation rules, and emergency contacts. According to Sun et al. (2022), tourists often prioritize access to accurate logistical data when planning and navigating destinations. This module ensures that visitors have all essential pre-tour and on-site information, minimizing confusion and improving preparedness. 
+Key benefit: Centralized access to all vital park and travel data in one interface.
+8.  Customization and Feedback
+The Customization and Feedback module allows users to personalize their experiences and provide direct input to park authorities. Tourists can rate tours, suggest improvements, and customize the system’s interface to match their preferences (language, theme, content depth).Feedback data was designed to feed into AI algorithms for continuous system learning and improvement. Goo et al. (2022) note that such participatory feedback mechanisms promote tourist trust and long-term loyalty. 
+Key benefit: Promotes user engagement, continuous improvement, and responsive service delivery.
+2.2.4 Research Gap Analysis
+Gap Area
+Existing Systems
+SIGTS Response
+Information accuracy
+Crowdsourced or guide-dependent
+UWA-verified content
+Offline access in the forest
+Limited in global apps
+Offline cache + intranet
+National policy alignment
+Generic global platforms
+NDPIV / UWA contextual design
+Guide–tourist integration
+Separate apps
+Shared intranet roles
+A comparative analysis of SmartGuide, TripAdvisor, MakeMyTrip, and Explore Uganda demonstrates the continued need for a localized, park-specific tourism information system. Unlike international tourism platforms that rely on broad, generalized content repositories, SIGTS adopts a centralized, context-specific information architecture in which all content related to Bwindi Impenetrable National Park—including gorilla trekking regulations, trail information, conservation protocols, and community fee structures—is verified and approved by the Uganda Wildlife Authority to ensure accuracy, consistency, and operational relevance. While Explore Uganda effectively promotes Uganda as a tourism destination, it largely depends on individual guides for on-site interpretation and information delivery. Furthermore, none of the reviewed platforms integrates a park intranet environment supporting offline navigation, moderated question answering, and role-based interfaces tailored for tourists, tour guides, and IT administrators within a single protected area context. Rather than replicating a global tourism listing model, SIGTS was specifically designed to address these localized operational and informational gaps within the Ugandan park ecosystem.
+2.3 Summary
+The review confirms that digital tourism tools are widespread, but verified, park-controlled information for Bwindi remains thin. Policy direction from NDPIV and NITA-U supports digitisation, while field evidence points to inconsistent guide narratives as the practical problem. SIGTS responds by tying content approval to park management, storing data for offline use, and recording sightings and feedback that administrators can audit later.
+CHAPTER THREE: RESEARCH METHODOLOGY
+3.0 Introduction
+This chapter presents the methods and procedures for designing, developing, testing, and validating the Smart Information Guide Tour System (SIGTS). It outlines the research design, data collection methods, data analysis procedures, and the Agile system development process adopted for this project. The methodology ensures systematic development, validation by real users, and alignment with the project objectives.
+3.1 Research Design
+The Smart Information Guide Tour System (SIGTS) was developed using an Agile software development methodology. Agile supports iterative delivery, continuous stakeholder feedback, and adaptation to changing requirements which is essential for tourism platforms where visitor needs and destination information evolve frequently. The project used time-boxed sprints, a prioritized product backlog, sprint planning, stakeholder reviews, and retrospectives to improve each cycle. A pure Waterfall lifecycle was not used because tourism requirements evolved with stakeholder feedback; Agile sprints allowed iterative design, implementation, and testing.
+3.1.1 Agile Development Phases and Application to the Project
+Requirements Gathering and Analysis: Structured interviews, online tourist questionnaires, and document review were conducted to identify functional and non-functional requirements. Stakeholders included tourists, tour guides, park managers, and developers. Google Forms and interview guides were used. The output was a prioritized product backlog and requirements specification.
+Planning: The team defined system modules, the content management module, user interaction module, reporting dashboards, and AI module and broke work into sprint backlogs. Sprint durations were set, tasks assigned, and deliverables scheduled. Trello and Gantt charts supported planning, producing an approved sprint plan aligned with Agile milestones.
+System Design: SIGTS architecture was modelled using a structured, process-centred approach. Data flow diagrams, entity-relationship diagrams, context diagrams, and flowcharts visualized processes, data stores, and external entities. Draw.io, Figma, and PostgreSQL schema scripts in backend/sql/init were used. Outputs were reviewed in sprint reviews and refined before implementation.
+Software tools such as Draw.io, Figma, and PostgreSQL migration scripts were used. The expected output was a complete system design specification document.
+Development (Implementation): Developers built the system iteratively with front-end interfaces, back-end APIs, database integration, authentication, and core SIGTS workflows. Technologies included Next.js 14, React 18, Tailwind CSS, Node.js, Express.js, PostgreSQL with PostGIS, and Redis. Each sprint delivered working increments toward a functional prototype.
+Testing and Validation: Unit, integration, usability, and user acceptance testing ran within and after development sprints. Tourists and guides tested features in realistic scenarios. Postman, test scripts, and browser developer tools supported verification. The output was a tested, validated system meeting acceptance criteria.
+Release and Documentation: The team deployed the system, finalized documentation, and collected user feedback. Web hosting, GitHub, and Render supported deployment. This phase delivered the working SIGTS prototype and complete project documentation.
+3.2 Data Collection Methods and Procedures
+To gather system requirements and understand user needs, qualitative and quantitative data collection methods were used. Methods, instruments, sample sizes, and procedures are outlined below.
+3.2.1 Interviews
+Procedure
+Structured interviews were conducted with key stakeholders from relevant user groups including park managers, tour guides and park staff. Participants were contacted beforehand, appointments scheduled, and each session lasted approximately 20–30 minutes. Interviews were conducted face-to-face.
+Purpose
+To understand current nature-based information-sharing processes between guides, tourists, and park management, identify key operational challenges in delivering accurate and engaging content, assess the security and data privacy needs of a localized system, and determine the preferred user interaction channels for example kiosk and mobile web
+Instrument: Interview Guide (attached in the appendices)
+3.2.2 Questionnaires (Online Surveys)
+Procedure
+Google Forms questionnaires were distributed to tourists (local and international) visiting or planning to visit Bwindi Impenetrable National Park. Links were shared through tour operators, park visitor centres, lodges, and relevant social media or travel forums. Responses were collected automatically in Google Sheets for descriptive and inferential analysis.
+Purpose
+To gather large-scale quantitative data on user preferences, including preferred information access method (kiosk and personal mobile device), desired types of content (wildlife facts, trail maps, safety and privacy of information), frequency of seeking information during visits, and overall interest in and acceptance of an AI-assisted information system.
+Instrument: Questionnaire Form (attached in the appendices)
+3.2.3 Document Review
+Procedure
+A systematic review of existing Artificial Intelligence-driven information systems, tour guide platforms, and nature interpretation technologies was conducted. Examples include systems like SmartGuide, TripAdvisor, MakeMyTrip, Explore Uganda and various museum/kiosk-based interactive guides. Their system architectures, user interaction models, content delivery methods, and approaches to offline functionality and data privacy was designed to be examined to benchmark relevant best practices and technological approaches.
+Purpose
+To understand the capabilities and limitations of existing solutions, identify design and functionality gaps in the current ecosystem, and inform the technical and experiential design of the proposed Smart Information Guide Tour System (SIGTS) to ensure it offers distinctive value.
+Instrument: Document Review Checklist
+3.2.4 Sample Size
+Interviews and professional consultations targeted 15–20 key stakeholders (tour guides, park staff, and managers). The online tourist questionnaire aimed for 150 or more responses to support robust quantitative analysis of information accuracy, gaps, and SIGTS acceptance.
+A purposive sample was used: 15–20 professionals for in-depth requirements (qualitative depth) and a target of 150+ tourists for questionnaire data (quantitative breadth). This mixed approach follows Creswell and Plano-Clark (2017) for convergent mixed-methods design in information systems research.
+A purposive sample was used: 15–20 professionals for in-depth requirements (qualitative depth) and a target of 150+ tourists for questionnaire data (quantitative breadth). This mixed approach follows Creswell and Plano-Clark (2017) for convergent mixed-methods design in information systems research.
+Participants
+unit sample 
+population
+Target population
+sampling technique
+Experts
+3
+Park managers 
+Purposive sampling
+Primary end users 
+7
+Tour guides, park rangers, visitor center staff
+Purposive sampling
+Secondary end users
+134
+Tourists local and international
+Purposive sampling
+3.2.5 Ethical Considerations and Data Privacy
+Ethical approval for this study was obtained in accordance with university research guidelines and standards governing academic research involving human participants. Participation in the study was entirely voluntary, and all respondents provided informed consent before taking part in interviews or completing questionnaires.
+Data collection involved both physical interviews and online questionnaires administered through Google Forms. The online survey targeted tourists and individuals who had previously visited any tourist site, including secondary school students, university students, and members of the general public. The questionnaire link was voluntarily shared with participants through digital communication platforms like WhatsApp and respondents independently chose whether to participate in the study. No participant was pressured or financially induced to provide responses.
+To ensure confidentiality and privacy, no personally identifiable information was collected or disclosed in the research findings. All responses were anonymized and used strictly for academic and system development purposes. Furthermore, the Smart Information Guide Tour System (SIGTS) was designed with strong data protection measures, including role-based access control, encrypted authentication, secure intranet communication, and data minimization principles. These measures were implemented in compliance with Uganda’s Data Protection and Privacy Act and relevant park operational policies to safeguard tourist and operational information from unauthorized access or misuse.
+3.2.6 Risk Analysis
+The key risks identified included unreliable internet connectivity within remote forest areas, which will be mitigated through offline caching and intranet-based service delivery. The risk of inaccurate or misleading AI-generated responses will be reduced through Uganda Wildlife Authority-approved information sources. Potential low user adoption among tourists and tour guides will be addressed through stakeholder sensitization, user training and intuitive system design. Risks associated with unauthorized access and data breaches will be mitigated using intranet isolation, role-based access control (RBAC), encrypted authentication mechanisms and continuous system monitoring to ensure the confidentiality, integrity, and availability of tourism and operational data.
+3.3 Data Analysis
+The collected data was analyzed using both quantitative and qualitative approaches. Findings obtained from online questionnaires and interviews are presented in Chapter 4 (Sections 4.3–4.3.7), where summary statistics, charts, tables, and thematic insights were used to support system requirement analysis, and key design decisions for the proposed system.
+3.3.1 Qualitative Data Analysis
+Qualitative data from interviews and open-ended responses were analyzed using thematic analysis. Transcripts were coded for recurring themes such as challenges accessing accurate park information, expectations for reliability and interactivity, and concerns about trust and accessibility.
+The analysis produced user insights and user stories translated into product backlog items—functional requirements (for example AI-assisted responses) and non-functional requirements (for example offline use in low-connectivity areas). Thematic analysis provided a foundation for sprint planning and iterative design decisions.
+3.3.2 Quantitative Data Analysis
+Quantitative questionnaire data were analyzed using descriptive and inferential statistics where appropriate.
+Survey responses were summarized with frequencies, percentages, means, and standard deviations in tables and charts, showing tourist preferences, information gaps, and acceptance of a digital guide. Detailed results (for example information accuracy gaps, feature preferences, and trust factors) are reported in Chapter 4.
+Charts and graphs presented trends to validate and prioritize backlog items—for example offline access or verified content. Correlation analysis tested relationships between demographics and feature preferences, supporting data-driven sprint planning and product backlog refinement.
+3.3.3 Outcome of Data Analysis
+Chapter 4 reports the coded interview themes and questionnaire totals, including the fifty percent share of tourists who flagged inaccurate facts as their leading problem.
+Offline access, verified wildlife text, and map-based navigation moved to the top of the product backlog because those items scored highest among respondents.
+Validated system components, ensuring each component directly addresses a user problem or requirement.
+3.4 System Development
+3.4.1 System Design
+ 3.4.2 System Implementation
+1. Technologies
+Front-End: Next.js 14 (tourist and guide PWAs), React Admin (IT portal), Tailwind CSS, Leaflet
+Three client applications were built: a Next.js tourist PWA with offline map tiles and IndexedDB sync, a Next.js guide dashboard, and a React Admin portal for IT managers. Tailwind CSS and Leaflet provided responsive layout and geospatial views.
+Back-End: Node.js with Express.js
+Node.js with the Express.js framework provided the REST API, Socket.io real-time tour sessions, JWT authentication (jsonwebtoken, passport-jwt), bcryptjs password hashing, and optional two-factor codes through otplib. Route modules under /api/auth, /api/tourist, /api/guide, /api/admin, and /api/sync were protected by helmet, CORS, rate limiting, and intranet geofence middleware.
+Database:  PostgreSQL
+PostgreSQL 15 with PostGIS stored relational and geospatial data. The pg driver executed raw SQL from migration scripts (backend/sql/init), defining tables, indexes, triggers, and row-level security without an application-level ORM.
+API Testing: Postman
+Postman was used to exercise REST endpoints on the Express router. API contracts were documented in Table 4.17 and verified against the role-based route modules in the backend repository.
+Version Control: Git & GitHub
+Git tracked all code changes during development.GitHub stored the repository online, enabling collaboration and backup.
+2. Main Functional Components to be Implemented
+Tourist Interaction & Query SystemTourists can query the system via text or voice input at kiosks or on personal devices. The system processes natural language, retrieves vetted content, and delivers contextual, accurate responses in text format. Sessions are anonymous, with no login required for basic queries.
+Content Management System (CMS)Authorized Park Staff and Biologists (Content Managers) can log in to a secure portal to curate, update, and manage the system's knowledge base. This includes adding new facts, updating trail conditions, vetting information sources, and categorizing content. All changes are versioned and require appropriate approval workflows.
+Tour Guide Companion DashboardTour Guides can register and log in to access a dedicated dashboard. Features include saving frequent queries, accessing advanced park data (for example animal movement heatmaps), managing group profiles, and providing direct feedback on system accuracy to improve content.
+System Administration & User ManagementAdministrators can manage all user accounts (guides, staff), review system interaction logs and analytics, oversee the Content Management System (CMS) approval workflow, and manage the deployment status of kiosk units. Access control is enforced via role-based permissions.
+Offline Functionality & Data SyncThe core system, especially kiosk units, was designed for resilient operation in low/no-connectivity environments. A synchronization engine managed bi-directional data updates (for example new content, usage logs) when a network connection is available.
+Analytics, Reporting & System LearningThe system tracks anonymized interaction logs (query types, response success, session duration). An analytics dashboard visualizes this data to identify knowledge gaps, measure user engagement, and guide content curation. This data also feeds back into improving the query routing and response generation algorithms.
+3.5 System Testing
+Several testing methods were employed to ensure the Smart Information Guide Tour System (SIGTS) operates correctly, securely, and efficiently under real-world conditions.
+1.Unit Testing
+Developers exercised unit-level checks on Express middleware, SQL query helpers, and React components as part of each sprint Definition of Done. Jest and React Testing Library supported frontend tests; Postman and manual route inspection supported API verification.
+2.Integration Testing
+Integration tests evaluated interactions between the Next.js clients and the Express REST API, between Express handlers and PostgreSQL through pg, and between the offline sync queue and /api/sync routes. Postman collections automated representative data flows.
+3.User Acceptance Testing (UAT)
+UAT involves real users, including tourists and tour guides, testing the system in realistic scenarios. The goal is to confirm that the system is easy to use, meets user expectations, and supports intended workflows effectively.
+4.Performance Testing
+Performance testing assessed the system's ability to handle concurrent users on kiosks, and mobile devices process multiple simultaneous queries, and maintain responsiveness under peak park visitation conditions.
+5.Security Testing
+Security testing was conducted, focusing on user authentication/authorization, data protection for sensitive park data and user logs, input validation to prevent injection attacks, and ensuring secure communication. Regular dependency scanning and adherence to Express helmet and rate-limit middleware was designed to be standard practice
+3.6 Validation
+The system was validated by:
+Comparing requirements vs. delivered features
+Collecting feedback from 10 test users
+Evaluating usability (ease of navigation, and responses)
+Measuring the accuracy of provided information to tourists
+A validation checklist was included in the appendices.
+3.7 Summary 
+ 
+SPECIFIC OBJECTIVE 
+TOOLS AND TECHNIQUES 
+DELIVERABLES 
+1 
+To gather and analyze system and user requirements needed for developing a Smart Information Guide Tour System. 
+ 
+Interviews  
+Questionnaires 
+ 
+Requirement specification documentation 
+2.  
+ To design the Smart Information Guide Tour System.
+Data Flow diagrams (DFDs) 
+Entity relationship diagrams (ERDs) 
+Case diagram
+Activity diagram
+System design document 
+3. 
+To implement the Smart Information Guide Tour System. 
+ 
+HTML 
+CSS 
+MySQL 
+react 
+JavaScript 
+python
+The Smart Information Guide Tour System (SIGTS) prototype 
+4. 
+ To test and validate the Smart Information Guide Tour System
+1.Pytest
+The Smart Information Guide Tour System (SIGTS) 
+CHAPTER FOUR: SYSTEM ANALYSIS AND DESIGN
+4.1 Introduction
+This chapter presents the analysis and system Architectural Design of the Smart Information Guide Tour System. The design process follows the structured system approach, leveraging system analysis and design diagrams and modular architectural patterns to model system components, interactions, and data structures effectively. This approach ensures that the system is scalable, maintainable, and capable of supporting dynamic and structured tourism information delivery across different user environments.
+The purpose of this document is to provide a comprehensive architectural blueprint that guides system implementation, facilitates effective communication among stakeholders, and supports design validation. 
+4.2 System Study
+This phase of the project involved studying the operations and procedures of the current tourism information and tour management systems to identify their strengths and weaknesses. During this study, data collection methods such as interviews and questionnaires, both online and physical, were used to gather information from tourists, tour guides, park managers, and IT Manager.
+The study was conducted to identify the challenges faced in accessing tourism information, navigation, wildlife tracking, and tour management services within the park environment, and to propose the Smart Information Guide Tour System (SIGTS) as a solution. The information collected from potential system users was critically analyzed and evaluated to establish the system objectives and user requirements. 
+4.2.1 Current Study
+The current system of accessing tourism information at most tourist sites in Uganda is largely manual and guide-based. Tourists mainly rely on physical tour guides and onsite information centers to obtain details about attractions, wildlife, cultural heritage, and park activities.
+Although some tourist sites and national parks provide basic information through websites or brochures, the information is often limited, outdated, or not detailed enough to support real-time visitor needs. As a result, tourists frequently depend on verbal explanations from tour guides, which may vary in consistency and accuracy.
+4.2.2 Strength of the current system
+The current tourism information system has several strengths as outlined below.
+The system allows tourists to physically interact with tour guides at the site, enabling them to receive direct explanations and detailed interpretations of attractions, wildlife, and cultural heritage. This face-to-face interaction improves understanding and provides a more personalized experience for visitors.
+The presence of onsite information centers and printed materials such as brochures provides tourists with basic guidance about the site, expected activities, and available services. These resources can be accessed without requiring internet connectivity, making them useful in remote areas.
+The current system supports experiential learning, as tourists gain firsthand knowledge through guided tours and real-time demonstrations within the park environment.
+4.2.3 Weakness of the current system
+The current tourism information system has several limitations that affect the quality and efficiency of information delivery to visitors.
+The system is time consuming, as tourists are required to physically engage tour guides at every point of interest, even for minor or general information that could be accessed digitally. This often leads to delays and reduces overall visitor convenience.
+ The system provides limited and sometimes inconsistent information about attractions, wildlife, cultural heritage, and park services. Tourists may not receive sufficient details about sites, conservation practices, or historical background, which affects their overall experience and learning.
+It is difficult to ensure continuous and standardized information delivery, as tour guides may differ in interpretation and presentation. This can result in variation in the quality and accuracy of information provided to different visitors.
+4.3 Data Analysis and Findings
+This section presents the findings obtained from the field study, including the functional and non-functional requirements of the Smart Information Guide Tour System (SIGTS). It also outlines user requirements as well as the system requirements, covering both software and hardware needs necessary for implementation.
+System analysis involves the collection, examination, and interpretation of data gathered from stakeholders such as tourists, tour guides, and site managers. It focuses on identifying existing problems in the current tourism information delivery process and breaking down the system into its key components.
+The purpose of this phase is to clearly define what the system should achieve and to translate user needs into structured system requirements that guide the design and development of the proposed solution.
+4.3.1 Presentation of Findings
+This section presents the findings of the study, organized into two main subsections:
+Demographics of the Respondents (age, gender, position, etc.).
+Findings (responses to questions regarding the current system, processes, challenges, needs, and recommendations).
+4.3.2 Section A: Professional Background
+4.3.2.1 Demographics of the Respondents
+The demographic data provides an overview of the characteristics of the stakeholders who participated in the requirements gathering process for the Smart Information Guide Tour System. This information is essential for understanding the context of the responses and ensuring that the sample is representative of the target population, which includes park managers, tour guides, park rangers, visitor center staff, and tourists at Bwindi Impenetrable National Park.
+4.3.2.2 Age Distribution of Respondents
+This table shows the age distribution of tourists and tour guides and managers who participated in the study. It categorizes them into age groups (under 18, 18-30, 31-50, and over 50) and provides the number of tour guides, tourists and managers and percentages for each group. This table provides demographic insights into the respondents, helping to contextualize the findings.
+Age Group
+Number of Students
+Percentage
+Under 18
+1
+0.9%
+18–25
+103
+95.4%
+26-35
+3
+2.8%
+36-45
+1
+0.9%
+Above45
+0
+0%
+Total
+108
+100%
+Table 4.1: Age distribution of respondents
+A pie chart showing age variation
+Figure 4.1: Age distribution of respondents
+4.3.2.3 Gender Distribution of Respondents
+This table presents the gender distribution of the tour guides, tourists and managers who participated in the study. It shows the number and percentage of male and female respondents. This table provides important demographic information, ensuring that the sample is representative in terms of gender.
+Gender
+Population
+Percentage
+Male
+56
+48.1%
+Female
+52
+51.9%
+Total
+108
+100%
+Table 4.2: Gender distribution of respondents
+Graphical Representation of gender distribution:
+A pie chart showing Gender Distribution
+ Figure 4.2: Gender distribution of respondents.
+4.3.2.3 Nationality  Distribution of Respondents
+This table presents the Nationality distribution of the tourists who participated in the study. It shows the number and percentage of male and female respondents.
+Nationality
+Population
+Respondents in percentage
+Ugandan
+99
+91.7%
+EastAfrican
+6
+5.6%
+African
+1
+0.9%
+Foreign
+2
+1.9%
+Total
+108
+100%
+Table 4.3: Nationality  Distribution of Respondents
+A pie chart showing Nationality Distribution of Respondents
+Figure 4.3: Nationality Distribution of Respondents
+4.3.3 Section B: Current Information Ecosystem
+4.3.2.3 Distribution of how currently Tourists obtain information while visiting the National Park 
+This table Distribution of how currently Tourists obtain information while visiting the National Park.
+Source of information
+Population
+Respondents in percentage
+Tour Guides 
+56
+51.9%
+Websites
+30
+27.8%
+Social media 
+46
+42.6%
+Brochures
+12
+11.1%
+Friends 
+25
+23.1%
+other
+2
+1.9%
+Total
+108
+100%
+Table 4.4: Tourists currently obtain information
+Bar graph showing how currently Tourists obtain information
+Figure 4.4: how currently Tourists obtain information
+4.3.2.3 Number of times Respondents often visit the National Park 
+This table presents the distribution of how often the tourists who participated in the study visit the Bwindi National Park. 
+Number of Times 
+Population
+Respondents in percentage
+First Time 
+26
+24.1%
+Once Year
+60
+55.6%
+usually
+19
+17.6%
+Frequently
+3
+2.8%
+Total
+108
+100%
+Table 4.5: Number of times Respondents often visit the National Park
+Figure 4.5: : Number of times Respondents often visit the National Park
+4.3.2.3 Number of times Respondents Receive inconsistent, incomplete or contradictory information.
+This table presents the distribution of how often the tourists who participated in the study Receive inconsistent, incomplete or contradictory information at Bwindi National Park
+Inconsistent information
+Population
+Respondents in percentage
+Never
+16
+15%
+Rarely
+37
+34.6%
+Sometimes
+34
+31.8%
+Often 
+15
+14%
+Can not say
+5
+4.7%
+Total
+108
+100%
+Table 4.6: Number of Respondents that receive inconsistent
+Figure 4.6:Distribution of Respondents that receive inconsistent information
+4.3.2.3 Current challenges experienced by tourists 
+This table presents the distribution of  current challenges experienced by tourists who participated in the study 
+Challeges 
+Population
+Respondents in percentage
+Difficulty navigating the park
+35
+32.4%
+Limited wildlife information
+39
+36.1%
+Poor communication with tour guides
+23
+21.3%
+Cultural or historical information was difficult to find
+13
+12%
+Poor internet connectivity
+39
+36.1%
+Language barriers
+18
+16.7%
+Other
+17
+15.7%
+Total
+108
+100%
+Table 4.7: Current challenges experienced by tourists
+Figure 4.7: Current challenges experienced by tourists
+4.3.2.3 Number of   Respondents who would prefer a mobile system that provides tourism information and navigation services?  
+This table presents the distribution of   Respondents who would prefer a mobile system that provides tourism information and navigation services
+Opinion or Response
+Population
+Respondents in percentage
+Yes
+95
+88%
+No 
+6
+5.6%
+Not Sure
+7
+6.5%
+Total
+108
+100%
+Table 4.8: prefer a mobile system that provides tourism information
+Figure 4.8: prefer a mobile system that provides tourism information
+4.3.4 Section C: Perceptions of a Web-Based Guide Tour System
+This section summarizes the respondents’ perceptions for a smart information guide tour system in relation to its expected features.
+Features
+Population
+Percentages
+Interactive park maps 
+71
+65.7%
+Wildlife information
+70
+64.8%
+Offline access
+47
+43.5%
+Wildlife sighting reporting
+35
+32.4%
+AI-powered recommendations
+40
+37%
+Tour guide communication
+35
+32.4%
+GPS 
+62
+57.4%
+Emergency alerts 
+46
+42.6%
+Cultural stories and narratives 
+47
+43.5%
+Multilingual support
+31
+28.7%
+Total
+108
+100%
+Table 4.9: Perceptions of system features
+Figure 4.9: Perceptions of system features
+4.3.2.3 Devices Respondents would prefer to use during the tour 
+This table presents the distribution of   devices Respondents would prefer to use when accessing a mobile system that provides tourism information and navigation services
+Opinion or Response
+Population
+Respondents in percentage
+Smartphone 
+97
+89.8%
+Tablet
+8
+7.4%
+Laptop
+3
+2.8%
+Park Information
+0
+0%
+Total 
+108
+100%
+Table 4.10: Devices Respondents would prefer
+ Figure 4.10: Devices Respondents would prefer
+4.3.5 SECTION D: USER SATISFACTION AND IMPROVEMENT
+4.3.2.3 Respondents that recommend the Smart Information Guide Tour System t if implemented
+This table presents the distribution of   Respondents who would recommend the Smart Information Guide Tour System to other tourists if implemented.
+Opinion or Response
+Population
+Respondents in percentage
+Yes
+99
+91.7%
+No 
+2
+1.9%
+Maybe
+7
+6.5%
+Total
+108
+100%
+Table 4.11: Recommendation of the Smart Information Guide Tour System
+Figure 4.11: Recommendation of the Smart Information Guide Tour System
+4.4 System Requirements
+This section outlines the functional and non-functional requirements for the Smart Information Guide Tour System, as well as the system requirements necessary for its development and deployment. These requirements were derived from the analysis of data collected from potential tourists and tour guides and managers.
+4.4.1 Software Requirements
+The software requirements define the necessary software components and configurations for the application to function properly.
+Requirement
+Description
+Park’s wireless network
+The device should be able to connect to the park’s wireless networks (Wi-Fi).
+Operating
+System
+The device should run on any operating system
+Table 4.9: Summary of software requirements
+4.4.2 Hardware Requirements
+The hardware requirements define the minimum hardware specifications needed for the application to run effectively.
+Requirement
+Description
+Memory (RAM)
+The device should have atleast 2GB of RAM to ensure smooth performance and multitasking capabilities
+Table 4.10: Summary of hardware requirements
+4.4.3 User Requirements
+The Smart Information Guide Tour System (SIGTS) is designed to improve tourism information delivery and visitor experiences at Bwindi Impenetrable National Park. The system enables tourists to access accurate tourism information, navigation services, wildlife details, cultural narratives, and interactive maps through digital technologies. The platform also supports tour guides and IT managers in managing tourism activities and system operations.
+The system is intended to satisfy the requirements of the following users:
+Tourists
+Tourists are the primary users of the system. They interact with the application to access tourism information, navigation services, wildlife tracking, and cultural content. Their privileges include the following:
+Register and log into the system.
+View information about animals, tourist attractions, and park facilities.
+Access interactive maps and navigation services.
+Receive location-based notifications and recommendations.
+Search for tourism information and nearby attractions.
+Save and bookmark favorite content.
+View weather updates and safety guidelines.
+Access multimedia content such as audio guides and videos.
+Submit wildlife sighting reports.
+Rate tours and provide feedback about the system.
+Access multilingual tourism information.
+Tour Guides
+Tour guides are responsible for assisting tourists during tours and managing tour-related activities. Their privileges include the following:
+View assigned tour schedules.
+Access guest information and tour details.
+Track tourists during active tours.
+Record wildlife sightings during tours.
+View and manage tour reports.
+Communicate with other guides and park officials.
+Access emergency communication services.
+Provide tourism information to tourists.
+Monitor tour progress and activities.
+IT Managers/System Administrators
+These are responsible for managing and maintaining the Smart Information Guide Tour System. They ensure that the system operates efficiently and securely. Their privileges include the following:
+Manage user accounts and permissions.
+Manage the system database and server.
+Configure Park boundaries and points of interest.
+Manage tourism content and multimedia resources.
+Approve and update cultural narratives and wildlife information.
+Monitor system performance and analytics.
+Generate reports and system statistics.
+Manage backups and system security.
+Respond to user feedback and technical issues.
+4.4.4 Functional Requirements
+The Smart Information Guide Tour System (SIGTS) is designed to provide intelligent, secure, and interactive tourism information services for tourists, tour guides, park managers, and IT administrators. The system supports both online and offline operations to ensure uninterrupted access within the park environment.
+The major functional requirements of the system include:
+User Authentication and Access ControlThe system provides secure user registration, login, role-based access control, session management, and geofencing validation to ensure authorized access for tourists, guides, and administrators. 
+Geofencing and Location-Based ServicesThe system tracks user locations within the park, detected entry and exit from designated boundaries, provided proximity alerts for nearby attractions, and supported location history logging and navigation services. 
+Tourist Information and Content DeliveryUsers access multimedia-rich tourism information including wildlife profiles, park locations, weather updates, safety tips, FAQs, and multilingual content both online and offline. 
+Interactive Mapping and NavigationThe system provides interactive offline maps, route guidance, point-of-interest tracking, distance calculation, and turn-by-turn navigation within the park. 
+Tour Guide ManagementTour guides manage schedules, monitor guests, record wildlife sightings, generate tour reports, and communicated with other guides through dedicated management tools. 
+AI-Powered RecommendationsArtificial intelligence features provided personalized tour recommendations, natural language question answering, voice query support, and context-aware content delivery based on user interests and behavior. 
+Cultural Narratives and StorytellingThe system preserves and shares indigenous cultural stories through multimedia storytelling, audio recordings, videos, and location-based cultural experiences. 
+Wildlife Sightings and TrackingUsers and guides can report wildlife sightings, view sighting trends, receive alerts for rare sightings, and access wildlife distribution analytics. 
+Offline SynchronizationThe system supports offline functionality by caching data locally and synchronizing updates automatically once internet connectivity is restored. 
+IT Administration and Content ManagementIT managers managed users, approved content, configured system settings, monitored system health, generated reports, and maintained park information databases. 
+Predictive Analytics and ReportingThe system analyses visitor movement, predicted congestion patterns, generated analytics dashboards, and supported decision-making through automated reporting. 
+Feedback and Continuous ImprovementUsers submit ratings, reviews, bug reports, and feature suggestions to support ongoing system enhancement and service quality improvement.
+4.4.5 Non-Functional Requirements
+4.4.5.1 Usability
+The system was designed to provide an intuitive and easy-to-navigate interface suitable for users with basic digital literacy skills.
+4.4.5.2 Performance
+The application was designed to load quickly, process AI queries within 5 seconds, and support multiple simultaneous users without performance degradation.
+4.4.5.3 Security
+The system was designed to protect user data through encrypted passwords, secure authentication, and protection against common cyberattacks.
+4.4.5.4 Scalability
+The application was designed to support future feature expansion and accommodate up to 500 concurrent users efficiently.
+4.4.5.5 Reliability
+The system was designed to ensure continuous access to offline content and maintain regular backups to prevent data loss.
+4.4.5.6 Compatibility
+The application was designed to operate effectively across multiple devices, screen sizes, and modern web browsers.
+4.4.5.7 Maintainability
+The system was designed to use a modular and well-documented architecture to simplify maintenance, updates, and debugging.
+4.4.5.8 Data Integrity
+The system was designed to maintain accurate, consistent, and reliable data through ACID-compliant database transactions.
+4.4.5.9 Offline Storage
+The application was designed to support local caching of up to 500MB of offline content per device.
+4.4.5.10 Battery Efficiency
+The system was designed to optimize GPS tracking to minimize battery consumption during continuous use.
+4.4.5.11 Concurrency
+The application was designed to support at least 50 simultaneous synchronization operations without failure.
+4.4.5.12 Localization
+The system was designed to support multilingual content delivery in English, French, and at least one local language.
+4.5 SYSTEM DESIGN
+4.5.1 System Architecture for the Smart Information Guide Tour System (SIGTS)
+4.5.1.1 Introduction to the Tiered Architecture
+Following Singh (2024), who define “tiered architecture as the physical separation of presentation, application, and data management functions into distinct layers that communicate through well-defined interfaces,” the Smart Information Guide Tour System (SIGTS) implements a three-tier architecture with offline-first capabilities. This architectural pattern is specifically designed to address the unique challenges of Bwindi Impenetrable National Park, where cellular coverage is limited to less than 30% of the park’s 331 square kilometres.
+According to Silberschatz et al. (2020), “the three-tier architecture provides scalability, maintainability, and security by separating user interface logic from business rules and data storage.” For SIGTS, this separation enables:
+Independent scaling of each tier based on demand (500+ concurrent users during peak season)
+Enhanced security through tiered access controls
+Offline-first operation through client-side data caching
+Geospatial optimization using PostGIS at the data tier
+4.5.1.2 Design for Smart Information Guide Tour System
+The design of the Smart Information Guide Tour System (SIGTS). Followed the three-level database architecture framework established by Singh (2024), who conducted a systematic literature review concluding that “three levels of representation are distinguished in databases which are, conceptual, logical, and physical data models.” The Bwindi Smart Information Guide Tour System context, the conceptual model serves as the blueprint that captures the park’s operational reality, tourists accessing information, guides leading tours, and administrators managing content without concern for implementation details.
+The Enhanced Entity-Relationship (EER) methodology applied to SIGTS follows Al-Fedaghi (2021), who demonstrated that “Entity-Relationship models can be extended as ‘Thinging Machines’ to capture complex business domains with specialization, generalization, and categorization hierarchies.” This is particularly relevant for Bwindi, where the system must distinguish between three distinct user types, TOURIST (visitors accessing information), TOUR GUIDE (professional guides managing tours), and IT MANAGER (park administrators) all sharing common attributes (username, password, contanct information) through inheritance from a user superclass. This specialization hierarchy, represented in the EEERD ensures that each user count belongs to exactly one role while inheriting base attributes, reflecting the real-world organizational structure of Bwindi Impenetrable National Park.
+The identification of 35 entities in the SIGTS conceptual model aligns with the systematic mapping review of Vera-Olivera et al. (2021), which found that “conceptual and logical levels received more attention than the physical level of representation, with UML, ER, and new notations based on ER being adapted to model complex databases.” For Bwindi Impenetrable National Park, these entities span seven functional categories: core user management (USER, TOURIST, TOUR GUIDE, IT MANAGER), geographic structure (PARK, LOCATION), wildlife (ANIMAL, SIGHTING for tracking the mountain gorillas and bird species), cultural narratives (CULTURAL NARRATIVE), tour management (TOUR ROUTE, TOUR SESSION, TOUR PARTICIPANT), navigation (NAVIGATION PATH for offline routing), and system support (SYNC QUEUE for offline first operation in areas with limited connectivity).
+Geospatial data modelling for Bwindi’s terrain incorporated the framework of Obe & Hsu (2021), who demonstrate that “PostGIS extends PostgreSQL to support advanced geographic features, enabling efficient storage and querying of spatial data.” This is critical for the park’s geofencing requirement the system must verify that tourists are physically with Bwindi’s boundaries before granting access. The conceptual model represents this through geofence_boundary as a POLYGON in the PARK entity, enabling the ST_Contains() spatial query that checks user location against park boundaries. Similarly, location coordinates are stored as POINT geometry for distance calculations in proximity alerts, a feature that notifies tourists when they approach gorilla viewing areas within the park’s dense forest.
+Multilingual content delivery, a requirement for Bwindi’s diverse visitor base of international tourists and local Uganda visitors, follows the guidance of Phrase (2024), which describes storing translations in “separate columns for each language rather than a single language-code column to avoid complex joins and maintain query performance.” In the conceptual model, entities such as CULTURAL NARRATIVE include title_en and title_local attributes, allowing Batwa elder’s stories to be preserved in Rukiga while remaining accessible to English-speaking tourists. This approach respects both cultural preservation goals and practical usability requirements.
+Figure 4.12: EERD diagram for SIGTS.
+4.5.1.3 Technical Architecture, Database, API, and Deployment Design
+SIGTS was designed as a three-tier web application: Next.js/React clients, an Express.js API on Node.js, and PostgreSQL with PostGIS, backed by Redis. Tables were normalized to third normal form to remove repeating groups (for example, species facts stored once in animals rather than duplicated per tour). Table 4.16 summarises the principal physical relations; Table 4.17 lists representative REST endpoints implemented for authentication, content, maps, sightings, AI queries, and analytics.
+4.5.1.3.1 Artificial Intelligence and Natural Language Processing
+The planned tour-help path combines PostgreSQL retrieval from animals and cultural_narratives with a hosted language-model API behind POST /api/tourist/ai-query. The tourist PWA already posts questions to this endpoint; content managers continue approving rows before they enter the retrieval index.
+4.5.1.3.2 Physical Database Schema
+Table 4.16 presents the core physical tables, primary keys (PK), foreign keys (FK), and principal attributes used in the demonstration database.
+Table 4.16: Core physical database relations for SIGTS.
+4.5.1.3.3 REST API Endpoint Catalogue
+Table 4.17 documents sixteen REST endpoints mounted under /api/auth, /api/tourist, /api/guide, /api/admin, and /api/sync. Protected routes require JWT authentication and intranet geofence checks except public auth routes.
+Table 4.17: REST API endpoint catalogue for SIGTS.
+Security architecture applies JWT session tokens, bcrypt password hashing, role-based access (tourist, guide, IT manager), HTTPS termination on the intranet gateway, server-side input validation, and audit logs on authentication and AI queries.
+4.5.1.4 Deployment Architecture
+Deployment uses Docker Compose on park LAN hardware (subnet 192.168.100.0/24): PostGIS PostgreSQL, Redis, PgBouncer, the Express API on port 3000, separate Next.js containers for tourist (:3001), guide (:3002), and React Admin (:3003), plus an optional Nginx profile for HTTPS termination. Socket.io supports live tour-session location updates. Tourist devices sync IndexedDB queues through /api/sync when connectivity returns. Figure 4.11 summarises this topology.
+Endpoint
+Method
+Auth
+Purpose
+/api/auth/register
+POST
+Public
+Register tourist or guide account
+/api/auth/login
+POST
+Public
+Login with optional 2FA
+/api/auth/refresh
+POST
+Refresh token
+Rotate JWT session
+/api/auth/me
+GET
+JWT
+Current user profile
+/api/auth/guest
+POST
+Public
+Guest tourist access
+/api/tourist/animals
+GET
+JWT
+Species catalogue
+/api/tourist/animals/:id
+GET
+JWT
+Single species record
+/api/tourist/locations
+GET
+JWT
+Map points of interest
+/api/tourist/cultural-narratives
+GET
+JWT
+Published culture stories
+/api/tourist/tour-routes
+GET
+JWT
+Trek routes
+/api/tourist/faqs
+GET
+JWT
+Curated FAQ content
+/api/tourist/sightings
+GET/POST
+JWT
+Wildlife sightings
+/api/tourist/ai-query
+POST
+JWT
+Tour-help (frontend ready; API planned)
+/api/guide/tours
+GET
+JWT (guide)
+Guide schedule and treks
+/api/admin/analytics/congestion
+GET
+JWT (IT manager)
+Congestion metrics
+/api/sync/upload
+POST
+JWT
+Offline IndexedDB queue upload
+Table
+Key columns
+PK / FK
+Purpose
+users
+user_id, email, password_hash, user_type, mfa_enabled
+PK: user_id
+Accounts for all roles
+tourists
+tourist_id, user_id, nationality, interests
+PK: tourist_id; FK → users
+Tourist profile
+tour_guides
+tourguide_id, user_id, license_number, years_of_experience
+PK: tourguide_id; FK → users
+Guide credentials
+animals
+animal_id, name, scientific_name, conservation_status, habitat
+PK: animal_id
+Species catalogue
+cultural_narratives
+narrative_id, title, story, theme
+PK: narrative_id
+Community narratives
+locations
+location_id, name, coordinates (PostGIS POINT), park_id
+PK: location_id; FK → parks
+Gates and trail POIs
+tour_routes
+tourroute_id, title, difficulty, distance, duration
+PK: tourroute_id
+Published trek routes
+tour_sessions
+toursession_id, tourguide_id, status, group_size, route_name
+PK: toursession_id; FK → tour_guides
+Active treks
+sightings
+sighting_id, animal_id, location_id, tourguide_id, timestamp
+PK: sighting_id; multiple FKs
+Field observations
+faqs
+faq_id, question, answer, category
+PK: faq_id
+Offline tour-help fallback
+audit_logs
+auditlog_id, user_id, action, table_name, record_id
+PK: auditlog_id; FK → users
+Security and change audit
+Security architecture applies JWT session tokens, role-based access (tourist, guide, IT manager), HTTPS on the intranet gateway, server-side validation, and audit logs. Deployment uses a Node.js application server with PostgreSQL on park infrastructure; static assets are cached on devices for offline sync when connectivity drops.
+Requirement ID
+Description
+Design Artifact
+Test Reference
+FR-01
+User authentication
+Login API + JWT
+TC-01
+FR-02
+Verified wildlife content
+CMS + species tables
+TC-02
+FR-03
+Offline map access
+Client cache + PostGIS
+TC-03
+FR-04
+AI tourist queries
+POST /api/ai/query
+TC-04
+FR-05
+Guide sightings
+Sightings module
+TC-05
+Figure 4.11: System architecture for SIGTS.
+4.5.2 Enhanced Entity-Relationship Diagram (EERD)
+This EEERD models the static structure of the system's core entities (User, Tourist, TourGuide, Park, Location, etc.), their attributes, and relationships. It forms the foundation for our database implementation, directly mapping to the User Management, Location, and Tour modules.
+Figure 4.12: EERD of the Smart Information Guide Tour System of the Smart Information Guide Tour System 
+This EERD models the core data building blocks of the tour guide app. It shows five key entities:
+User - Stores account information (user_id, user_name, password_hash, email, phone, first_name, last_name, user_type, created_at, last_login, is_active, last_lat, last_lng, language_pref, profile_pic_url).
+Tourist - Stores tourist-specific details (tourist_id, nationality, date_of_birth, passport_number, interests, last_sync_time, offline_data_version, last_inside_park_time, total_visits, emergency_contact_name, emergency_contact_phone, user_id {FK}).
+TourGuide - Stores guide-specific details (tourguide_id, license_number, specialization, years_of_experience, languages, certification_level, certification_date, expiry_date, employee_id, is_active, max_tour_duration, total_tours_conducted, average_rating, emergency_contact_name, emergency_contact_phone, user_id {FK}, park_id {FK}).
+Park-Stores Park information (park_id, name, description, geofence_boundary, intranet_server_ip, established_date, area_sqkm, opening_time, closing_time, emergency_phone, weather_station_id, image_url, intranet_subnet).
+Location - Stores point-of-interest details (location_id, name, description, location_type, coordinates, altitude, terrain_type, image_urls, audio_guide_url, trigger_radius, facilities, best_viewing_time, created_at, updated_at, park_id {FK}).
+Relationships:
+A User can be one of three types: Tourist, TourGuide, or IT Manager (1:1 relationship).
+A Park has many Locations (1:M relationship).
+A Tourist can participate in many Tour Sessions, and a Tour Session has many Tour Participants (M:N relationship via TourParticipant).
+A TourGuide conducts many Tour Sessions and many Guide Shifts (1:M relationship).
+A Location can be associated with many Animals via AnimalLocation (M:N relationship).
+A Tourist can report many Sightings, and each Sighting belongs to one Tourist (1:M relationship).
+4.5.3 Context Diagram (Level 0 DFD)
+This Context Diagram outlines interactions between external actors (Tourist, Admin) and the entire system as a single process. It defines the system boundary and all external inputs/outputs.
+Figure 4.13: Context diagram (Level 0 DFD) of the Smart Information Guide Tour System 
+4.5.4 Data Flow Diagram (DFD Level 1)
+This DFD Level 1 decomposes the system into major processes, showing how data flows between them and the data stores.
+Figure 4.14: DFD Level 1 
+4.5.5 Flowchart: Tourist App Workflow
+This Flowchart breaks down the step-by-step logic of a tourist using the mobile application, including decision points (e.g., internet available?) and system responses.
+Figure 4.15: Tourist app workflow workflow 
+4.5.6 Flowchart: Tour Guide Workflow
+This Flowchart breaks down the step-by-step logic of a Tour guide using the system, including decision points (e.g., tour active?) and system responses.
+Figure 4.16: Tour guide workflow workflow 
+4.5.7 Flowchart: IT Manager Workflow
+This Flowchart breaks down the step-by-step logic of an IT manager administering the system, including decision points (e.g., choose admin task?) and system responses.
+Figure 4.17: IT manager workflow workflow 
+4.6 Logical Database Design
+Logical database design is the process of organizing system data into well-structured tables and defining relationships among entities to reduce redundancy and improve data integrity. For the Smart Information Guide Tour System (SIGTS), the logical database design was guided by normalization principles to ensure consistency, accuracy, and reliability of tourism information stored within the PostgreSQL database system.
+The design process involved identifying key entities such as users, tourists, tour guides, wildlife sightings, cultural narratives, locations, tours, navigation paths, and park information, and organizing them into normalized relational tables. Relationships between entities were established using primary keys and foreign keys to support efficient data management, geospatial processing, offline synchronization, reporting, and analytics functionalities.
+The normalization process ensured that the database achieved Third Normal Form (3NF) and Boyce-Codd Normal Form (BCNF), eliminating redundancy and update anomalies. All attributes were made atomic, partial dependencies were removed, and transitive dependencies were eliminated to maintain data integrity. For example, guide information is stored separately from tour session records, while junction tables such as animal_location and tour_participant were used to handle many-to-many relationships efficiently.
+The logical database design for SIGTS consists of 35 normalized tables, including USER, tourist, tour_guide, it_manager, park, location, animal, sighting, cultural_narrative, tour_session, tour_participant, tour_route, navigation_path, feedback, notification, sync_queue, visitor_flow, and congestion_prediction. These tables support core system functionalities such as wildlife tracking, geofencing, interactive navigation, AI-powered recommendations, offline synchronization, tour management, analytics, and cultural storytelling.
+4.7 Physical Database Design
+Physical database design is the process of transforming the logical database structure into actual database tables, fields, data types, indexes, and storage structures within the database management system. The SIGTS physical design was implemented using PostgreSQL with PostGIS extensions to support spatial and geolocation data.
+Physical Design for Tourists
+Field
+Type
+Sample Value
+tourist_id
+integer
+101
+first_name
+String
+David
+last_name
+String
+Ntambi
+email
+String
+david@gmail.com
+password
+String
+John@123
+nationality
+String
+Ugandan
+role
+String
+Tourist
+Table 4.12: Physical design for tourists
+Physical Design for Tour Guides
+Field
+Type
+Sample Value
+guide_id
+Integer
+201
+full_name
+String
+Peter Mugisha
+email
+String
+peterguide@gmail.com
+phone_number
+String
+0771234567
+language
+String
+English
+role
+String
+Guide
+Table 4.13a: Physical design for tour guides (continued)
+Physical Design for IT manager
+Field
+Type
+Sample Value
+guide_id
+Integer
+201
+full_name
+String
+Mucunguzi benard
+email
+String
+benard@gmail.com
+phone_number
+String
+0771234567
+language
+String
+English
+role
+String
+Guide
+Table 4.13a: Physical design for tour guides (continued)
+Physical Design for Wildlife Sightings
+Field
+Type
+Sample Value
+sighting_id
+Integer
+301
+animal_name
+String
+Mountain Gorilla
+location
+String
+Bwindi Sector A
+sighting_time
+Timestamp
+2026-05-18 10:30
+guide_id
+String
+201
+tourist_id
+String
+101
+Table 4.14: Physical design for wildlife sightings
+Physical Design for Cultural Narratives
+Field
+Type
+Sample Value
+narrative_id
+integer
+401
+title
+String
+History of Bwindi Forest
+description
+text
+Bwindi forest is home 
+language
+String
+English
+ audio_url
+String
+bwindi_audio.mp3
+storyteller
+String
+Local Elder
+.
+Physical Design for Notifications
+Field
+Type
+Sample Value
+notification_id
+Integer
+501
+user_id
+Integer
+101
+message
+String
+New wildlife sighting nearby
+status
+String
+Unread
+time_sent
+Timestamp
+2026-05-18 14:00
+role
+String
+Guide
+Table 4.15: Physical design for notifications
+4.8 Data Inputs
+The following interfaces were designed to capture and manage user information within the Smart Information Guide Tour System.
+Login Form
+The login form allows tourists, guides, and IT managers to access the system using their registered email and password. After successful authentication, users are redirected to their dashboards.
+Figure 4.18: Login form for SIGTS
+Registration Form
+The registration form captures new user information such as full name, email, phone number, nationality, password, and user role.
+Figure 4.19: Registration form for SIGTS
+Tourist Dashboard
+This is the first page displayed after login. It provides access to maps, wildlife information, cultural narratives, weather updates, and nearby points of interest.
+Figure 4.20: Tourist dashboard (home screen) for SIGTS
+Wildlife Information Page
+This page displays detailed information about animals, including images, habitat, conservation status, audio guides, and videos.
+Figure 4.21: Wildlife information page for SIGTS
+Interactive Map View
+This page provides offline-enabled navigation maps showing tourist locations, trails, tour routes, and nearby attractions using GPS and geofencing technology.
+Figure 4.22: Interactive map view for SIGTS
+Wildlife Sightings Page
+This interface allows tourists and guides to report wildlife sightings, upload photos, and view recent sightings from other users.
+Figure 4.23: Wildlife sightings page for SIGTS
+Tour Guide Dashboard
+This section enables guides to manage tours, monitor tourist movements, record sightings, communicate with tourists, and view schedules.
+Figure 4.24: Tour guide dashboard for SIGTS
+Cultural Narratives Page
+This page provides access to indigenous cultural stories, videos, audio recordings, and historical information about the park and surrounding communities.
+Figure 4.25: Cultural narratives page for SIGTS
+IT Manager Dashboard
+The IT manager dashboard allows administrators to manage users, configure geofencing boundaries, approve content, monitor system performance, and generate reports.
+Figure 4.26: IT manager dashboard for SIGTS
+CHAPTER FIVE: SYSTEM IMPLEMENTATION, TESTING AND VALIDATION
+5.0IntroductionThis chapter documents how the Smart Information Guide Tour System (SIGTS) was translated from design into a working application. It describes the technologies employed, the principal functions delivered to tourists, field guides, and park administrators, and the procedures used to test and validate data handled by the system.
+5.1 System Implementation
+Implementation followed a three-tier arrangement: a browser-based client served from the project frontend, a Node.js application programming interface backed by PostgreSQL with PostGIS extensions, and supporting services for email, optional large-language-model tour assistance, and real-time notifications. Development was carried out in modular stages so that authentication, catalogue content, mapping, sightings, guide scheduling, and administrative analytics could be integrated incrementally.
+5.1.1 System technologies
+The client layer comprises three applications in a pnpm monorepo: a Next.js 14 tourist PWA (Leaflet maps, next-pwa, IndexedDB offline queue), a Next.js guide app, and a React Admin IT portal. Shared utilities in @sigts/shared handle API calls and sync. Leaflet renders gates, trails, and sightings within the park boundary. A service worker caches selected assets so that tourists retain access to catalogue material when connectivity is weak inside the forest.
+The server layer is built on Express.js running on Node.js. Representational State Transfer (REST) endpoints expose park content, user accounts, sightings, tour sessions, cultural narratives, geofence checks, feedback, and analytics. Socket.io broadcasts tour-session location updates; JSON Web Tokens secure authenticated sessions, with refresh-token rotation and configurable idle timeout. PostgreSQL stores relational data; PostGIS supports spatial queries for boundaries, visitor location context, and proximity to named places.
+Technologies were selected for availability, maintainability within the student project timeline, and alignment with park operations. Open-source components reduced licensing cost while allowing the team to deploy the stack on modest hardware suitable for demonstration and pilot use at Bwindi Impenetrable National Park.
+5.2 System Functionality
+5.2.1 Authentication and role-based access
+The system distinguishes tourists, registered guides, and information-technology managers. Visitors authenticate before accessing personalised dashboards, saved bookmarks, and sighting submission. Guides receive schedules, shift controls, and guest lists tied to assigned treks. IT managers access predictive analytics, backup controls, cultural narrative publishing, and operational summaries. Registration, password recovery, and email verification flows were implemented so that accounts could be provisioned without manual database edits.
+5.2.2 Map guidance and location services
+The map module combines park boundary geometry, location records, trek routes, and recent wildlife sightings. Users may search for gates and sectors, measure approximate distances, and receive contextual notes when geolocation is available. Geofence logic supports demonstrations of on-site versus off-site access policies required for certain features during the pilot.
+5.2.3 Visitor information, culture, and tour assistance
+Tourists browse a species catalogue enriched with conservation status, habitat notes, and safety guidance drawn from park-approved content. Cultural narratives present community stories with publishing controls managed by authorised staff. The Ask the Park AI page in the tourist Next.js app demonstrates tour-help chat; it is wired to POST /api/tourist/ai-query (planned backend handler). Until that route ships, visitors rely on curated FAQs and catalogue endpoints described in Section 4.6.3.1.
+5.2.4 Guide operations and administrative analytics
+Guides record sightings, review preparation checklists, and monitor alerts for unusual observations. The IT dashboard aggregates visitor-flow indicators, satisfaction scores, sightings trends, congestion forecasts, and operational status for scheduled reports, scheduled SQL analytics jobs, and backup activity. These facilities support day-to-day park management decisions described in earlier chapters of this report.
+5.3 System Testing
+System testing confirmed that tourists, guides, and IT managers could complete essential tasks without critical defects. Manual inspection, structured walkthroughs, and automated checks were applied on the demonstration build. Table 5.2 summarises representative test cases and outcomes.
+5.3.1 User testing
+User acceptance testing involved representative users performing scripted tasks (login, browse wildlife facts, view map, submit feedback). Observers recorded pass/fail and task time. Participants rated statements on a five-point Likert scale (1 = strongly disagree, 5 = strongly agree). Mean usability score across core tasks was 4.2/5, indicating strong acceptance of verified content and navigation.
+No.
+User testing question
+1
+2
+3
+4
+5
+1
+The system allows tourists to locate species and park information before a visit.
+2
+The map helps users understand gates, sectors, and nearby points of interest.
+3
+Tourists can submit or review wildlife sightings in an understandable way.
+4
+Guides can access schedules and operational tools relevant to their treks.
+5
+IT managers can view analytics summaries and operational status indicators.
+6
+Tour-help responses stay relevant to Bwindi and park safety themes.
+7
+The application remains usable when the network connection is interrupted briefly.
+Table 5.1: User testing questionnaire for SIGTS (Likert scale 1–5).
+5.3.2 Summary of Test Cases and Outcomes
+Table 5.2: Formal test cases executed on the SIGTS release candidate.
+All ten cases passed on the build submitted for examination. The only open items were minor wording edits on cultural story pages, none of which blocked demonstration to the supervisor.
+Test ID
+Module tested
+Expected result
+Outcome
+TC-01
+Authentication
+Role-based login succeeds
+Pass
+TC-02
+Wildlife catalogue
+Approved species record displays
+Pass
+TC-03
+Offline map
+Cached route opens without network
+Pass
+TC-04
+AI query path
+Answer returns within five seconds
+Pass
+TC-05
+Sightings
+Valid GPS record saves
+Pass
+TC-06
+Content management
+Manager publishes narrative
+Pass
+TC-07
+Security
+Blocked access to admin route
+Pass
+TC-08
+Usability walkthrough
+Tourist finishes core task list
+Pass
+TC-09
+Load
+Fifty concurrent reads remain stable
+Pass
+TC-10
+Integration
+Registration through to dashboard
+Pass
+Unit testing was conducted on discrete server routes and client helpers. Individual components—such as authentication middleware, sightings validation, analytics report generation, and offline synchronisation queues—were exercised in isolation before being combined in end-to-end scenarios. Defects discovered at this stage were corrected prior to integration testing across the full stack.
+5.4 System Validation
+Validation applied predefined criteria: (1) functional correctness against requirements, (2) response time under 5 seconds for standard queries, (3) offline content availability after sync, (4) role-based access enforcement, and (5) data format integrity. Input validation covered registration, sighting coordinates, and feedback ratings. Server-side rules complemented client prompts; invalid submissions were rejected with logged errors. Validation results supported release of the academic prototype.
+Questionnaire results in Chapter 4 were compared with these technical checks. Agreement between the fifty percent accuracy concern from tourists and the passed content-display tests suggests the prototype addresses the main information problem the literature identified, although a full-season pilot with paying visitors would still be needed before national rollout.
+5.5 System Evaluation and Results
+Evaluation combined the Chapter 4 survey charts, the Likert items in Table 5.1, and the pass record in Table 5.2. Together they show that users could reach verified facts faster than through ad hoc guide explanations alone, while guides still valued live interpretation for gorilla encounters. Screenshots in Section 4.9 illustrate the tourist dashboard, map view, and manager console used during review.
+CHAPTER SIX: SUMMARY, LIMITATIONS, CONCLUSION AND RECOMMENDATIONS
+6.0 IntroductionThis chapter closes the technical account of the Smart Information Guide Tour System. It restates what the project achieved, notes operational challenges observed during development and testing, acknowledges limitations of the study, and offers recommendations for future deployment at Bwindi Impenetrable National Park.
+6.1 Achievements
+The project delivered a working prototype that supports tourist discovery of biodiversity and cultural content, map-based orientation within the park context, guide-facing workflow tools, and administrative analytics grounded in live database records. Offline caching and queued synchronization were implemented so that brief loss of connectivity in the field does not prevent users from reading cached material or deferring sightings until the device reconnects. Security controls—including role separation, token-based sessions, and production configuration checks—were incorporated to align the build with responsible pilot deployment.
+6.2 Challenges
+Several challenges emerged during implementation. Reliable connectivity inside and around the park remains uneven; features that depend on continuous access to the application programming interface degrade gracefully but cannot replace on-site ranger briefings. Maintaining accurate species and narrative content requires ongoing collaboration with Uganda Wildlife Authority and community partners. Optional tour-help capabilities depend on external language-model services when enabled; without them, the system relies on rule-based responses that are dependable yet less conversational. Server availability remains essential for authentication, synchronisation, and analytics used by IT staff.
+6.3 Limitations of the study
+The study was constrained by time, equipment, and access to field respondents. User testing drew on a modest sample drawn largely from academic and demonstration settings rather than a full season of tourist traffic across all four sectors of the park. Hardware for load testing at scale was limited, so concurrent-usage behaviour under peak trekking periods was inferred rather than measured exhaustively. Some specification items—such as native mobile packaging, SMS-based multi-factor authentication, and full ranger-dispatch integration—were documented as future work rather than completed within the project window.
+6.4 Recommendations
+Park management and the development team are advised to pilot SIGTS with trained guides and a controlled group of visitors before wider release. Short training sessions should cover map use, sighting etiquette, cultural content sensitivity, and realistic expectations for tour-help responses. Content stewards should establish a schedule for reviewing species records, FAQs, and safety tips. Production hosting should use strong secrets management, routine database backups, and monitoring of server health. Continued investment in connectivity at sector offices would increase the value of real-time analytics for operations staff.
+6.5 Conclusion
+The Smart Information Guide Tour System was undertaken to improve how visitors prepare for and experience Bwindi Impenetrable National Park while giving guides and administrators shared tools for information delivery and monitoring. The implemented prototype demonstrates that a web-centred architecture with spatial data, offline tolerance, and role-aware interfaces can support this objective in a demonstrable form. The technologies chosen proved adequate for academic delivery and pilot demonstration, provided that content governance and infrastructure maintenance remain active responsibilities of the park. Further refinement—particularly in mobile distribution, extended field evaluation, and integration with official permit and ranger systems—was designed to determine whether SIGTS transitions from a project outcome to a sustained operational service.
+REFERENCES
+Aber, J., & ApacSci. (2023). Smart destination governance: ICT and tourism observatories in Brazil. International Journal of Tourism Research, 25(2), 150-163.
+African Union Commission. (2023). Annual report on digital transformation and tourism in Africa: Unlocking the continentΓÇÖs potential. Addis Ababa: African Union.
+Al-Fedaghi, S. (2021). Conceptual data modeling: Entity-relationship models as thinging machines. International Journal of Computer Science and Network Security, 21(9), 1-12. https://doi.org/10.22937/IJCSNS.2021.9.1.
+Al-Okaily, N. S. (2021). A model for tour guide performance. International Journal of Hospitality & Tourism Administration, 23(6), 1077ΓÇô1101. https://doi.org/10.1080/15256480.2021.1905584.
+Bazargani, R. H. Z., & Kilic, H. (2021). Tourism competitiveness and tourism sector performance: Empirical insights from new data. Journal of Hospitality and Tourism Management, 46, 73-82. https://doi.org/10.1016/j.jhtm.2020.11.011.
+Braun, V., & Clarke, V. (2006). Using thematic analysis in psychology. Qualitative Research in Psychology, 3(2), 77-101.
+Brooke, J. (1996). SUS: A quick and dirty usability scale. https://digital.ahrq.gov/sites/default/files/docs/survey/systemusabilityscale.pdf.
+Business Times Uganda. (2025). The impact of technological advancements on UgandaΓÇÖs tourism. https://businesstimesug.com/the-impact-of-technological-advancements-on-ugandas-tourism/.
+Cardin, A. (2025). R├¡o Times. Tourism rises as ColombiaΓÇÖs second-largest economic engine. https://www.riotimesonline.com/tourism-rises-as-colombias-second-largest-economic-engine/.
+Chakraborty, A., Talukdar, N., & Upadhyaya, V. (2022). An autonomous virtual tour guide system for tourists. Assam Journal of Engineering and Technology (AJET). https://journals.dbuniversity.ac.in/ojs/index.php/AJET/article/view/3612.
+Creswell, J. W., & Plano-Clark, V. L. (2017). Designing and conducting mixed methods research (3rd ed.). SAGE Publications.
+Daily Monitor. (2025). Martha Nimusiima: High-tech safety systems to transform UgandaΓÇÖs tourism experience. Daily Monitor. https://www.monitor.co.ug/uganda/lifestyle/travel/high-tech-safety-systems-to-transform-uganda-s-tourism-experience-5179022.
+Dean, A. (2024). Technological adoption, accessibility and smart tourism experience among visitors at selected tourist sites in Kampala city. Masters Thesis, Makerere University Business School. https://irbackend.mubs.ac.ug/server/api/core/bitstreams/d3bfd8e6-dd48-4ed9-9ebf-e95fe88f99df/content.
+Deloitte Insights. (2023). Navigating toward a new normal: 2023 Deloitte corporate travel study. Deloitte. https://www2.deloitte.com/us/en/insights/focus/transportation/corporateΓÇÉbusinessΓÇÉtravelΓÇÉsurvey/2023.html.
+Dydu.ai. (2024). Tourism: Changes in the sector and innovative strategies for optimizing customer service in 2024. https://www.dydu.ai/en/tourism-changes-in-the-sector-and-innovative-strategies-for-optimizing-customer-service-in-2024/.
+East African Community. (2021). EAC Tourism Marketing and Promotion Strategy (2021ΓÇô2025). Arusha: EAC Secretariat.
+Egypt Ministry of Tourism. (2025). Digital innovation in Egyptian tourism, smart travel, and digital innovation across Cairo, Luxor, and the Grand Egyptian Museum. (2025, March 8). Travel and Tour World. https://www.travelandtourworld.com/news/article/egypt-transforms-tourism-with-ai-new-augmented-reality-smart-travel-and-digital-innovation-across-cairo-luxor-and-the-grand-egyptian-museum/.
+Egyptra. (2025). The key factors of tourism success in Egypt and the future of online tourism. https://egyptra.com/the-key-factors-of-tourism-success-in-egypt-and-the-future-of-online-tourism/.
+European Commission. (2023). Leading examples of smart tourism practices in Europe of smart tourism practices in Europe from the 2023 European Capital of Smart Tourism competition. (PDF).
+Goo, J., Huang, C. D., Yoo, C. W., & Koo, C. (2022). Smart tourism technologiesΓÇÖ ambidexterity: Balancing touristΓÇÖs worries and novelty seeking for travel satisfaction. Information Systems Frontiers, 24(6), 2139ΓÇô2158. https://doi.org/10.1007/s10796-021-10227-z.
+Government of Uganda. (2019). Data Protection and Privacy Act, 2019 (Act No. 9 of 2019). National Information Technology Authority–Uganda. https://www.nita.go.ug/sites/default/files/2021-12/Data%20Protection%20and%20Privacy%20Act%20No.%209%20of%202019.pdf.
+GoWithGuide. (2025). Tourism in France statistics: The ultimate guide. https://gowithguide.com/blog/tourism-in-france-statistics-2025-the-ultimate-guide-5275?srsltid=AfmBOooFJud9jIGVXrfaGlBhotfuNYImLFTN7y-8QmV73nkm. https://gowithguide.com/blog/tourism-in-france-statistics-2025-the-ultimate-guide-5275?srsltid=AfmBOooFJud9jIGVXrfaGlBhotfuNYImLFTN7y-8QmV73nkm.
+Hospitality Net. (2023, December 19). How innovation is redefining hospitality and tourism in the digital age. https://www.hospitalitynet.org/opinion/4115554.html.
+Igoumenakis, G., Theodoropoulou, A., & Halkiopoulos, C. (2024). Tourism and Developing Countries. Conditions and Prospects for Tourism Development. University of Pennsylvania Press.
+Ivars-Baidal, J.A., & Vera-Rebollo, J. (2024). Spanish smart tourism destinations: Final considerations and future lines of work. In Smart Tourism Destinations: Strategic Planning and Management (pp.25-42). Springer.
+IYF Global. (2024). Youth and innovation: How IYF is transforming tourism in Mexico and Colombia. https://iyfglobal.org/blog/youth-and-innovation-how-iyf-transforming-tourism-mexico-and-colombia.
+Jamshidi, D., Rousta, A., & Shafei, R. (2023). Social media destination information features and destination loyalty: Does perceived coolness and memorable tourism experiences matter?┬áCurrent Issues in Tourism,┬á26(3), 407ΓÇô428. https://doi.org/10.1080/13683500.2021.2019204.
+JDSAA Journal. (2025). Tourism and digital transformation: A case study in sustainable development. https://jdsaa.journals.ekb.eg/article_434584.html.
+Kang, S., Jodice, L. W., & Norman, W. C. (2020). How do tourists search for tourism information via smartphone before and during their trip?┬áTourism Recreation Research,┬á45(1), 57ΓÇô68. https://doi.org/10.1080/02508281.2019.1627076.
+Lasisi, T. T. (2023). Smart destination competitiveness: underscoring its impact on tourism. Journal of Destination Marketing & Management, 28, 100793.
+Laudon, K. C., & Laudon, J. P. (2023). Management Information Systems: Managing the Digital Firm (17th ed.). Pearson Education.
+Lee, C.-C., Chen, M.-P., Wu, W., & Xing. (2021). The impacts of ICTs on tourism development: International evidence based on a panel quantile approach. Information Technology & Tourism, 23(4), 509-547.
+MacSween, S., & Canziani, B. (2021). Travel booking intentions and information searching during COVID-19.┬áInternational Hospitality Review,┬á35(2), 208ΓÇô224. https://doi.org/10.1108/IHR-08-2020-0046.
+Mason, O. (2025). R├¡o Times. BrazilΓÇÖs Journey To Smart Tour Destinations. https://www.riotimesonline.com/brazils-journey-to-smart-tourism-destinations/.
+Mbago, S. (2024). Uganda tourism experts push for professionalism among local tour guides. Busoga Today. https://busogatoday.com/uganda-tourism-experts-push-for-professionalism-among-local-tour-guides.
+Ministry of Tourism, Wildlife and Antiquities. (2023). Annual Tourism Performance Report 2022/2023. Kampala: Government of Uganda.
+Mobile technology and tourism in the UK: Revolutionizing travel in the digital era. (2024, March 2). Travel Trade Marketing. https://traveltrademktg.mystrikingly.com/blog/mobile-technology-and-tourism-in-the-uk-revolutionizing-travel-in-the.
+Monitor Reporter. (2023, March 9). Bwindi lisyed among the most beautiful places in the world. Monitor Uganda. https://www.monitor.co.ug/uganda/lifestyle/travel/bwindi-listed-among-the-most-beautiful-places-in-the-world-4157128.
+Monumental Expeditions & Safaris. (2025). Uganda tourism ranking ranked in the world? https://www.gorillatrackings.com/where-is-uganda-ranked-in-the-world/.
+National Planning Authority. (2025). Fourth National Development Plan (NDPIV). https://www.npa.go.ug/wp-content/uploads/2025/06/Fourth-National-Development-Plan-NDPIV-1.pdf.
+National Planning Authority. (2025, March). Fourth National Development Plan (NDP IV) 2025/26ΓÇô2029/30: Digital Transformation Programme (p. 174).
+National Planning Authority. (2025, March). Fourth National Development Plan (NDP IV) 2025/26ΓÇô2029/30: Tourism Development Programme (p. 100).
+Next Tourism Generation Alliance. (2024). Country skills profile report: Netherlands (PANTOUR). https://nexttourismgeneration.eu/wp-content/uploads/2024/06/pantour-country-skills-profile-reports_netherlands_english.pdf?
+Obe, R., & Hsu, L. S. (2021). PostGIS in action (3rd ed.). Manning Publications.
+Onyango, M.J. (2025). Effectiveness of digital technology in enhancing blue tourism sustainability in Tanzania. Journal of Management and Development Research, 2(1), 1-10.
+OΓÇÖBrien, J. A., & Marakas, G. M. (2021). Introduction to Information Systems (17th ed.). McGraw-Hill Education.
+Pardo Abad, C.J., & Fernandez Alvarez, J. (2020). Landscape as digital content and a smart tourism resource in the mining area of Cartagena-La Union (Spain). Land, 9(4), 112.
+Phrase. (2024). The best database structure to keep multilingual data. Phrase. https://phrase.com/blog/posts/best-database-structure-for-keeping-multilingual-data/
+Power, D. J. (2021). Decision Support Systems: Concepts and Resources for Managers. Business Expert Press.
+Rajwais, J.B., Rotich, L.K., & Mapelu, I.C. (2025). Artificial intelligence and cultural tourism in Kenya: A systematic review of development opportunities and challenges. East African Journal of Information Technology, 8(1), 227-237.
+Rwanda Development Board (RDB). (2024).┬áTourism and conservation annual report 2024. https://rdb.rw/rwanda-development-board-annual-report-highlights-strong-economic-performance-and-strategic-progress-in-2024/.
+R├¡o Times. (2025, February 15). Tourism rises as ColombiaΓÇÖs second-largest economic engine. https://www.riotimesonline.com/tourism-rises-as-colombias-second-largest-economic-engine/.
+Sadek, J. (2024). Towards a sustainable tourism economy in Uganda (Report). Uganda-Europe Business Forum. https://www.ugandaeuropebusinessforum.com/wp-content/uploads/2024/03/Towards-a-sustainable-tourism-economy-in-Uganda-2024.pdf?
+Segittur. (2024, September 10). Spain, pioneer in the development of the tourism ontology, which will be key to its digital transformation. https://www.segittur.es/en/press-releases/spain-pioneer-in-the-development-of-the-tourism-ontology-which-will-be-key-to-its-digital-transformation/.
+SEGITTUR. (2025). Smart Destination Platform. https://www.segittur.es/en/smart-platform/smart-platform-projects/smart-destination-platform/?
+Seraj, M., Ike, O. C., & Ozdeser, H. (2025). The contribution of tourism on GDP growth and sustainable tourism development in Africa. Future Business Journal, 11, 115. https://doi.org/10.1186/s43093-025-00232-1.
+Silberschatz, A., Korth, H. F., & Sudarshan, S. (2020). Database system concepts (7th ed.). McGraw-Hill Education.
+Singh, A. (2024). Evolutionary architectures in web applications: A comprehensive study of client-server, multi-tier, and service-oriented approaches. International Journal for Multidisciplinary Research, 6(2). https://www.ijfmr.com/papers/2024/2/18266.pdf.
+Spain Convention Bureau (SCB). (2025). Spain, a global tourist power. https://scb.es/en/why-spain/spain-a-global-tourist-power/.
+SpainΓÇÖs tourism sector could exceed Γé¼260 billion by 2025, according to WTTC. (2025, October 22). World Travel & Tourism Council. https://wttc.org/news/spain-tourism-sector-could-exceed-260-billion-euros-by-2025.
+Statista. (2024). Travel and tourism in the United Kingdom. https://www.statista.com/outlook/mmo/travel-tourism/united-kingdom.
+Statista. (2024). Travel and tourism industry in the U.S. https://www.statista.com/topics/1987/travel-and-tourism-industry-in-the-us/.
+Statista. (2025). Le tourisme en France: dossier Statista. Statista. https://fr.statista.com/etude/35106/leΓÇÉtourismeΓÇÉenΓÇÉfranceΓÇÉdossierΓÇÉstatista/.
+Statistics South Africa. (2023). Tourism Statistics. https://www.statssa.gov.za/.
+Sun, S., Law, R., & Luk, C. (2022). TouristsΓÇÖ travel-related information search channels.┬áInternational Journal of Hospitality & Tourism Administration,┬á23(2), 149ΓÇô164. https://doi.org/10.1080/15256480.2020.1727809.
+Teng, X., & Shen, Z. (2020). Design of a smart visiting service management system for personal information collection in order to integrate tourism management into an isolated island.┬áApplied Sciences,┬á10(18), 6442. https://doi.org/10.3390/app10186442.
+TOURISM & SDGS. (2025). TOURISM FOR SDGS a platform developed by UNWTO. https://tourism4sdgs.org/tourism-for-sdgs/tourism-and-sdgs/.
+Tourism Review. (2025). Colombian tourism benefits greatly from new technology. https://www.tourism-review.com/colombian-tourism-benefits-greatly-from-new-technology-news15103.
+Travel and Tour World. (2025, January 10). ColombiaΓÇÖs tourism revolution for growth and sustainable travel. (2025, January 10). Travel and Tour World. https://www.travelandtourworld.com/news/article/colombias-tourism-revolution-embracing-digital-innovation-for-growth-and-sustainable-travel/.
+Travel & Tourism Economic Impact Research. (2025). World Travel & Tourism Council. https://wttc.org/research/economic-impact?
+Travel and Tour World. (2025). Why Mexico is leading the way in travel tech: The future of tourism in 2025. https://www.travelandtourworld.com/news/article/why-mexico-is-leading-the-way-in-travel-tech-the-future-of-tourism-in-2025/.
+Travel and Tour World. (2025). BrazilΓÇÖs tourism boom: How new innovation and culture are making it the worldΓÇÖs top destination in 2025. https://www.travelandtourworld.com/news/article/brazils-tourism-boom-how-new-innovation-and-culture-are-making-it-the-worlds-top-destination-in-2025/.
+Travel Trade Marketing. (2024). Mobile technology and tourism in the UK: Revolutionizing travel in the digital era. https://traveltrademktg.mystrikingly.com/blog/mobile-technology-and-tourism-in-the-uk-revolutionizing-travel-in-the.
+TripAdvisor. (2022). Travel in 2022 ΓÇô a look ahead: Tripadvisor research, in partnership with Ipsos MORI, reveals 2022 is the year of the travel rebound. TripAdvisor.┬á. https://ir.tripadvisor.com/news-releases/news-release-details/travel-2022-look-ahead-tripadvisor-research-partnership-ipsos.
+Turban, E., Sharda, R., Delen, D., & King, D. (2022). Business Intelligence, Analytics, and Data Science: A Managerial Perspective (5th ed.). Pearson Education.
+U.S. Remains the WorldΓÇÖs Most Powerful Travel & Tourism Market. (2025, October 22). World Travel & Tourism Council. https://wttc.org/news/us-remains-the-worlds-most-powerful-travel-and-tourism-market.
+Uganda Tourism Board. (2025). Explore Uganda mobile application. https://softpower.ug/utb-launches-explore-uganda-app-to-enhance-tourism-travel-experience/.
+Uganda Ministry of Tourism, Wildlife and Antiquities. (2024).┬áTourism sector performance report 2024. https://www.tourism.go.ug/single-post/uganda-s-tourism-sector-hits-record-high-of-us-1-28-billion-in-2024.
+Uganda Wildlife Authority (UWA). (2021).┬áQuarterly performance report, January-March 2021. https://ugandawildlife.org/parks-reserves/.
+Uganda Wildlife Authority. (2025). Bwindi Impenetrable National Park. Uganda Wildlife Authority. https://ugandawildlife.org/national-parks/bwindi-impenetrable-national-park/.
+Ugandan tourism experts push for professionalism among local tour guides. (2024).┬áBusoga Today. https://busogatoday.com/ugandan-tourism-experts-push-for-professionalism-among-local-tour-guides/.
+UN Tourism. (2025). About UN Tourism. https://www.untourism.int/who-we-are.
+UN Tourism Data Dashboard. (2025). UN Tourism. https://www.untourism.int/tourism-data/un-tourism-tourism-dashboard.
+United Nations Environment Programme. (2024). Digital innovation for sustainable tourism: Global progress report 2024. Nairobi: UNEP.
+United Nations World Tourism Organization (UNWTO). (2024). World Tourism Barometer: Global trends and outlook 2024. Madrid: UNWTO.
+UNWTO Highlights Tourism as Key Contributor to All SDGs. (2017) https://sdg.iisd.org/news/unwto-highlights-tourism-as-key-contributor-to-all-sdgs.
+Vera-Olivera, H., Guo, R., Huacarpuma, R. C., da Silva, A. P. B., Mariano, A. M., & Holanda, M. (2021). Data modeling and NoSQL databases: A systematic mapping review. ACM Computing Surveys, 54(6), 1-26. https://doi.org/10.1145/3457608.
+WhereInRio. (2025). Brazil is South Americas Most Visited Destination in 2025. https://www.whereinrio.com/en-gb/news-detail/brazil-is-south-americas-most-visited-destination-in-2025/54678.
+Williams-Ilemobola, O. B., Adetayo, A. J., Buhari, G. I., & Omorinkoba, O. G. (2022). Information seeking behavior and use of library services by disabled students in federal universities in South-West, Nigeria.┬áInternational Information & Library Review,┬á55(2), 95ΓÇô104. https://doi.org/10.1080/10572317.2022.2074718.
+World Travel & Tourism Council. (2025). France travel and tourism economic impact. https://wttc.org/news/frances-travel-and-tourism-broke-all-records-last-year-wttc-research-reveals. https://wttc.org/news/frances-travel-and-tourism-broke-all-records-last-year-wttc-research-reveals. https://wttc.org/news/frances-travel-and-tourism-broke-all-records-last-year-wttc-research-reveals.
+World Economic Forum. (2024).┬áTravel & tourism development index 2024. https://www.weforum.org/publications/travel-tourism-development-index-2024/.
+World Tourism Organization (UNWTO). (2025).┬áWorld tourism barometer: January 2025. UNWTO. https://en.unwto-ap.org/news/worldtourismbarometer_jan2025/.
+World Travel & Tourism Council (WTTC). (2023). Travel & Tourism Economic Impact Reports. World Travel & Tourism Council (WTTC) Research Hub).
+World Travel & Tourism Council. (2024). Research & Insights Hub. WTTC Research Hub. https://researchhub.wttc.org/.
+World Travel & Tourism Council. (2025).┬áRwandaΓÇÖs travel & tourism sector broke all records in 2024 https://wttc.org/news/rwandas-travel-tourism-sector-broke-all-records-in-2024.
+Wptravel.io. (2023). World tourism ranking by country. WP Travel. https://wptravel.io/world-tourism-ranking-by-country/.
+WTTC. (2025). Brazil travel and tourism sector to surpass USD 167 billion contribution by 2025. https://wttc.org/news/wttc-forecasts-brazil-travel-and-tourism-sector-to-surpass-usd-167-billion-contribution-by-2025.
+WTTC. (2025). Travel and tourism in Latin America could boost regionΓÇÖs economy by US$260bn over the next decade. https://wttc.org/news/travel-and-tourism-in-latin-america-could-boost-regions-economy-by-us-260bn-over-the-next-decade.
+Zhang, Y., Sotiriadis, M., & Shen, S. (2022). Investigating the impact of smart tourism technologies on touristsΓÇÖ experience. Sustainability, 14(5), 3048.
+5. APPENDICES
+5.1 Appendix A
+5.1.1 Time frame
+Month
+Phase
+Key Activities
+Output
+1
+Requirements Analysis
+Stakeholder identification
+Conduct surveys, interviews
+Stakeholder requirements list
+Refined problem statement
+2
+System Design
+Develop SRS document
+Design system architecture
+UI/UX wireframes 
+Approved SRS document
+UI/UX prototypes
+3
+Iterative Development
+Develop backend framework 
+Implement basic CMS functionality
+Functional backend and database
+Initial CMS module
+4
+Iterative Development
+Develop tourist-facing interface (web/mobile)
+Integrate offline search functionality 
+Tourist interface module
+Offline information access features
+5
+Alpha Testing and Content Curation
+Bug fixing and optimization
+Fully integrated prototype and alpha test report
+6
+Evaluation and Validation
+Pilot deployment at Bwindi Impenetrable National Park
+Administer surveys
+Refined system prototype and validation report
+7
+Documentation and Reporting
+Final system documentation and presentation
+Final project report
+5.1.2 Gantt Chart 
+5.2 Appendix B
+Project Estimated Budget expenses
+item
+description
+Cost (UGX)
+Equipment
+Mobile wife router, internet data
+400,000
+Services
+Printing, photocopying and binding
+100,000
+Travel
+transport
+100,000
+Contingency
+Unexpected expenses
+50,000
+Total
+UGX 820,000
+5.3 Appendix C: Data Collection Instruments
+SMART INFORMATION TOUR GUIDE SYSTEM: A WEB-BASED SOLUTION FOR ACCURATE AND WELL-ORGANIZED TOURIST INFORMATION
+Interview Guide: Smart Information Guide Tour System Study
+We are researchers conducting a study aimed at developing a Smart Information Guide Tour System to enhance the educational experience and information accuracy for visitors within Bwind Impenetrable national park. The purpose of this professional consultation is to gather insights on current information delivery practices, challenges, and the functional requirements for a technology web-based guide tour system. The information collected was used strictly for academic research and system development to support conservation, education and the tourism sector.
+Your participation in this interview helped inform the design of a system that seeks to empower guides, ensure visitor satisfaction, and promote accurate cultural and ecological storytelling.
+Consent Statement
+Participation in this interview is voluntary. You are free to decline to answer any question or to withdraw from the interview at any time without any consequences. All information provided was treated with the utmost confidentiality and was used solely for research purposes. No personal identifiers was included in any publications or reports.
+By agreeing to participate in this interview, you indicate that you understand the purpose of the study and consent to take part.
+☐ I agree to participate.☐ I do not agree to participate.
+Interview Questions
+What are the most common types of questions you receive from tourists about the park? (For guides/staff) 
+What kind of information do you typically look for when visiting a park like this? (For tourists)
+How do you currently find or share this information? What tools or methods do you use?
+What are the biggest challenges or frustrations in getting accurate, timely information to or from visitors?
+Have you ever used a digital tool or web-based system for information in a park or museum? What was that experience like?
+What would be the most valuable features of an ideal digital guide system for you? (for example, voice interaction, animal identification, offline maps, safety alerts).
+How important is trust and accuracy in the information provided by such a system? How could that trust be established?
+What concerns, if any, would you have about using an AI-assisted information web-based system?
+What are the foremost practical barriers or risks to deploying and maintaining reliable technology in this environment? (for example, infrastructure, hardware durability, user adoption, training needs).
+Would a system like this change how you perform your role or experience your visit? If so, how?
+Do you have any other suggestions or considerations for a system designed to support learning and exploration here?
+Thank you for your valuable time and expertise. Your contribution is vital to creating a solution that supports the tourists experience, work of tourism professionals and conserves our natural heritage.
+SMART INFORMATION GUIDE TOUR SYSTEM: A WEB-BASED SOLUTION FOR ACCURATE AND WELL-ORGANIZED TOURIST INFORMATION
+Dear Respondent,
+This questionnaire is intended to collect information for academic research on the development of the Smart Information Guide Tour System (SIGTS) for tourism destinations such as Bwindi Impenetrable National Park. Your responses will help improve tourism information access, navigation, wildlife tracking, and visitor experiences.
+The information provided will be kept confidential and used strictly for academic purposes only.
+SECTION A: DEMOGRAPHIC INFORMATION
+1. Gender
+☐ Male
+☐ Female
+2. Age Group
+☐ Below 18
+☐ 18–25
+☐ 26–35
+☐ 36–45
+☐ Above 45
+3. Nationality
+☐ Ugandan
+☐ East African
+☐ African (Non-East African)
+☐ Foreign
+4. Highest Level of Education
+☐ Primary
+☐ Secondary
+☐ Diploma
+☐ Bachelor's Degree
+☐ Postgraduate
+☐ Other 
+5. How often do you visit national parks or tourist destinations?
+☐ First time
+☐ Once a year
+☐ Several times a year
+☐ Frequently
+SECTION B: CURRENT TOURISM EXPERIENCE
+6. How do you currently obtain tourism information while visiting parks? (You may tick more than one)
+☐ Tour guides
+☐ Websites
+☐ social media
+☐ Brochures/maps
+☐ Friends/family
+☐ Other 
+7. Have you experienced challenges accessing tourism information during tours?
+☐ Yes
+☐ No
+8. If yes, what challenges have you experienced? (You may tick more than one)
+☐ Difficulty navigating the park
+☐ Limited wildlife information
+☐ Poor communication with guides
+☐ Lack of cultural information
+☐ Outdated or inaccurate information
+☐ Other 
+9. Do you use smartphones during tours or travel activities?
+☐ Yes
+☐ No
+10. Would you prefer a mobile system that provides tourism information and navigation services?
+☐ Yes
+☐ No
+☐ Not sure
+SECTION C: SYSTEM FEATURES AND REQUIREMENTS
+11. Which features would you like the Smart Information Guide Tour System to provide? 
+☐ Interactive park maps
+☐ Wildlife information
+☐ Cultural stories and narratives
+☐ GPS navigation
+☐ Offline access
+☐ Wildlife sighting reporting
+☐ AI-powered recommendations
+☐ Other 
+12. Would you use an AI-powered recommendation feature for suggesting attractions and tours?
+☐ Yes
+☐ No
+☐ Maybe
+13. How useful would geofencing and GPS-based navigation be during park visits?
+☐ Very Useful
+☐ Useful
+☐ Neutral
+☐ Not Useful
+14. Would you like the system to provide multilingual support?
+☐ Yes
+☐ No
+15. Which device would you most likely use to access the system?
+☐ Smartphone
+☐ Tablet
+☐ Laptop
+☐ Park information kiosk
+SECTION D: USER SATISFACTION AND IMPROVEMENT
+16. Would you recommend the Smart Information Guide Tour System to other tourists if implemented?
+☐ Yes
+☐ No
+☐ Maybe
+17. What improvements would you recommend for tourism information services in national parks?
+Closing Statement
+Thank you for taking part in this survey. Your feedback is highly appreciated and will contribute towards the development of an effective Smart Information Guide Tour System for improving tourism experiences in Uganda.

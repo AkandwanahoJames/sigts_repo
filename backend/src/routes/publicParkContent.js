@@ -129,7 +129,7 @@ router.get(
     }
 );
 
-/** Server-computed weather capsule for Bwindi (updates each request; swap for Open-Meteo in production). */
+/** Server-computed weather capsule for Bwindi (Open-Meteo live feed with deterministic fallback). */
 function buildWeatherDemo() {
     const now = Date.now();
     const baseTemp = 16 + Math.sin(now / 86400000) * 2;
@@ -142,8 +142,8 @@ function buildWeatherDemo() {
         });
     }
     return {
-        label: 'Bwindi Impenetrable NP (live server estimate)',
-        source: 'sigts_server',
+        label: 'Bwindi Impenetrable NP (offline estimate)',
+        source: 'sigts_fallback',
         generatedAt: new Date(now).toISOString(),
         temperatureC: Math.round(baseTemp * 10) / 10,
         condition: hours[0].rainProbabilityPct > 55 ? 'Rain likely' : 'Partly cloudy / mist',
@@ -153,9 +153,69 @@ function buildWeatherDemo() {
     };
 }
 
+const BWINDI_LAT = -1.031;
+const BWINDI_LNG = 29.638;
+
+const WMO_CONDITIONS = {
+    0: 'Clear sky',
+    1: 'Mainly clear',
+    2: 'Partly cloudy',
+    3: 'Overcast',
+    45: 'Fog / mist',
+    48: 'Depositing rime fog',
+    51: 'Light drizzle',
+    53: 'Drizzle',
+    55: 'Heavy drizzle',
+    61: 'Light rain',
+    63: 'Rain',
+    65: 'Heavy rain',
+    80: 'Rain showers',
+    95: 'Thunderstorm'
+};
+
+async function fetchBwindiOpenMeteoWeather() {
+    const url =
+        'https://api.open-meteo.com/v1/forecast?' +
+        `latitude=${BWINDI_LAT}&longitude=${BWINDI_LNG}` +
+        '&current=temperature_2m,relative_humidity_2m,precipitation,weather_code' +
+        '&hourly=temperature_2m,precipitation_probability&timezone=Africa%2FKampala&forecast_days=1';
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) throw new Error(`Open-Meteo HTTP ${res.status}`);
+    const json = await res.json();
+    const cur = json.current || {};
+    const hourly = json.hourly || {};
+    const temps = hourly.temperature_2m || [];
+    const rainProb = hourly.precipitation_probability || [];
+    const forecastSlices = [];
+    for (let i = 0; i < Math.min(temps.length, 24); i += 3) {
+        forecastSlices.push({
+            hourOffset: i,
+            tempC: Math.round(Number(temps[i] || 0) * 10) / 10,
+            rainProbabilityPct: Math.round(Number(rainProb[i] || 0))
+        });
+    }
+    const code = Number(cur.weather_code || 2);
+    return {
+        label: 'Bwindi Impenetrable NP (Open-Meteo)',
+        source: 'open_meteo',
+        generatedAt: new Date().toISOString(),
+        temperatureC: Math.round(Number(cur.temperature_2m || 18) * 10) / 10,
+        condition: WMO_CONDITIONS[code] || 'Partly cloudy',
+        humidityPct: Math.round(Number(cur.relative_humidity_2m || 75)),
+        rainProbabilityPct: Math.round(Number(rainProb[0] || 0)),
+        forecastSlices
+    };
+}
+
 router.get('/weather', async (_req, res) => {
     try {
-        const data = buildWeatherDemo();
+        let data;
+        try {
+            data = await fetchBwindiOpenMeteoWeather();
+        } catch (liveErr) {
+            console.warn('Open-Meteo unavailable, using fallback weather:', liveErr.message);
+            data = buildWeatherDemo();
+        }
         res.json({ success: true, data });
     } catch (e) {
         console.error('Weather error:', e);
