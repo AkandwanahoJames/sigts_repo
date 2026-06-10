@@ -115,3 +115,5 @@ legacy/
 scripts/windows/*.bat
 scripts/windows/*.ps1
 .vercel
+
+.vercel

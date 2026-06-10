@@ -626,8 +626,8 @@ function getPageTitle(view) {
         info: 'Info',
         ai_chat: 'Bwindi assistant',
         guide_dashboard: 'Guide Dashboard',
-        it_dashboard: 'Admin Dashboard',
-        it_predictive_analytics: 'Predictive Analytics',
+        it_dashboard: 'IT Operations',
+        it_predictive_analytics: 'IT Operations',
         it_tour_assignments: 'Tour Session Assignments',
         intranet: 'Intranet Hub'
     };
@@ -641,8 +641,8 @@ function getPageSubtitle(view) {
         dashboard: "Search, browse categories, and pick up saved species or places.",
         saved: 'Bookmarks from your visits — tap to reopen details.',
         guide_dashboard: 'Track tours, guests, and active shifts.',
-        it_dashboard: 'Monitor users, sync status, and platform health.',
-        it_predictive_analytics: 'Historical signals, forecasts, exports, and schedules for park operations.',
+        it_dashboard: 'Operations overview and predictive analytics in one place.',
+        it_predictive_analytics: 'Operations overview and predictive analytics in one place.',
         it_tour_assignments: 'Assign and manage guide tour sessions.',
         intranet: 'Manage staff communication and operations.',
         ai_chat: 'Chat-style help for Bwindi Impenetrable National Park only — not generic travel or medical advice.'
@@ -726,8 +726,18 @@ function getLandingViewForUser(user) {
     return 'dashboard';
 }
 
+// The legacy "Predictive Analytics" view is now the Analytics sub-tab of IT Operations.
+// Resolve it to it_dashboard while remembering which sub-tab to open.
+function resolveItOpsAlias(view) {
+    if (String(view) === 'it_predictive_analytics') {
+        itOpsActiveSection = 'analytics';
+        return 'it_dashboard';
+    }
+    return view;
+}
+
 function navigateTo(view, options = {}) {
-    const targetView = normalizeView(view);
+    const targetView = normalizeView(resolveItOpsAlias(view));
     if (
         Auth.isAuthenticated() &&
         !PUBLIC_VIEWS.has(targetView) &&
@@ -1132,6 +1142,8 @@ let adminRealtimeUsersTimer = null;
 let adminRealtimeRefreshMs = 12000;
 let guideDashboardRefreshTimer = null;
 let assignmentDashboardRefreshTimer = null;
+// Active sub-tab within the unified IT Operations view: 'overview' | 'analytics'.
+let itOpsActiveSection = 'overview';
 let parkAccessSimulation = (() => {
     try {
         const raw = localStorage.getItem('parkAccessSimulation');
@@ -1995,10 +2007,10 @@ function renderMainLayout(content) {
     }
     if (isGuide) navItems.push({ id: 'guide_dashboard', icon: 'ticket', label: 'Guide' });
     if (isITManager) {
-        navItems.push({ id: 'it_dashboard', icon: 'chart', label: 'Admin' });
-        navItems.push({ id: 'it_predictive_analytics', icon: 'activity', label: 'Analytics' });
+        // Admin + Analytics are unified under one "IT Operations" tab with an in-page
+        // Overview / Analytics sub-navigation (see renderITOperations).
+        navItems.push({ id: 'it_dashboard', icon: 'chart', label: 'IT Operations' });
         navItems.push({ id: 'it_tour_assignments', icon: 'clock', label: 'Assignments' });
-        navItems.push({ id: 'intranet', icon: 'building', label: 'Intranet' });
     }
     
     const accessState = getParkAccessState();
@@ -2195,7 +2207,12 @@ window.applyPredictiveAnalyticsFilters = function () {
     if (cd) sessionStorage.setItem('sigts.pa.congestion', String(cd.value || '').slice(0, 10));
     if (af) sessionStorage.setItem('sigts.pa.animal', String(af.value || ''));
     invalidateSigtsViewCache('it_predictive_analytics');
-    renderView('it_predictive_analytics', { updateHash: false, suppressAccessToast: true });
+    invalidateSigtsViewCache('it_dashboard');
+    if (typeof switchItOpsSection === 'function') {
+        switchItOpsSection('analytics');
+    } else {
+        renderView('it_predictive_analytics', { updateHash: false, suppressAccessToast: true });
+    }
 };
 
 window.paRunReportFromBuilder = async function () {
@@ -2273,8 +2290,8 @@ async function computeViewContent(view) {
         case 'saved': return await renderSavedContent();
         case 'ai_chat': return renderAIChatContent();
         case 'guide_dashboard': return await renderGuideDashboard();
-        case 'it_dashboard': return await renderITManagerDashboard();
-        case 'it_predictive_analytics': return await renderITPredictiveAnalyticsDashboard();
+        case 'it_dashboard': return await renderITOperations(itOpsActiveSection);
+        case 'it_predictive_analytics': return await renderITOperations('analytics');
         case 'it_tour_assignments': return await renderITTourAssignmentsDashboard();
         case 'intranet': return await renderIntranetDashboard();
         default: return await renderDashboardContent();
@@ -3468,7 +3485,11 @@ window.sigtsRunDashboardAction = async function sigtsRunDashboardAction(action) 
         return;
     }
     if (a === 'it_analytics') {
-        await navigateTo('it_predictive_analytics');
+        if (typeof switchItOpsSection === 'function' && window.currentView === 'it_dashboard') {
+            await switchItOpsSection('analytics');
+        } else {
+            await navigateTo('it_predictive_analytics');
+        }
         return;
     }
     if (a === 'it_live_users') {
@@ -3513,7 +3534,11 @@ window.sigtsOpenDashboardRec = async function sigtsOpenDashboardRec(kind, id, la
         return;
     }
     if (k === 'metric_sync' || k === 'metric_satisfaction') {
-        await navigateTo('it_predictive_analytics');
+        if (typeof switchItOpsSection === 'function' && window.currentView === 'it_dashboard') {
+            await switchItOpsSection('analytics');
+        } else {
+            await navigateTo('it_predictive_analytics');
+        }
         return;
     }
     if (k === 'metric_users') {
@@ -6112,6 +6137,66 @@ window.itApproveAiContent = async function itApproveAiContent(generationId, stat
     }
 };
 
+// Unified "IT Operations" view: an in-page Overview / Analytics sub-navigation that houses
+// what used to be two separate tabs (Admin + Predictive Analytics). The two section bodies are
+// still produced by renderITManagerDashboard (Overview) and renderITPredictiveAnalyticsDashboard
+// (Analytics); this wrapper just adds the tab strip and renders the active section.
+async function renderITOperations(section) {
+    if (!isCurrentUserITManager()) {
+        return `<div class="it-ops"><div class="section-card"><div class="section-header"><h3>${icon('shield', 'icon-sm')} Access restricted</h3></div><div class="seasonal-list"><div class="seasonal-item">Only IT managers and system admins can open this area.</div></div></div></div>`;
+    }
+    const active = section === 'analytics' ? 'analytics' : 'overview';
+    itOpsActiveSection = active;
+    const content = active === 'analytics'
+        ? await renderITPredictiveAnalyticsDashboard()
+        : await renderITManagerDashboard();
+    return `<div class="it-ops">
+        <div class="it-ops-subnav" role="tablist" aria-label="IT Operations sections">
+            <button type="button" role="tab" id="itOpsTabOverview" class="it-ops-tab ${active === 'overview' ? 'is-active' : ''}" aria-selected="${active === 'overview'}" onclick="switchItOpsSection('overview')">${icon('chart', 'icon-sm')} Overview</button>
+            <button type="button" role="tab" id="itOpsTabAnalytics" class="it-ops-tab ${active === 'analytics' ? 'is-active' : ''}" aria-selected="${active === 'analytics'}" onclick="switchItOpsSection('analytics')">${icon('activity', 'icon-sm')} Analytics</button>
+        </div>
+        <div id="itOpsSection" class="it-ops-section" role="tabpanel">${content}</div>
+    </div>`;
+}
+
+// Swap the active IT Operations section in place (no full view re-render), keeping timers and
+// the page header stable. Used by the sub-nav tabs and by deep-link/CTA actions.
+window.switchItOpsSection = async function (section) {
+    if (typeof requireITManagerAccess === 'function' && !requireITManagerAccess('IT Operations')) return;
+    const active = section === 'analytics' ? 'analytics' : 'overview';
+    itOpsActiveSection = active;
+
+    const ov = document.getElementById('itOpsTabOverview');
+    const an = document.getElementById('itOpsTabAnalytics');
+    if (ov) { ov.classList.toggle('is-active', active === 'overview'); ov.setAttribute('aria-selected', String(active === 'overview')); }
+    if (an) { an.classList.toggle('is-active', active === 'analytics'); an.setAttribute('aria-selected', String(active === 'analytics')); }
+    document.body.classList.toggle('pa-analytics-view', active === 'analytics');
+
+    // The other section's live-refresh timer must not keep running while it is hidden.
+    stopAdminRealtimeUsersRefresh();
+
+    const mount = document.getElementById('itOpsSection');
+    if (!mount) return;
+    mount.innerHTML = renderViewSkeleton('it_dashboard');
+    // The combined view caches under it_dashboard; drop it so navigating back recomputes the active section.
+    invalidateSigtsViewCache('it_dashboard');
+
+    try {
+        const html = active === 'analytics'
+            ? await renderITPredictiveAnalyticsDashboard()
+            : await renderITManagerDashboard();
+        if (itOpsActiveSection !== active) return; // a newer switch superseded this one
+        mount.innerHTML = html;
+        if (active === 'analytics') {
+            requestAnimationFrame(() => refreshPaOperationsStatus());
+        } else {
+            startAdminRealtimeUsersRefresh();
+        }
+    } catch (err) {
+        mount.innerHTML = `<div class="section-card"><div class="empty-state">Could not load this section. ${escapeHtml(String(err?.message || err || ''))}</div></div>`;
+    }
+};
+
 async function renderITManagerDashboard() {
     if (!isCurrentUserITManager()) {
         return `<div class="it-dashboard"><div class="section-card"><div class="section-header"><h3>${icon('shield', 'icon-sm')} Access restricted</h3></div><div class="seasonal-list"><div class="seasonal-item">Only users with the IT Manager role can access predictive analytics and reporting.</div></div></div></div>`;
@@ -6140,7 +6225,6 @@ async function renderITManagerDashboard() {
         safeZoneRows = [];
     }
     const safeZoneHtml = `<div class="section-card"><div class="section-header"><h3>${icon('shield', 'icon-sm')} Safe-zone corridor alerts</h3></div><p class="animals-page-blurb">Shown when IT defines <strong>mandatory</strong> visitor corridors (migration 014). Guests inside the park but outside all mandatory polygons trigger a logged violation for ranger follow-up.</p><div class="seasonal-list">${(safeZoneRows || []).length ? safeZoneRows.map((v) => `<div class="seasonal-item"><strong>${escapeHtml(v.username || 'User')}</strong> @ ${escapeHtml(String(v.latitude?.toFixed?.(5) ?? v.latitude))}, ${escapeHtml(String(v.longitude?.toFixed?.(5) ?? v.longitude))}<br/><span class="ui-modal-muted">${escapeHtml(v.detail || v.violation_kind || '')}</span><br/><small>${escapeHtml(String(v.created_at || ''))}</small> ${v.acknowledged ? '<span style="color:#2E7D32;">Reviewed</span>' : `<button type="button" class="small-btn" onclick="ackSafeZoneViolationPrompt('${escAttrBareUuid(v.violation_id)}')">Acknowledge</button>`}</div>`).join('') : '<div class="seasonal-item">No open safe-zone violations. If the list is always empty, migration 014 may not be applied or no mandatory corridors are configured.</div>'}</div><div class="info-chip-row" style="flex-wrap:wrap;margin-top:8px;"><button type="button" class="small-btn" onclick="sigtsItAdminOpsHelp()">${icon('info', 'icon-sm')} IT setup notes</button></div></div>`;
-    const predictiveCtaHtml = `<div class="section-card pa-admin-cta"><div class="section-header"><h3>${icon('chart', 'icon-sm')} Predictive Analytics & Reporting</h3></div><p class="animals-page-blurb">Forecast congestion, staffing, visitor flows, sightings, anomalies, satisfaction, demographics, exports, schedules, and model retraining—all in §3.1.1.11 tooling.</p><div class="info-chip-row" style="flex-wrap:wrap;gap:8px;"><button type="button" class="login-btn" onclick="navigateTo('it_predictive_analytics')">${icon('activity', 'icon-sm')} Open Predictive Analytics workspace</button></div></div>`;
     const animals = await Content.getAnimals();
     const avgStars = Number(metrics.averageRating || 0);
     const itKpis = [
@@ -6193,7 +6277,7 @@ async function renderITManagerDashboard() {
             {
                 title: 'Visitor Satisfaction',
                 match: `${avgStars.toFixed(1)} / 5`,
-                reason: `Administrative avg rating (${avgStars.toFixed(1)} / 5 rolling). Detailed satisfaction trends live under Predictive Analytics.`,
+                reason: `Administrative avg rating (${avgStars.toFixed(1)} / 5 rolling). Detailed satisfaction trends live in the Analytics sub-tab.`,
                 iconName: 'smile',
                 goIcon: 'chart',
                 avatarType: 'icon',
@@ -6214,7 +6298,7 @@ async function renderITManagerDashboard() {
         seasonalActionLabel: 'Open predictive analytics',
         seasonalAction: 'it_analytics',
         animalCount: animals.length
-    })}${usersGraphicHtml}<div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Current Users (Realtime)</h3><span id="adminLiveUsersStamp" class="status-badge neutral">Live · ${new Date().toLocaleTimeString()} · ${Number(liveOps.activeCount ?? (liveOps.peers || []).length)} online (5m) · ${Number(metrics.totalRegisteredUsers ?? 0)} accounts in database</span></div><div id="adminLiveUsersList">${liveUsersHtml}</div></div>${feedbackPanelHtml}${contentPanelHtml}${adminOpsHtml}${predictiveCtaHtml}<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('building', 'icon-sm')} Intranet Connectivity</h3></div><div class="analytics-list"><div class="analytics-row"><span>Intranet</span><div class="analytics-bar"><div style="width:${liveOps.intranetStatus?.isIntranet ? 100 : 35}%;"></div></div><strong>${liveOps.intranetStatus?.isIntranet ? 'Connected' : 'External'}</strong></div><div class="analytics-row"><span>Device IP</span><span></span><strong>${escapeHtml(liveOps.intranetStatus?.ip || 'Unknown')}</strong></div><div class="analytics-row"><span>Pending Sync (all users)</span><span></span><strong id="itSyncPendingValue">${liveOps.syncStatus?.pending_items ?? liveOps.syncStatus?.pending ?? 0}</strong></div><div class="analytics-row"><span>Location updates (15m)</span><span></span><strong id="itLocationPulseValue">${liveOps.syncStatus?.location_updates_last_15m ?? 0}</strong></div></div></div><div class="section-card"><div class="section-header"><h3>${icon('user', 'icon-sm')} Live Peers / Guests</h3></div><div id="adminLivePeersSnapshot" class="seasonal-list">${renderLivePeersSnapshotRows(liveOps.peers || [], Number(liveOps.windowMinutes) || 5)}</div></div></div>${rareAlertsHtml}${safeZoneHtml}<div class="admin-actions"><button class="admin-action-btn" onclick="handleMFASetup()">${icon('shield', 'icon-sm')} Configure MFA</button><button class="admin-action-btn" onclick="clearAllCache()">Clear Cache</button><button class="admin-action-btn" onclick="exportData()">Export Data</button><button class="admin-action-btn danger" onclick="resetApp()">Reset App</button></div></div>`;}
+    })}${usersGraphicHtml}<div class="section-card"><div class="section-header"><h3>${icon('users', 'icon-sm')} Current Users (Realtime)</h3><span id="adminLiveUsersStamp" class="status-badge neutral">Live · ${new Date().toLocaleTimeString()} · ${Number(liveOps.activeCount ?? (liveOps.peers || []).length)} online (5m) · ${Number(metrics.totalRegisteredUsers ?? 0)} accounts in database</span></div><div id="adminLiveUsersList">${liveUsersHtml}</div></div>${feedbackPanelHtml}${contentPanelHtml}${adminOpsHtml}<div class="dashboard-feature-grid"><div class="section-card"><div class="section-header"><h3>${icon('building', 'icon-sm')} Intranet Connectivity</h3></div><div class="analytics-list"><div class="analytics-row"><span>Intranet</span><div class="analytics-bar"><div style="width:${liveOps.intranetStatus?.isIntranet ? 100 : 35}%;"></div></div><strong>${liveOps.intranetStatus?.isIntranet ? 'Connected' : 'External'}</strong></div><div class="analytics-row"><span>Device IP</span><span></span><strong>${escapeHtml(liveOps.intranetStatus?.ip || 'Unknown')}</strong></div><div class="analytics-row"><span>Pending Sync (all users)</span><span></span><strong id="itSyncPendingValue">${liveOps.syncStatus?.pending_items ?? liveOps.syncStatus?.pending ?? 0}</strong></div><div class="analytics-row"><span>Location updates (15m)</span><span></span><strong id="itLocationPulseValue">${liveOps.syncStatus?.location_updates_last_15m ?? 0}</strong></div></div></div><div class="section-card"><div class="section-header"><h3>${icon('user', 'icon-sm')} Live Peers / Guests</h3></div><div id="adminLivePeersSnapshot" class="seasonal-list">${renderLivePeersSnapshotRows(liveOps.peers || [], Number(liveOps.windowMinutes) || 5)}</div></div></div>${rareAlertsHtml}${safeZoneHtml}<div class="admin-actions"><button class="admin-action-btn" onclick="handleMFASetup()">${icon('shield', 'icon-sm')} Configure MFA</button><button class="admin-action-btn" onclick="clearAllCache()">Clear Cache</button><button class="admin-action-btn" onclick="exportData()">Export Data</button><button class="admin-action-btn danger" onclick="resetApp()">Reset App</button></div></div>`;}
 
 // =====================================================
 // PREDICTIVE ANALYTICS (§3.1.1.11) — IT Manager workspace
@@ -7758,6 +7842,8 @@ window.openUatResults = async function () {
         return;
     }
     const s = data.summary;
+    // Keep the latest payload so the "Download PDF" button can render it without re-fetching.
+    window.__uatResultsForExport = data;
     const fmt = (v, suffix = '') => (v == null ? '—' : `${v}${suffix}`);
     const reliabilityBadge = s.reliable
         ? `<span class="status-badge success">Reliable sample (n=${s.responses})</span>`
@@ -7805,8 +7891,138 @@ window.openUatResults = async function () {
         title: 'UAT results — System Usability Scale',
         subtitle: 'Decision-grade usability evidence',
         bodyHtml,
-        footerHtml: `<button type="button" class="small-btn ghost-btn" onclick="document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();">Close</button>`
+        footerHtml: `<button type="button" class="small-btn" onclick="downloadUatResultsPdf()">${icon('download', 'icon-sm')} Download PDF</button><button type="button" class="small-btn ghost-btn" onclick="document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();">Close</button>`
     });
+};
+
+// Build a self-contained, printable HTML document for the UAT results so an IT manager can
+// save decision-grade usability evidence as a PDF on their device. Styles are inlined so the
+// export does not depend on the app's stylesheet, a network connection, or any PDF library.
+function buildUatResultsPrintDoc(data) {
+    const s = data.summary || {};
+    const esc = (v) => (typeof escapeHtml === 'function' ? escapeHtml(String(v == null ? '' : v)) : String(v == null ? '' : v));
+    const fmt = (v, suffix = '') => (v == null ? '—' : `${v}${suffix}`);
+    const generatedAt = new Date().toLocaleString();
+    const reliability = s.reliable
+        ? `Reliable sample (n=${s.responses})`
+        : `Provisional — needs at least ${s.min_reliable_sample} testers (n=${s.responses})`;
+
+    const itemRows = (data.per_item || [])
+        .map((it) => `<tr><td>${it.index}</td><td class="left">${esc(it.label)}</td><td>${fmt(it.mean)}</td><td>${fmt(it.sd)}</td><td>${it.responses}</td></tr>`)
+        .join('');
+
+    const roleRows = Object.entries(s.role_breakdown || {})
+        .map(([role, count]) => `<span class="chip">${esc(role)}: ${count}</span>`)
+        .join(' ') || '<span class="chip">none</span>';
+
+    const commentsHtml = (data.recent_comments || []).length
+        ? data.recent_comments
+              .map((c) => `<div class="comment"><strong>${esc(c.role)}</strong> &middot; SUS ${esc(c.sus_score)}<br>${esc(c.comment)}</div>`)
+              .join('')
+        : '<div class="comment">No written comments yet.</div>';
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SIGTS UAT Results</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; margin: 32px; }
+  h1 { font-size: 20px; margin: 0 0 2px; }
+  .subtitle { color: #52616b; font-size: 12px; margin: 0 0 18px; }
+  .meta { font-size: 11px; color: #52616b; margin-bottom: 18px; }
+  .headline { display: flex; align-items: baseline; gap: 12px; border: 1px solid #d9e2ec; border-radius: 8px; padding: 14px 18px; margin-bottom: 16px; }
+  .headline .score { font-size: 34px; font-weight: 700; color: #0b7285; }
+  .headline .of { font-size: 14px; color: #829ab1; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
+  .stat { border: 1px solid #d9e2ec; border-radius: 8px; padding: 10px; text-align: center; }
+  .stat .num { display: block; font-size: 18px; font-weight: 700; }
+  .stat .lbl { display: block; font-size: 10px; color: #627d98; margin-top: 2px; }
+  .section-title { font-size: 13px; font-weight: 700; margin: 18px 0 8px; }
+  .chip { display: inline-block; background: #e8f0fe; border-radius: 12px; padding: 2px 10px; font-size: 11px; margin: 0 4px 4px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th, td { border: 1px solid #d9e2ec; padding: 6px 8px; text-align: center; }
+  th { background: #f0f4f8; }
+  td.left, th.left { text-align: left; }
+  .comment { border: 1px solid #e4ebf1; border-radius: 6px; padding: 8px 10px; font-size: 11px; margin-bottom: 6px; }
+  .note { font-size: 10px; color: #627d98; margin-top: 16px; }
+  @media print { body { margin: 12mm; } .no-print { display: none; } }
+</style>
+</head>
+<body>
+  <h1>Sustainable Game Tourism System (SIGTS)</h1>
+  <p class="subtitle">User Acceptance Testing — System Usability Scale (SUS) results</p>
+  <p class="meta">Generated: ${esc(generatedAt)} &nbsp;|&nbsp; Respondents: ${esc(s.responses)} &nbsp;|&nbsp; ${esc(reliability)}</p>
+  <div class="headline">
+    <span class="score">${fmt(s.avg_sus)}</span><span class="of">/100 mean SUS</span>
+    <span style="margin-left:auto; font-size:12px;">Grade: <strong>${esc(s.grade)}</strong></span>
+  </div>
+  <div class="grid">
+    <div class="stat"><span class="num">${esc(s.responses)}</span><span class="lbl">Respondents</span></div>
+    <div class="stat"><span class="num">${fmt(s.sus_sd)}</span><span class="lbl">SUS std. dev.</span></div>
+    <div class="stat"><span class="num">${fmt(s.sus_min)}&ndash;${fmt(s.sus_max)}</span><span class="lbl">SUS range</span></div>
+    <div class="stat"><span class="num">${fmt(s.avg_task_completion, '%')}</span><span class="lbl">Task completion</span></div>
+  </div>
+  <div class="section-title">Respondents by role</div>
+  <div>${roleRows}</div>
+  <div class="section-title">Per-statement results (mean &amp; standard deviation)</div>
+  <table><thead><tr><th>#</th><th class="left">Statement</th><th>Mean</th><th>SD</th><th>n</th></tr></thead><tbody>${itemRows}</tbody></table>
+  <div class="section-title">Recent comments</div>
+  ${commentsHtml}
+  <p class="note">SUS benchmark: &ge; 68 is above average; &ge; 80.3 is excellent. Figures are computed server-side from individual responses.</p>
+</body>
+</html>`;
+}
+
+// Render the printable document into a hidden iframe and invoke the browser's print dialog,
+// where the IT manager chooses "Save as PDF" to download it. Using an iframe avoids pop-up
+// blockers and keeps the export entirely client-side and offline-capable.
+window.downloadUatResultsPdf = function () {
+    const data = window.__uatResultsForExport;
+    if (!data || !data.summary) {
+        showToast('Open UAT results first, then download.', 'warning');
+        return;
+    }
+    const docHtml = buildUatResultsPrintDoc(data);
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+    document.body.appendChild(iframe);
+
+    let removed = false;
+    const cleanup = () => {
+        if (removed) return;
+        removed = true;
+        setTimeout(() => iframe.remove(), 500);
+    };
+
+    let printed = false;
+    const triggerPrint = () => {
+        if (printed) return;
+        printed = true;
+        try {
+            const win = iframe.contentWindow;
+            win.focus();
+            win.addEventListener('afterprint', cleanup, { once: true });
+            win.print();
+            // Fallback cleanup in case afterprint never fires (some mobile browsers).
+            setTimeout(cleanup, 60000);
+        } catch (err) {
+            console.error('UAT PDF export failed:', err);
+            showToast('Could not open the PDF export. Please try again.', 'danger');
+            cleanup();
+        }
+    };
+
+    iframe.onload = () => setTimeout(triggerPrint, 250);
+    const idoc = iframe.contentWindow.document;
+    idoc.open();
+    idoc.write(docHtml);
+    idoc.close();
+    // If onload already fired (synchronous write), ensure print still runs.
+    if (idoc.readyState === 'complete') setTimeout(triggerPrint, 250);
 };
 
 window.submitTourCompletionFeedback = async function () {
@@ -9360,7 +9576,7 @@ function bindAIViewportHooksOnce() {
 }
 
 async function renderView(view, options = {}) {
-    const safeView = normalizeView(view);
+    const safeView = normalizeView(resolveItOpsAlias(view));
     const shouldUpdateHash = options.updateHash === true;
     const suppressAccessToast = options.suppressAccessToast === true;
 
@@ -9415,7 +9631,7 @@ async function renderView(view, options = {}) {
 
     document.body.classList.toggle('auth-page', PUBLIC_VIEWS.has(safeView));
     document.body.classList.toggle('ai-chat-view', safeView === 'ai_chat');
-    document.body.classList.toggle('pa-analytics-view', safeView === 'it_predictive_analytics');
+    document.body.classList.toggle('pa-analytics-view', safeView === 'it_dashboard' && itOpsActiveSection === 'analytics');
 
     const u = Auth.getCurrentUser() || {};
     const isGuide = u?.role === 'guide' || u?.userType === 'guide';
@@ -9498,7 +9714,13 @@ async function renderView(view, options = {}) {
     // 3) Post-render hooks (async; do not block switching).
     if (renderNonce !== __sigtsRenderNonce || window.currentView !== safeView) return;
 
-    if (safeView === 'it_dashboard') startAdminRealtimeUsersRefresh();
+    if (safeView === 'it_dashboard') {
+        if (itOpsActiveSection === 'analytics') {
+            requestAnimationFrame(() => refreshPaOperationsStatus());
+        } else {
+            startAdminRealtimeUsersRefresh();
+        }
+    }
     if (safeView === 'guide_dashboard') startGuideDashboardRefresh();
     if (safeView === 'it_tour_assignments') startAssignmentDashboardRefresh();
 
@@ -9537,9 +9759,6 @@ async function renderView(view, options = {}) {
     }
     if (safeView === 'dashboard') {
         requestAnimationFrame(() => initDashboardEditorialHero());
-    }
-    if (safeView === 'it_predictive_analytics') {
-        requestAnimationFrame(() => refreshPaOperationsStatus());
     }
     if (safeView === 'wildlife' || safeView === 'animals') {
         requestAnimationFrame(() => wireWildlifeCatalogSearch());

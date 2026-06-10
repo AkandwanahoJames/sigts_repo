@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "test": "jest --config jest.config.js",
     "init-db": "node scripts/initDb.js",
     "deploy-prep": "node scripts/deploy-prep.js",
     "supabase:url": "node scripts/supabase-url.js",

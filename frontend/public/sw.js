@@ -1,9 +1,9 @@
 // Service Worker for PWA - Offline-first caching
 // Following structured approach with event-driven architecture
 
-const CACHE_NAME = 'bwindi-v4';
-const STATIC_CACHE = 'bwindi-static-v4';
-const DYNAMIC_CACHE = 'bwindi-dynamic-v4';
+const CACHE_NAME = 'bwindi-v7';
+const STATIC_CACHE = 'bwindi-static-v7';
+const DYNAMIC_CACHE = 'bwindi-dynamic-v7';
 
 // Assets to cache on install
 const STATIC_ASSETS = [

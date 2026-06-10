@@ -8185,3 +8185,67 @@ body.sigts-park-locked .sigts-mobile-tab {
     gap: 8px;
     align-items: center;
 }
+
+/* ===================================================== */
+/* IT Operations unified tab: Overview / Analytics sub-nav */
+/* ===================================================== */
+.it-ops-subnav {
+    display: inline-flex;
+    gap: 4px;
+    padding: 4px;
+    margin: 0 0 18px;
+    background: var(--cream-200);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xs);
+}
+.it-ops-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 0;
+    background: transparent;
+    color: var(--text-500);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1;
+    padding: 10px 18px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+.it-ops-tab:hover {
+    color: var(--text-700);
+    background: rgba(255, 255, 255, 0.6);
+}
+.it-ops-tab.is-active {
+    color: var(--green-900);
+    background: var(--cream-50);
+    box-shadow: var(--shadow-xs);
+}
+.it-ops-tab:focus-visible {
+    outline: 2px solid var(--green-600);
+    outline-offset: 2px;
+}
+.it-ops-tab .icon-sm {
+    width: 16px;
+    height: 16px;
+}
+.it-ops-section {
+    animation: itOpsFade 0.2s ease;
+}
+@keyframes itOpsFade {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@media (max-width: 560px) {
+    .it-ops-subnav {
+        display: flex;
+        width: 100%;
+    }
+    .it-ops-tab {
+        flex: 1 1 0;
+        justify-content: center;
+        padding: 10px 8px;
+    }
+}

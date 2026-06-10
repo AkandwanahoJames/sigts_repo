@@ -23,6 +23,41 @@ const SUS_ITEMS = [
 // Minimum distinct testers before aggregated results are treated as decision-grade.
 const MIN_RELIABLE_SAMPLE = 5;
 
+// Self-healing schema guard. In serverless deployments the SQL migration may not have been
+// run against the target database; rather than crash every UAT request with
+// "relation uat_responses does not exist", we lazily ensure the table (and its indexes)
+// exist on first use. CREATE TABLE IF NOT EXISTS is idempotent, so this is safe to re-run.
+let uatTableReady = null;
+function ensureUatTable() {
+    if (!uatTableReady) {
+        uatTableReady = pool
+            .query(
+                `CREATE TABLE IF NOT EXISTS uat_responses (
+                    uat_response_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_id UUID UNIQUE REFERENCES users(user_id) ON DELETE CASCADE,
+                    role VARCHAR(40) NOT NULL DEFAULT 'tourist',
+                    sus_answers JSONB NOT NULL,
+                    sus_score NUMERIC(5,2) NOT NULL CHECK (sus_score >= 0 AND sus_score <= 100),
+                    task_results JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    task_completion_rate NUMERIC(5,2) CHECK (task_completion_rate >= 0 AND task_completion_rate <= 100),
+                    comment TEXT,
+                    is_anonymous BOOLEAN NOT NULL DEFAULT false,
+                    device VARCHAR(255),
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS idx_uat_responses_created ON uat_responses (created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_uat_responses_role ON uat_responses (role);`
+            )
+            .catch((err) => {
+                // Reset so a later request can retry provisioning instead of caching the failure.
+                uatTableReady = null;
+                throw err;
+            });
+    }
+    return uatTableReady;
+}
+
 function computeSusScore(answers) {
     // answers: array of 10 integers in [1,5]. Returns SUS score in [0,100].
     let total = 0;
@@ -67,6 +102,7 @@ router.get('/instrument', authenticateJWT, (req, res) => {
 // GET /api/uat/mine — whether the current tester has already submitted.
 router.get('/mine', authenticateJWT, async (req, res) => {
     try {
+        await ensureUatTable();
         const result = await pool.query(
             `SELECT uat_response_id, sus_score, task_completion_rate, is_anonymous, created_at, updated_at
              FROM uat_responses WHERE user_id = $1 LIMIT 1`,
@@ -123,6 +159,7 @@ router.post(
         const device = req.body.device ? String(req.body.device).slice(0, 255) : null;
 
         try {
+            await ensureUatTable();
             const result = await pool.query(
                 `INSERT INTO uat_responses (
                     user_id, role, sus_answers, sus_score, task_results, task_completion_rate,
@@ -169,6 +206,7 @@ router.post(
 // GET /api/uat/results — aggregated, decision-grade results (IT manager only).
 router.get('/results', authenticateJWT, authorize('it_manager'), async (req, res) => {
     try {
+        await ensureUatTable();
         const result = await pool.query(
             `SELECT role, sus_answers, sus_score, task_results, task_completion_rate,
                     comment, is_anonymous, created_at, updated_at

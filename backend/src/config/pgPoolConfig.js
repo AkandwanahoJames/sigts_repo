@@ -76,10 +76,16 @@ function getPgPoolConfig() {
     const isServerless = Boolean(process.env.VERCEL);
     const poolSizing = {
         max: Number.parseInt(process.env.DB_MAX_CONNECTIONS, 10) || (isServerless ? 1 : 20),
-        idleTimeoutMillis: Number.parseInt(process.env.DB_IDLE_TIMEOUT_MS, 10) || (isServerless ? 10000 : 30000),
+        // Keep the warm function's connection alive long enough to be reused across
+        // back-to-back invocations instead of paying a fresh TLS + auth handshake (~0.5s)
+        // on every request. Vercel keeps instances warm for several minutes.
+        idleTimeoutMillis: Number.parseInt(process.env.DB_IDLE_TIMEOUT_MS, 10) || (isServerless ? 30000 : 30000),
         connectionTimeoutMillis:
             Number.parseInt(process.env.DB_CONNECTION_TIMEOUT_MS, 10) || (isServerless ? 12000 : 2000),
-        maxUses: isServerless ? 1 : 7500,
+        // Reuse a connection for many queries before recycling it (recycling still guards
+        // against stale pooler connections). maxUses:1 previously forced a new connection
+        // per request, which was the main source of API latency on warm instances.
+        maxUses: Number.parseInt(process.env.DB_MAX_USES, 10) || (isServerless ? 200 : 7500),
     };
 
     const useSupabase = String(process.env.USE_SUPABASE || '').toLowerCase() === 'true';

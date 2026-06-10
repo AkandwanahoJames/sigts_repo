@@ -2354,8 +2354,8 @@ class AIRecommendationEngine {
             sightings: 'Sightings',
             saved: 'Saved',
             profile: 'Profile',
-            it_dashboard: 'IT Admin',
-            it_predictive_analytics: 'Predictive Analytics',
+            it_dashboard: 'IT Operations',
+            it_predictive_analytics: 'IT Operations',
             it_tour_assignments: 'Tour assignments',
             guide_dashboard: 'Guide dashboard',
             intranet: 'Staff intranet'

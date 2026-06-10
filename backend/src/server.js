@@ -62,6 +62,10 @@ const publicParkContentRoutes = require('./routes/publicParkContent');
 
 // Initialize Express app
 const app = express();
+// Behind Vercel (and any reverse proxy) the client IP arrives via X-Forwarded-For.
+// Trusting the first proxy hop lets express-rate-limit identify users correctly and
+// stops it from throwing ERR_ERL_UNEXPECTED_X_FORWARDED_FOR on every request.
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 8000;
 const HOST = process.env.HOST || '0.0.0.0';
 
@@ -84,20 +88,45 @@ app.use(helmet({
 }));
 
 // CORS configuration
-const allowedOrigins = process.env.CLIENT_URL ? process.env.CLIENT_URL.split(',').map((s) => s.trim()).filter(Boolean) : 
-    [
-        'http://localhost:3000',
-        'http://localhost:3001',
-        'http://localhost:5173',
-        'http://127.0.0.1:3000',
-        'http://127.0.0.1:5173',
-        'http://192.168.100.40:3000'
-    ];
+// Always allow local development hosts and the known hosted domains, then merge in any
+// origins supplied via CLIENT_URL. This way a Vercel domain/alias change can never silently
+// block sign-in again (see isOriginAllowed for the same-origin / *.vercel.app fallbacks).
+const DEFAULT_ALLOWED_ORIGINS = [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:5173',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:5173',
+    'http://192.168.100.40:3000',
+    'https://sigts.vercel.app',
+    'https://sigts-static.vercel.app'
+];
+const envAllowedOrigins = (process.env.CLIENT_URL || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+const allowedOrigins = Array.from(new Set([...envAllowedOrigins, ...DEFAULT_ALLOWED_ORIGINS]));
+
+function isOriginAllowed(origin) {
+    // No Origin header: same-origin navigations, curl, or server-to-server calls.
+    if (!origin) return true;
+    if (allowedOrigins.indexOf(origin) !== -1) return true;
+    // Accept any Vercel deployment of this app (production alias and preview URLs) so the
+    // frontend keeps working when it is served same-origin from a Vercel domain.
+    try {
+        const hostname = new URL(origin).hostname;
+        if (/(^|\.)vercel\.app$/i.test(hostname)) return true;
+    } catch (_) {
+        // Malformed Origin header falls through to the checks below.
+    }
+    // Outside production, be permissive to keep local/dev tooling friction-free.
+    if (process.env.NODE_ENV !== 'production') return true;
+    return false;
+}
 
 app.use(cors({
     origin: function (origin, callback) {
-        if (!origin) return callback(null, true);
-        if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+        if (isOriginAllowed(origin)) {
             callback(null, true);
         } else {
             callback(new Error('CORS policy: origin not allowed'));
