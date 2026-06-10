@@ -54,6 +54,7 @@ const syncRoutes = require('./routes/sync');
 const aiRoutes = require('./routes/ai');
 const intranetRoutes = require('./routes/intranet');
 const feedbackRoutes = require('./routes/feedback');
+const uatRoutes = require('./routes/uat');
 const geoRoutes = require('./routes/geo');
 const guideMessagesRoutes = require('./routes/guideMessages');
 const bookmarkRoutes = require('./routes/bookmarks');
@@ -360,6 +361,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/intranet', intranetRoutes);
 app.use('/api/feedback', feedbackRoutes);
+app.use('/api/uat', uatRoutes);
 
 // =====================================================
 // WEBSOCKET SETUP (Optional)

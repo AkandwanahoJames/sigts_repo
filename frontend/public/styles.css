@@ -8055,3 +8055,133 @@ body.sigts-park-locked .sigts-mobile-tab {
         display: none !important;
     }
 }
+
+/* ---- User Acceptance Testing (SUS survey + results) ---- */
+.uat-survey .uat-section-title,
+.uat-results .uat-section-title {
+    font-weight: 600;
+    margin: 16px 0 8px;
+    font-size: 0.95rem;
+    opacity: 0.85;
+}
+.uat-tasks {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.uat-task {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.92rem;
+    cursor: pointer;
+}
+.uat-item {
+    border: 1px solid rgba(120, 120, 120, 0.25);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin: 0 0 10px;
+}
+.uat-item legend {
+    font-size: 0.92rem;
+    font-weight: 500;
+    padding: 0 6px;
+}
+.uat-qno {
+    opacity: 0.6;
+    margin-right: 4px;
+}
+.uat-scale {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    margin-top: 6px;
+}
+.uat-scale-opt {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    flex: 1;
+}
+.uat-scale-ends {
+    display: flex;
+    justify-content: space-between;
+    opacity: 0.6;
+    margin-top: 2px;
+}
+.uat-headline {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+    padding: 12px 0;
+}
+.uat-headline-score {
+    display: flex;
+    align-items: baseline;
+}
+.uat-big {
+    font-size: 2.6rem;
+    font-weight: 700;
+    line-height: 1;
+}
+.uat-of {
+    opacity: 0.6;
+    margin-left: 4px;
+}
+.uat-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 10px;
+    margin: 10px 0;
+}
+.uat-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px;
+    border: 1px solid rgba(120, 120, 120, 0.2);
+    border-radius: 10px;
+}
+.uat-stat-num {
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+.uat-stat-label {
+    font-size: 0.78rem;
+    opacity: 0.7;
+    text-align: center;
+}
+.uat-roles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.uat-roles .chip {
+    background: rgba(120, 120, 120, 0.15);
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 0.82rem;
+}
+.uat-table-wrap {
+    overflow-x: auto;
+}
+.uat-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.86rem;
+}
+.uat-table th,
+.uat-table td {
+    border-bottom: 1px solid rgba(120, 120, 120, 0.2);
+    padding: 6px 8px;
+    text-align: center;
+}
+.section-header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}

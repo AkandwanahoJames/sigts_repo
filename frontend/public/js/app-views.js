@@ -4949,6 +4949,7 @@ async function renderProfileContent() {
             ${!isGuide ? '<button type="button" class="small-btn" onclick="submitTourCompletionFeedback()">Rate Last Tour</button><button type="button" class="small-btn" onclick="submitGuidePerformanceFeedback()">Rate Guide</button>' : ''}
             <button type="button" class="small-btn" onclick="submitBugReportPrompt()">Report Bug</button>
             <button type="button" class="small-btn" onclick="submitFeatureSuggestionPrompt()">Suggest Feature</button>
+            <button type="button" class="small-btn primary-btn" onclick="openUatSurvey()">Usability Survey (UAT)</button>
         </div>
         <div id="feedbackList" class="seasonal-list profile-feedback-list"><div class="seasonal-item">Loading your recent feedback...</div></div>
         </div></section>`
@@ -5560,7 +5561,7 @@ async function renderItFeedbackQueuePanel() {
                   })
                   .join('')
             : '<div class="seasonal-item">No visitor feedback in the last 30 days.</div>';
-    return `<div class="section-card" id="itFeedbackQueuePanel"><div class="section-header"><h3>${icon('message', 'icon-sm')} Visitor feedback queue</h3><button type="button" class="small-btn ghost-btn" onclick="refreshItFeedbackQueue()">Refresh</button></div><p class="animals-page-blurb">Respond to tourist ratings, NPS, and bug reports — stored in PostgreSQL via <code>/api/feedback/manager</code>.</p><div id="itFeedbackQueueMount" class="seasonal-list">${list}</div></div>`;
+    return `<div class="section-card" id="itFeedbackQueuePanel"><div class="section-header"><h3>${icon('message', 'icon-sm')} Visitor feedback queue</h3><div class="section-header-actions"><button type="button" class="small-btn" onclick="openUatResults()">UAT results</button><button type="button" class="small-btn ghost-btn" onclick="refreshItFeedbackQueue()">Refresh</button></div></div><p class="animals-page-blurb">Respond to tourist ratings, NPS, and bug reports — stored in PostgreSQL via <code>/api/feedback/manager</code>.</p><div id="itFeedbackQueueMount" class="seasonal-list">${list}</div></div>`;
 }
 
 async function renderItContentPendingPanel() {
@@ -7641,6 +7642,171 @@ window.submitUserFeedback = async function () {
     const commentNode = document.getElementById('feedbackComment');
     if (commentNode) commentNode.value = '';
     await loadRecentFeedback();
+};
+
+// ---- User Acceptance Testing (System Usability Scale) ----
+const UAT_SUS_FALLBACK = [
+    'I think that I would like to use this system frequently.',
+    'I found the system unnecessarily complex.',
+    'I thought the system was easy to use.',
+    'I think that I would need the support of a technical person to be able to use this system.',
+    'I found the various functions in this system were well integrated.',
+    'I thought there was too much inconsistency in this system.',
+    'I would imagine that most people would learn to use this system very quickly.',
+    'I found the system very cumbersome to use.',
+    'I felt very confident using the system.',
+    'I needed to learn a lot of things before I could get going with this system.'
+];
+
+const UAT_TASKS = [
+    { id: 'login', label: 'Sign in or create an account' },
+    { id: 'browse_wildlife', label: 'Browse wildlife / animal profiles' },
+    { id: 'map', label: 'View the park map and my location' },
+    { id: 'tour_info', label: 'Find tour or tour-guide information' },
+    { id: 'feedback', label: 'Submit feedback or a rating' }
+];
+
+window.openUatSurvey = async function () {
+    const instrument = await API.getUatInstrument().catch(() => null);
+    const items = Array.isArray(instrument?.items) && instrument.items.length === 10
+        ? instrument.items
+        : UAT_SUS_FALLBACK;
+    const mine = await API.getMyUatResponse().catch(() => null);
+
+    const scaleEnds = '<div class="uat-scale-ends"><small>Strongly disagree</small><small>Strongly agree</small></div>';
+    const itemsHtml = items
+        .map((label, i) => {
+            const opts = [1, 2, 3, 4, 5]
+                .map((v) => `<label class="uat-scale-opt"><input type="radio" name="uat_q${i}" value="${v}"><span>${v}</span></label>`)
+                .join('');
+            return `<fieldset class="uat-item"><legend><span class="uat-qno">${i + 1}.</span> ${escapeHtml(label)}</legend><div class="uat-scale">${opts}</div>${scaleEnds}</fieldset>`;
+        })
+        .join('');
+
+    const tasksHtml = UAT_TASKS
+        .map((t) => `<label class="uat-task"><input type="checkbox" id="uat_task_${t.id}"><span>${escapeHtml(t.label)}</span></label>`)
+        .join('');
+
+    const priorNote = mine
+        ? `<p class="ui-modal-muted">You submitted a response on ${escapeHtml(new Date(mine.updated_at || mine.created_at).toLocaleDateString())} (score ${escapeHtml(String(mine.sus_score))}/100). Submitting again will update it.</p>`
+        : '';
+
+    const bodyHtml = `
+        <div class="uat-survey">
+            <p class="ui-modal-muted">This standardized usability survey (System Usability Scale) helps us measure how easy SIGTS is to use. Rate each statement from 1 (strongly disagree) to 5 (strongly agree). It takes about 2 minutes.</p>
+            ${priorNote}
+            <div class="uat-section-title">Before you rate, which tasks did you complete?</div>
+            <div class="uat-tasks">${tasksHtml}</div>
+            <div class="uat-section-title">Usability statements</div>
+            ${itemsHtml}
+            <label class="auth-field"><span class="auth-field-label">Optional comment</span><textarea id="uatComment" class="auth-input profile-textarea" placeholder="Anything that was confusing or that you really liked..."></textarea></label>
+            <label class="uat-task"><input type="checkbox" id="uatAnon"><span>Submit anonymously (your identity is hidden from results)</span></label>
+        </div>`;
+
+    const footerHtml = `<button type="button" class="small-btn ghost-btn" onclick="document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();">Cancel</button><button type="button" class="small-btn primary-btn" onclick="submitUatSurvey()">Submit survey</button>`;
+
+    showRichContentModal({
+        title: 'Usability survey (UAT)',
+        subtitle: 'System Usability Scale',
+        bodyHtml,
+        footerHtml
+    });
+};
+
+window.submitUatSurvey = async function () {
+    const answers = [];
+    for (let i = 0; i < 10; i += 1) {
+        const sel = document.querySelector(`input[name="uat_q${i}"]:checked`);
+        if (!sel) {
+            showToast(`Please answer statement ${i + 1} before submitting.`, 'warning');
+            return;
+        }
+        answers.push(Number(sel.value));
+    }
+    const taskResults = UAT_TASKS.map((t) => ({
+        id: t.id,
+        label: t.label,
+        completed: Boolean(document.getElementById(`uat_task_${t.id}`)?.checked)
+    }));
+    const comment = (document.getElementById('uatComment')?.value || '').trim();
+    const isAnonymous = Boolean(document.getElementById('uatAnon')?.checked);
+    const device = String(navigator.userAgent || '').slice(0, 200);
+
+    const res = await API.submitUatResponse({
+        sus_answers: answers,
+        task_results: taskResults,
+        comment,
+        is_anonymous: isAnonymous,
+        device
+    });
+
+    if (res?.success) {
+        showToast(`Thank you — your usability score: ${res.sus_score}/100 (${res.grade}).`, 'success');
+        document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();
+    } else if (!navigator.onLine) {
+        showToast('You appear offline — please submit the usability survey when connectivity returns.', 'warning');
+    } else {
+        showToast(res?.error || 'Could not submit the survey. Please try again.', 'danger');
+    }
+};
+
+window.openUatResults = async function () {
+    if (typeof requireITManagerAccess === 'function' && !requireITManagerAccess('UAT results')) return;
+    const data = await API.getUatResults();
+    if (!data || !data.summary) {
+        showToast('Could not load UAT results.', 'danger');
+        return;
+    }
+    const s = data.summary;
+    const fmt = (v, suffix = '') => (v == null ? '—' : `${v}${suffix}`);
+    const reliabilityBadge = s.reliable
+        ? `<span class="status-badge success">Reliable sample (n=${s.responses})</span>`
+        : `<span class="status-badge warning">Provisional — needs ≥ ${s.min_reliable_sample} testers (n=${s.responses})</span>`;
+
+    const itemRows = (data.per_item || [])
+        .map((it) => `<tr><td>${it.index}</td><td style="text-align:left">${escapeHtml(it.label)}</td><td>${fmt(it.mean)}</td><td>${fmt(it.sd)}</td><td>${it.responses}</td></tr>`)
+        .join('');
+
+    const roleRows = Object.entries(s.role_breakdown || {})
+        .map(([role, count]) => `<span class="chip">${escapeHtml(role)}: ${count}</span>`)
+        .join(' ');
+
+    const commentsHtml = (data.recent_comments || []).length
+        ? data.recent_comments
+              .map((c) => `<div class="seasonal-item"><strong>${escapeHtml(c.role)}</strong> · SUS ${escapeHtml(String(c.sus_score))}<br>${escapeHtml(c.comment)}</div>`)
+              .join('')
+        : '<div class="seasonal-item">No written comments yet.</div>';
+
+    const bodyHtml = `
+        <div class="uat-results">
+            <div class="uat-headline">
+                <div class="uat-headline-score"><span class="uat-big">${fmt(s.avg_sus)}</span><span class="uat-of">/100</span></div>
+                <div class="uat-headline-meta">
+                    <div><strong>Mean SUS score</strong> — Grade: ${escapeHtml(s.grade)}</div>
+                    <div>${reliabilityBadge}</div>
+                </div>
+            </div>
+            <div class="uat-stat-grid">
+                <div class="uat-stat"><span class="uat-stat-num">${s.responses}</span><span class="uat-stat-label">Respondents</span></div>
+                <div class="uat-stat"><span class="uat-stat-num">${fmt(s.sus_sd)}</span><span class="uat-stat-label">SUS std. dev.</span></div>
+                <div class="uat-stat"><span class="uat-stat-num">${fmt(s.sus_min)}–${fmt(s.sus_max)}</span><span class="uat-stat-label">SUS range</span></div>
+                <div class="uat-stat"><span class="uat-stat-num">${fmt(s.avg_task_completion, '%')}</span><span class="uat-stat-label">Task completion</span></div>
+            </div>
+            <div class="uat-section-title">Respondents by role</div>
+            <div class="uat-roles">${roleRows || '<span class="chip">none</span>'}</div>
+            <div class="uat-section-title">Per-statement results (mean &amp; standard deviation)</div>
+            <div class="uat-table-wrap"><table class="uat-table"><thead><tr><th>#</th><th style="text-align:left">Statement</th><th>Mean</th><th>SD</th><th>n</th></tr></thead><tbody>${itemRows}</tbody></table></div>
+            <div class="uat-section-title">Recent comments</div>
+            <div class="seasonal-list">${commentsHtml}</div>
+            <p class="ui-modal-muted">SUS benchmark: ≥ 68 is above average; ≥ 80.3 is excellent. Reported figures are computed server-side from individual responses.</p>
+        </div>`;
+
+    showRichContentModal({
+        title: 'UAT results — System Usability Scale',
+        subtitle: 'Decision-grade usability evidence',
+        bodyHtml,
+        footerHtml: `<button type="button" class="small-btn ghost-btn" onclick="document.querySelector('.ui-modal-overlay-rich .ui-modal-close')?.click();">Close</button>`
+    });
 };
 
 window.submitTourCompletionFeedback = async function () {

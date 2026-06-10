@@ -1462,6 +1462,40 @@ class APIService {
         return result?.success ? result.feedback : null;
     }
 
+    // ---- User Acceptance Testing (SUS instrument) ----
+    async getUatInstrument() {
+        const result = await this.request('/uat/instrument');
+        if (result?.success && Array.isArray(result.items)) return result;
+        return null;
+    }
+
+    async getMyUatResponse() {
+        const result = await this.request('/uat/mine');
+        return result?.success ? (result.response || null) : null;
+    }
+
+    async submitUatResponse(payload) {
+        const result = await this.request('/uat/responses', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        if (result?.success) {
+            return { success: true, sus_score: result.sus_score, grade: result.grade, response: result.response };
+        }
+        const msg =
+            (Array.isArray(result?.errors) && result.errors.length
+                ? result.errors.map((e) => e.msg || e.message || JSON.stringify(e)).join(' ')
+                : null) ||
+            result?.error ||
+            (result?.status ? `Request failed (${result.status})` : 'Could not submit UAT response');
+        return { success: false, error: msg, errors: result?.errors, status: result?.status };
+    }
+
+    async getUatResults() {
+        const result = await this.request('/uat/results');
+        return result?.success ? result : null;
+    }
+
     // User profile (GET /api/users/profile)
     async fetchUserProfile() {
         const result = await this.request('/users/profile');
