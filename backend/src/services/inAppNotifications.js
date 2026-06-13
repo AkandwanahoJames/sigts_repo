@@ -65,8 +65,110 @@ async function notifyProximityAlert(userId, locationName, distanceMeters) {
     });
 }
 
+async function listItStaffUserIds() {
+    try {
+        const result = await pool.query(
+            `SELECT DISTINCT u.user_id
+             FROM users u
+             LEFT JOIN it_managers im ON im.user_id = u.user_id
+             WHERE u.is_active = true
+               AND (u.user_type IN ('it_manager', 'admin') OR im.user_id IS NOT NULL)`
+        );
+        return result.rows.map((r) => r.user_id).filter(Boolean);
+    } catch (err) {
+        logger.warn('listItStaffUserIds failed:', err.message);
+        return [];
+    }
+}
+
+function formatClockTime(isoOrDate) {
+    if (!isoOrDate) return 'now';
+    try {
+        return new Date(isoOrDate).toLocaleString('en-UG', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+    } catch (_) {
+        return 'now';
+    }
+}
+
+/**
+ * Guide clock-in: confirm to the guide and alert IT operations staff (in-app bell).
+ */
+async function notifyGuideShiftClockIn({ guideUserId, guideName, shiftId, actualStart }) {
+    if (!guideUserId) return { guide: false, it_staff: 0 };
+
+    const at = formatClockTime(actualStart);
+    const name = guideName || 'A guide';
+
+    const guideNote = await createInAppNotification(guideUserId, {
+        type: 'system',
+        title: 'You are clocked in',
+        message: `Your park shift is active as of ${at}. You are visible to IT operations as on duty.`,
+        data: { link_view: 'guide_dashboard', shift_id: shiftId, event: 'guide_clock_in' }
+    });
+
+    const itUserIds = await listItStaffUserIds();
+    let itCount = 0;
+    for (const itUserId of itUserIds) {
+        if (itUserId === guideUserId) continue;
+        const sent = await createInAppNotification(itUserId, {
+            type: 'system',
+            title: 'Guide clocked in',
+            message: `${name} clocked in for today's shift at ${at}.`,
+            data: {
+                link_view: 'it_dashboard',
+                shift_id: shiftId,
+                guide_user_id: guideUserId,
+                event: 'guide_clock_in'
+            }
+        });
+        if (sent) itCount += 1;
+    }
+
+    return { guide: Boolean(guideNote), it_staff: itCount };
+}
+
+async function notifyGuideShiftClockOut({ guideUserId, guideName, shiftId, actualEnd, workedHours }) {
+    if (!guideUserId) return false;
+
+    const at = formatClockTime(actualEnd);
+    const hours = Number.isFinite(Number(workedHours)) ? Number(workedHours).toFixed(2) : null;
+    const note = await createInAppNotification(guideUserId, {
+        type: 'system',
+        title: 'Shift ended',
+        message: hours
+            ? `You clocked out at ${at}. Time on duty: ${hours} h.`
+            : `You clocked out at ${at}.`,
+        data: { link_view: 'guide_dashboard', shift_id: shiftId, event: 'guide_clock_out' }
+    });
+
+    const itUserIds = await listItStaffUserIds();
+    for (const itUserId of itUserIds) {
+        if (itUserId === guideUserId) continue;
+        await createInAppNotification(itUserId, {
+            type: 'system',
+            title: 'Guide clocked out',
+            message: `${guideName || 'A guide'} clocked out at ${at}${hours ? ` (${hours} h on duty)` : ''}.`,
+            data: {
+                link_view: 'it_dashboard',
+                shift_id: shiftId,
+                guide_user_id: guideUserId,
+                event: 'guide_clock_out'
+            }
+        });
+    }
+
+    return Boolean(note);
+}
+
 module.exports = {
     createInAppNotification,
     notifyFeedbackResponse,
-    notifyProximityAlert
+    notifyProximityAlert,
+    notifyGuideShiftClockIn,
+    notifyGuideShiftClockOut,
+    listItStaffUserIds
 };

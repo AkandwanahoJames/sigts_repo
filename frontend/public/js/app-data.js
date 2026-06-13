@@ -1351,7 +1351,15 @@ class APIService {
 
     async getAdminSchemaStatus() {
         const result = await this.request('/admin/schema-status');
-        return result?.status || {};
+        if (!result || typeof result !== 'object') return { status: {} };
+        return result;
+    }
+
+    async runDatabaseAnalyze() {
+        return this.request('/admin/database/analyze', {
+            method: 'POST',
+            body: JSON.stringify({})
+        });
     }
 
     /** Self-service: sets `is_active` false and sends activity email when configured (POST /api/auth/deactivate). */

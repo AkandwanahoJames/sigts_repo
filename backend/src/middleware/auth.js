@@ -125,9 +125,12 @@ async function authenticateJWT(req, res, next) {
         if (SESSION_IDLE_MINUTES > 0) {
             const row = result.rows[0];
             const lastActivity = row.last_location_time || row.last_login || row.created_at;
-            if (lastActivity) {
+            const tokenIssuedMs = decoded.iat ? decoded.iat * 1000 : 0;
+            const lastActivityMs = lastActivity ? new Date(lastActivity).getTime() : 0;
+            const effectiveActivityMs = Math.max(lastActivityMs, tokenIssuedMs);
+            if (effectiveActivityMs > 0) {
                 const idleMs = SESSION_IDLE_MINUTES * 60 * 1000;
-                if (Date.now() - new Date(lastActivity).getTime() > idleMs) {
+                if (Date.now() - effectiveActivityMs > idleMs) {
                     return res.status(401).json({
                         success: false,
                         error: 'Session expired',

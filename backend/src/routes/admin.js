@@ -18,6 +18,15 @@ const path = require('path');
 const fs = require('fs');
 const execFileAsync = promisify(execFile);
 const { getEmailProvider, isEmailConfigured } = require('../services/emailService');
+const {
+    requireItCapability,
+    recordItManagerAction,
+    getDatabaseMeta,
+    getMigrationStatus,
+    getSchemaTableStatus,
+    runAnalyzeOnKeyTables,
+    KEY_TABLES
+} = require('../utils/itManagerOps');
 
 // IT operations desk: IT managers and system admins (user_type admin)
 router.use(authenticateJWT, authorize('it_manager', 'admin'));
@@ -353,7 +362,7 @@ router.get('/active-users', [
 // POST /api/admin/users
 // Create new user (admin)
 // =====================================================
-router.post('/users', [
+router.post('/users', requireItCapability('create_users'), [
     body('username').isLength({ min: 3 }),
     body('email').isEmail(),
     body('password').isLength({ min: 6 }),
@@ -384,34 +393,47 @@ router.post('/users', [
         }
 
         const hashedPassword = await hashPassword(password);
+        const client = await pool.connect();
 
-        const result = await pool.query(
-            `INSERT INTO users (user_id, username, password_hash, email, first_name, last_name, phone, user_type)
-             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)
-             RETURNING user_id, username, email, user_type`,
-            [usernameNorm, hashedPassword, emailNorm, first_name, last_name, phone, user_type]
-        );
+        let newUser;
+        try {
+            await client.query('BEGIN');
 
-        const newUser = result.rows[0];
+            const result = await client.query(
+                `INSERT INTO users (user_id, username, password_hash, email, first_name, last_name, phone, user_type)
+                 VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)
+                 RETURNING user_id, username, email, user_type`,
+                [usernameNorm, hashedPassword, emailNorm, first_name, last_name, phone, user_type]
+            );
 
-        if (newUser.user_type === 'tourist') {
-            await pool.query(
-                `INSERT INTO tourists (user_id, interests)
-                 VALUES ($1, $2)`,
-                [newUser.user_id, '[]']
-            );
-        } else if (newUser.user_type === 'guide') {
-            await pool.query(
-                `INSERT INTO tour_guides (user_id, license_number, specialization, languages)
-                 VALUES ($1, $2, $3, $4)`,
-                [newUser.user_id, `GUIDE-${Date.now()}`, '[]', '[]']
-            );
-        } else if (newUser.user_type === 'it_manager') {
-            await pool.query(
-                `INSERT INTO it_managers (user_id, employee_id, access_level)
-                 VALUES ($1, $2, $3)`,
-                [newUser.user_id, `ITM-${Date.now()}`, 'admin']
-            );
+            newUser = result.rows[0];
+
+            if (newUser.user_type === 'tourist') {
+                await client.query(
+                    `INSERT INTO tourists (user_id, interests)
+                     VALUES ($1, $2)`,
+                    [newUser.user_id, '[]']
+                );
+            } else if (newUser.user_type === 'guide') {
+                await client.query(
+                    `INSERT INTO tour_guides (user_id, license_number, specialization, languages)
+                     VALUES ($1, $2, $3, $4)`,
+                    [newUser.user_id, `GUIDE-${Date.now()}`, '[]', '[]']
+                );
+            } else if (newUser.user_type === 'it_manager') {
+                await client.query(
+                    `INSERT INTO it_managers (user_id, employee_id, access_level)
+                     VALUES ($1, $2, $3)`,
+                    [newUser.user_id, `ITM-${Date.now()}`, 'admin']
+                );
+            }
+
+            await client.query('COMMIT');
+        } catch (txError) {
+            await client.query('ROLLBACK');
+            throw txError;
+        } finally {
+            client.release();
         }
 
         await audit(req, {
@@ -419,6 +441,10 @@ router.post('/users', [
             table_name: 'users',
             record_id: newUser.user_id,
             new_value: newUser
+        });
+        await recordItManagerAction(req.user.user_id, 'user.create', {
+            record_id: newUser.user_id,
+            user_type: newUser.user_type
         });
 
         res.status(201).json({
@@ -546,7 +572,7 @@ router.post('/content/:id/approve', async (req, res) => {
 // POST /api/admin/backup/create
 // Create database backup
 // =====================================================
-router.post('/backup/create', async (req, res) => {
+router.post('/backup/create', requireItCapability('view_reports'), async (req, res) => {
     try {
         const backupScript = path.join(__dirname, '../../scripts/backup.js');
         const startedAt = Date.now();
@@ -577,6 +603,21 @@ router.post('/backup/create', async (req, res) => {
             ]
         );
 
+        await audit(req, {
+            action: 'database.backup_create',
+            table_name: 'park_performance_reports',
+            record_id: backupId,
+            new_value: {
+                backupId,
+                backup_path: backupPath,
+                size_bytes: fileStats ? Number(fileStats.size) : null
+            }
+        });
+        await recordItManagerAction(req.user.user_id, 'database.backup_create', {
+            backup_id: backupId,
+            size_bytes: fileStats ? Number(fileStats.size) : null
+        });
+
         res.json({
             success: true,
             backup_id: backupId,
@@ -592,7 +633,7 @@ router.post('/backup/create', async (req, res) => {
 });
 
 // GET /api/admin/backup/list — recent backup artefacts recorded in ops reports table
-router.get('/backup/list', async (req, res) => {
+router.get('/backup/list', requireItCapability('view_reports'), async (req, res) => {
     try {
         const r = await pool.query(
             `SELECT report_id, report_type, period_start, period_end, metrics, generated_at
@@ -613,7 +654,7 @@ router.get('/backup/list', async (req, res) => {
 });
 
 // POST /api/admin/animals/bulk-json — CSV-style rows as JSON array (§3.1.1.10 bulk upload)
-router.post('/animals/bulk-json', [
+router.post('/animals/bulk-json', requireItCapability('modify_content'), [
     body('animals').isArray({ min: 1 })
 ], async (req, res) => {
     const errors = validationResult(req);
@@ -622,17 +663,19 @@ router.post('/animals/bulk-json', [
     const rows = req.body.animals;
     let inserted = 0;
     let updated = 0;
+    const client = await pool.connect();
     try {
+        await client.query('BEGIN');
         for (const raw of rows) {
             const name = String(raw.name || '').trim();
             const sci = String(raw.scientific_name || '').trim();
             if (!name || !sci) continue;
-            const existing = await pool.query(
+            const existing = await client.query(
                 `SELECT animal_id FROM animals WHERE LOWER(name) = LOWER($1) LIMIT 1`,
                 [name]
             );
             if (existing.rows[0]?.animal_id) {
-                await pool.query(
+                await client.query(
                     `UPDATE animals SET
                         scientific_name = COALESCE(NULLIF($2::text,''), scientific_name),
                         description = COALESCE($3::text, description),
@@ -650,7 +693,7 @@ router.post('/animals/bulk-json', [
                 );
                 updated += 1;
             } else {
-                await pool.query(
+                await client.query(
                     `INSERT INTO animals (
                         name, scientific_name, description, conservation_status,
                         habitat, image_urls
@@ -667,16 +710,25 @@ router.post('/animals/bulk-json', [
                 inserted += 1;
             }
         }
+        await client.query('COMMIT');
         await audit(req, {
             action: 'animals.bulk_import',
             table_name: 'animals',
             record_id: null,
             new_value: { inserted, updated, attempted: rows.length }
         });
+        await recordItManagerAction(req.user.user_id, 'animals.bulk_import', {
+            inserted,
+            updated,
+            attempted: rows.length
+        });
         res.json({ success: true, inserted, updated, attempted: rows.length });
     } catch (error) {
+        await client.query('ROLLBACK');
         console.error('Bulk animals import:', error);
         res.status(500).json({ error: 'Bulk import failed' });
+    } finally {
+        client.release();
     }
 });
 
@@ -770,7 +822,7 @@ router.put('/alert-rules/:id', async (req, res) => {
 // PUT /api/admin/users/:id/deactivate
 // Deactivate a user account (IT manager / admin)
 // =====================================================
-router.put('/users/:id/deactivate', async (req, res) => {
+router.put('/users/:id/deactivate', requireItCapability('delete_users'), async (req, res) => {
     const { id } = req.params;
 
     try {
@@ -799,6 +851,7 @@ router.put('/users/:id/deactivate', async (req, res) => {
             old_value: before.rows[0] || null,
             new_value: { ...(before.rows[0] || {}), is_active: false }
         });
+        await recordItManagerAction(req.user.user_id, 'user.deactivate', { record_id: id });
 
         res.json({ success: true, message: 'User deactivated successfully' });
 
@@ -812,7 +865,7 @@ router.put('/users/:id/deactivate', async (req, res) => {
 // GET /api/admin/audit-logs
 // Recent audit log entries for IT manager review.
 // =====================================================
-router.get('/audit-logs', [
+router.get('/audit-logs', requireItCapability('view_reports'), [
     query('limit').optional().isInt({ min: 1, max: 500 })
 ], async (req, res) => {
     const errors = validationResult(req);
@@ -822,7 +875,7 @@ router.get('/audit-logs', [
     try {
         const result = await pool.query(
             `SELECT
-                a.id,
+                a.auditlog_id AS id,
                 a.action,
                 a.table_name,
                 a.record_id,
@@ -850,9 +903,12 @@ router.get('/audit-logs', [
 // GET /api/admin/system-health
 // Light operational health snapshot.
 // =====================================================
-router.get('/system-health', async (req, res) => {
+router.get('/system-health', requireItCapability('view_reports'), async (req, res) => {
     try {
-        const dbResult = await pool.query('SELECT NOW() AS now');
+        const [dbResult, dbMeta] = await Promise.all([
+            pool.query('SELECT NOW() AS now'),
+            getDatabaseMeta()
+        ]);
         const syncQueue = await pool.query(
             `SELECT
                 COUNT(*) FILTER (WHERE status = 'pending') AS pending,
@@ -887,7 +943,8 @@ router.get('/system-health', async (req, res) => {
                 total_sync_items: Number(syncQueue.rows[0]?.total || 0),
                 location_updates_last_15m: Number(geofencePulse.rows[0]?.updates_last_15m || 0),
                 feedback_last_24h: Number(feedbackPulse.rows[0]?.feedback_last_24h || 0)
-            }
+            },
+            database_meta: dbMeta
         });
     } catch (error) {
         console.error('Get system health error:', error);
@@ -897,54 +954,58 @@ router.get('/system-health', async (req, res) => {
 
 // =====================================================
 // GET /api/admin/schema-status
-// Reports table row counts for key operational tables.
+// Reports table row counts, migration status, and DB metadata for IT ops.
 // =====================================================
-router.get('/schema-status', async (req, res) => {
-    const tables = [
-        'users',
-        'tourists',
-        'tour_guides',
-        'it_managers',
-        'parks',
-        'locations',
-        'animals',
-        'sightings',
-        'cultural_narratives',
-        'tour_routes',
-        'tour_sessions',
-        'safety_tips',
-        'faqs',
-        'feedback',
-        'sync_queue',
-        'audit_logs',
-        'park_safe_zones',
-        'safe_zone_violations'
-    ];
-
+router.get('/schema-status', requireItCapability('view_reports'), async (req, res) => {
     try {
-        const status = {};
-        for (const table of tables) {
-            const exists = await pool.query(
-                `SELECT 1
-                 FROM information_schema.tables
-                 WHERE table_schema = 'public' AND table_name = $1
-                 LIMIT 1`,
-                [table]
-            );
-            if (!exists.rows.length) {
-                status[table] = { exists: false, count: 0, status: 'missing' };
-                continue;
-            }
-            const countResult = await pool.query(`SELECT COUNT(*)::int AS count FROM ${table}`);
-            status[table] = {
-                exists: true,
-                count: Number(countResult.rows[0]?.count || 0),
-                status: 'active'
-            };
-        }
-        res.json({ status });
+        const [status, database, migrations] = await Promise.all([
+            getSchemaTableStatus(KEY_TABLES),
+            getDatabaseMeta(),
+            getMigrationStatus()
+        ]);
+        res.json({
+            generated_at: new Date().toISOString(),
+            status,
+            database,
+            migrations
+        });
     } catch (error) {
         console.error('Get schema status error:', error);
+        res.status(500).json({ error: 'Failed to load schema status' });
+    }
+});
+
+// POST /api/admin/database/analyze — refresh PostgreSQL planner statistics (safe maintenance)
+router.post('/database/analyze', requireItCapability('view_reports'), async (req, res) => {
+    try {
+        const result = await runAnalyzeOnKeyTables(KEY_TABLES);
+        await audit(req, {
+            action: 'database.analyze',
+            table_name: null,
+            record_id: null,
+            new_value: result
+        });
+        await recordItManagerAction(req.user.user_id, 'database.analyze', {
+            analyzed_count: result.analyzed.length
+        });
+        res.json({
+            success: true,
+            message: 'ANALYZE completed on operational tables.',
+            ...result
+        });
+    } catch (error) {
+        console.error('Database analyze error:', error);
+        res.status(500).json({ error: 'Failed to run ANALYZE' });
+    }
+});
+
+// Legacy alias kept for older clients expecting flat status-only payload
+router.get('/schema-status/legacy', requireItCapability('view_reports'), async (req, res) => {
+    try {
+        const status = await getSchemaTableStatus(KEY_TABLES);
+        res.json({ status });
+    } catch (error) {
+        console.error('Get legacy schema status error:', error);
         res.status(500).json({ error: 'Failed to load schema status' });
     }
 });

@@ -5,6 +5,15 @@ const { body, query, validationResult } = require('express-validator');
 const { pool } = require('../config/database');
 const { authenticateJWT, authorize } = require('../middleware/auth');
 const { redactMedicalNotes } = require('../services/medicalNotesAccess');
+const {
+    notifyGuideShiftClockIn,
+    notifyGuideShiftClockOut
+} = require('../services/inAppNotifications');
+const { isValidUUID } = require('../utils/validators');
+
+function validateDbUuid(value) {
+    return isValidUUID(String(value || ''));
+}
 
 async function resolveGuideProfileId(userId) {
     const result = await pool.query(
@@ -59,7 +68,7 @@ async function getTourForGuideOrThrow(tourSessionId, guideUserId) {
 }
 
 async function defaultParkId() {
-    const r = await pool.query(`SELECT park_id FROM parks ORDER BY created_at ASC NULLS LAST LIMIT 1`);
+    const r = await pool.query(`SELECT park_id FROM parks ORDER BY name ASC LIMIT 1`);
     return r.rows[0]?.park_id || null;
 }
 
@@ -119,7 +128,7 @@ router.get('/schedule', authenticateJWT, authorize('guide'), async (req, res) =>
 // =====================================================
 // GET /api/tours/routes (Guide + IT manager)
 // =====================================================
-router.get('/routes', authenticateJWT, authorize('guide', 'it_manager'), async (req, res) => {
+router.get('/routes', authenticateJWT, authorize('guide', 'it_manager', 'admin'), async (req, res) => {
     try {
         const rows = await pool.query(
             `SELECT route_id, name, description, distance_km, duration_hours, difficulty
@@ -136,7 +145,7 @@ router.get('/routes', authenticateJWT, authorize('guide', 'it_manager'), async (
 // =====================================================
 // GET /api/tours/guides (IT manager)
 // =====================================================
-router.get('/guides', authenticateJWT, authorize('it_manager'), async (req, res) => {
+router.get('/guides', authenticateJWT, authorize('it_manager', 'admin'), async (req, res) => {
     try {
         const rows = await pool.query(
             `SELECT tg.tourguide_id, tg.user_id, tg.license_number, tg.certification_level,
@@ -158,14 +167,14 @@ router.get('/guides', authenticateJWT, authorize('it_manager'), async (req, res)
 // POST /api/tours/assignments (IT manager)
 // Create one tour assignment for a guide
 // =====================================================
-router.post('/assignments', authenticateJWT, authorize('it_manager'), [
-    body('guide_user_id').isUUID(),
-    body('route_id').isUUID(),
+router.post('/assignments', authenticateJWT, authorize('it_manager', 'admin'), [
+    body('guide_user_id').custom((v) => validateDbUuid(v)).withMessage('Invalid guide_user_id'),
+    body('route_id').custom((v) => validateDbUuid(v)).withMessage('Invalid route_id'),
     body('scheduled_start').isISO8601(),
-    body('group_size').optional().isInt({ min: 1, max: 200 }),
-    body('vehicle_used').optional().isString(),
-    body('special_requests').optional().isString(),
-    body('park_id').optional().isUUID()
+    body('group_size').optional({ nullable: true }).isInt({ min: 1, max: 200 }).toInt(),
+    body('vehicle_used').optional({ nullable: true }).isString(),
+    body('special_requests').optional({ nullable: true }).isString(),
+    body('park_id').optional({ nullable: true }).custom((v) => v == null || v === '' || validateDbUuid(v)).withMessage('Invalid park_id')
 ], async (req, res) => {
     try {
         if (!(await hasTourSchedulingTables())) {
@@ -208,7 +217,13 @@ router.post('/assignments', authenticateJWT, authorize('it_manager'), [
         return res.status(201).json({ success: true, assignment: ins.rows[0] });
     } catch (error) {
         console.error('create assignment', error);
-        return res.status(500).json({ error: 'Failed to create assignment' });
+        if (error.code === '23503') {
+            return res.status(400).json({ error: 'Invalid guide, route, or park reference for this assignment.' });
+        }
+        return res.status(500).json({
+            error: 'Failed to create assignment',
+            detail: process.env.NODE_ENV === 'production' ? undefined : error.message
+        });
     }
 });
 
@@ -216,16 +231,16 @@ router.post('/assignments', authenticateJWT, authorize('it_manager'), [
 // POST /api/tours/assignments/weekly (IT manager)
 // Bulk weekly assignment for one guide
 // =====================================================
-router.post('/assignments/weekly', authenticateJWT, authorize('it_manager'), [
-    body('guide_user_id').isUUID(),
-    body('route_id').isUUID(),
+router.post('/assignments/weekly', authenticateJWT, authorize('it_manager', 'admin'), [
+    body('guide_user_id').custom((v) => validateDbUuid(v)).withMessage('Invalid guide_user_id'),
+    body('route_id').custom((v) => validateDbUuid(v)).withMessage('Invalid route_id'),
     body('week_start').isISO8601(),
     body('days').isArray({ min: 1, max: 7 }),
     body('start_time').matches(/^\d{2}:\d{2}$/),
-    body('group_size').optional().isInt({ min: 1, max: 200 }),
-    body('vehicle_used').optional().isString(),
-    body('special_requests').optional().isString(),
-    body('park_id').optional().isUUID()
+    body('group_size').optional({ nullable: true }).isInt({ min: 1, max: 200 }).toInt(),
+    body('vehicle_used').optional({ nullable: true }).isString(),
+    body('special_requests').optional({ nullable: true }).isString(),
+    body('park_id').optional({ nullable: true }).custom((v) => v == null || v === '' || validateDbUuid(v)).withMessage('Invalid park_id')
 ], async (req, res) => {
     try {
         if (!(await hasTourSchedulingTables())) {
@@ -286,7 +301,13 @@ router.post('/assignments/weekly', authenticateJWT, authorize('it_manager'), [
         return res.status(201).json({ success: true, created_count: created.length, assignments: created });
     } catch (error) {
         console.error('weekly assignments', error);
-        return res.status(500).json({ error: 'Failed to create weekly assignments' });
+        if (error.code === '23503') {
+            return res.status(400).json({ error: 'Invalid guide, route, or park reference for weekly assignments.' });
+        }
+        return res.status(500).json({
+            error: 'Failed to create weekly assignments',
+            detail: process.env.NODE_ENV === 'production' ? undefined : error.message
+        });
     }
 });
 
@@ -294,10 +315,10 @@ router.post('/assignments/weekly', authenticateJWT, authorize('it_manager'), [
 // GET /api/tours/assignments (IT manager)
 // List assigned tour sessions with guide/route details
 // =====================================================
-router.get('/assignments', authenticateJWT, authorize('it_manager'), [
+router.get('/assignments', authenticateJWT, authorize('it_manager', 'admin'), [
     query('start').optional().isISO8601(),
     query('end').optional().isISO8601(),
-    query('guide_user_id').optional().isUUID(),
+    query('guide_user_id').optional().custom((v) => !v || validateDbUuid(v)).withMessage('Invalid guide_user_id'),
     query('status').optional().isIn(['scheduled', 'ongoing', 'completed', 'cancelled'])
 ], async (req, res) => {
     try {
@@ -958,7 +979,27 @@ router.post('/guide/shifts/clock-in', authenticateJWT, authorize('guide'), async
              RETURNING shift_id, shift_date, actual_start, status`,
             [guideId, today]
         );
-        return res.json({ success: true, shift: upsert.rows[0] });
+        const shift = upsert.rows[0];
+        const guideUser = await pool.query(
+            `SELECT u.user_id, u.first_name, u.last_name, u.username
+             FROM users u WHERE u.user_id = $1 LIMIT 1`,
+            [req.user.user_id]
+        );
+        const gu = guideUser.rows[0] || {};
+        const guideName =
+            [gu.first_name, gu.last_name].filter(Boolean).join(' ').trim() || gu.username || 'Guide';
+        const notifications = await notifyGuideShiftClockIn({
+            guideUserId: req.user.user_id,
+            guideName,
+            shiftId: shift.shift_id,
+            actualStart: shift.actual_start
+        });
+        return res.json({
+            success: true,
+            shift,
+            guide_name: guideName,
+            notifications
+        });
     } catch (error) {
         console.error('clock-in', error);
         return res.status(500).json({ error: 'Failed to clock in' });
@@ -988,7 +1029,22 @@ router.post('/guide/shifts/clock-out', authenticateJWT, authorize('guide'), asyn
         const workedHours = shift.actual_start && shift.actual_end
             ? Number(((new Date(shift.actual_end) - new Date(shift.actual_start)) / 3600000).toFixed(2))
             : 0;
-        return res.json({ success: true, shift, worked_hours: workedHours });
+        const guideUser = await pool.query(
+            `SELECT u.user_id, u.first_name, u.last_name, u.username
+             FROM users u WHERE u.user_id = $1 LIMIT 1`,
+            [req.user.user_id]
+        );
+        const gu = guideUser.rows[0] || {};
+        const guideName =
+            [gu.first_name, gu.last_name].filter(Boolean).join(' ').trim() || gu.username || 'Guide';
+        await notifyGuideShiftClockOut({
+            guideUserId: req.user.user_id,
+            guideName,
+            shiftId: shift.shift_id,
+            actualEnd: shift.actual_end,
+            workedHours
+        });
+        return res.json({ success: true, shift, worked_hours: workedHours, guide_name: guideName });
     } catch (error) {
         console.error('clock-out', error);
         return res.status(500).json({ error: 'Failed to clock out' });

@@ -1440,13 +1440,19 @@ class TourGuideManager {
 
     async clockIn() {
         const result = await API.clockInGuideShift();
-        if (result?.success) return { success: true, shift: result.shift };
+        if (result?.success) return { success: true, shift: result.shift || null };
         return { success: false, error: result?.error || 'Already clocked in' };
     }
 
     async clockOut() {
         const result = await API.clockOutGuideShift();
-        if (result?.success) return { success: true, hoursWorked: Number(result.worked_hours || 0).toFixed(2) };
+        if (result?.success) {
+            return {
+                success: true,
+                shift: result.shift || null,
+                hoursWorked: Number(result.worked_hours || 0).toFixed(2)
+            };
+        }
         return { success: false, error: result?.error || 'Not clocked in' };
     }
 
@@ -2906,9 +2912,12 @@ class ITManagerAPI {
     }
     
     async getSchemaStatus() {
-        const status = await API.getAdminSchemaStatus();
-        if (status && typeof status === 'object' && Object.keys(status).length) return status;
-        return {};
+        const payload = await API.getAdminSchemaStatus();
+        if (payload && typeof payload === 'object') {
+            if (payload.status && typeof payload.status === 'object') return payload;
+            return { status: payload };
+        }
+        return { status: {} };
     }
 
     async getInteractiveAnalytics() {

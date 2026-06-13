@@ -29,6 +29,7 @@ const { initializeRedis, getRedisClient } = require('./config/redis');
 const { logger } = require('./utils/logger');
 const { getEmailProvider, isEmailConfigured } = require('./services/emailService');
 const { generateToken, verifyToken, hashPassword, verifyPassword } = require('./config/auth');
+const { touchUserSessionActivity } = require('./utils/sessionPresence');
 const { REQUIREMENTS, ensureSecurityConfiguration } = require('./config/requirements');
 ensureSecurityConfiguration();
 
@@ -288,6 +289,7 @@ app.post('/api/auth/login-direct', async (req, res) => {
 
         // Generate token with the shared auth config path.
         const token = generateToken(user.user_id, user.user_type);
+        await touchUserSessionActivity(user.user_id);
 
         console.log('Login successful for:', username);
         console.log('========================================');
@@ -379,7 +381,7 @@ app.use('/api/animals', animalRoutes);
 app.use('/api/wildlife-tour-themes', wildlifeTourThemesRoutes);
 app.use('/api/locations', locationRoutes);
 app.use('/api/sightings', authenticateJWT, rejectGuestAccounts, requireInsidePark({ bypassRoles: ['it_manager'] }), sightingRoutes);
-app.use('/api/tours', authenticateJWT, rejectGuestAccounts, requireInsidePark({ bypassRoles: ['it_manager'] }), tourRoutes);
+app.use('/api/tours', authenticateJWT, rejectGuestAccounts, requireInsidePark({ bypassRoles: ['it_manager', 'admin'] }), tourRoutes);
 app.use('/api/cultural', culturalRoutes);
 app.use('/api/geofence', geofenceRoutes);
 app.use('/api/sync', authenticateJWT, rejectGuestAccounts, requireInsidePark({ bypassRoles: ['it_manager'] }), syncRoutes);

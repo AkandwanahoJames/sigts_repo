@@ -1952,17 +1952,42 @@ function startAssignmentDashboardRefresh() {
     }, 30000);
 }
 
+function renderGuideShiftBanner(activeShift) {
+    const onDuty = Boolean(activeShift && activeShift.status === 'active');
+    const startedAt = activeShift?.actual_start
+        ? new Date(activeShift.actual_start).toLocaleString(undefined, {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+          })
+        : null;
+    const statusClass = onDuty ? 'guide-shift-banner--on' : 'guide-shift-banner--off';
+    const title = onDuty ? 'On duty' : 'Off duty';
+    const detail = onDuty
+        ? startedAt
+            ? `Clocked in at ${escapeHtml(startedAt)}. IT operations can see you as available.`
+            : 'You are clocked in for today. IT operations can see you as available.'
+        : 'Clock in when your park shift starts so IT can track guides on duty.';
+    return `<div id="guideShiftBanner" class="guide-shift-banner ${statusClass}" role="status" aria-live="polite">
+        <div class="guide-shift-banner__icon">${icon('clock', 'icon-sm')}</div>
+        <div class="guide-shift-banner__body">
+            <strong id="guideShiftBannerTitle">${escapeHtml(title)}</strong>
+            <span id="guideShiftBannerDetail" class="guide-shift-banner__detail">${detail}</span>
+        </div>
+        <button type="button" id="guideShiftBannerBtn" class="small-btn ${onDuty ? 'ghost-btn' : ''}" onclick="clockInOut()">${onDuty ? 'Clock Out' : 'Clock In'}</button>
+    </div>`;
+}
+
 function renderNotificationBell(user) {
+    if (user?.isGuest) return '';
+    if (!Auth.isAuthenticated?.() && !user?.user_id) return '';
     const isGuide = user?.role === 'guide' || user?.userType === 'guide';
     const isITManager = isITStaffRole(getEffectiveRole(user));
-    if (isITManager) {
-        return `<button type="button" class="icon-btn notif-btn" onclick="navigateTo('it_dashboard')" aria-label="Alerts and admin">${icon('bell', 'icon-md')}<span id="rareAlertBadge" class="notif-badge hidden">0</span></button>`;
-    }
-    if (isGuide) {
-        return `<button type="button" class="icon-btn notif-btn" onclick="navigateTo('guide_dashboard')" aria-label="Guide alerts">${icon('bell', 'icon-md')}<span id="rareAlertBadge" class="notif-badge hidden">0</span></button>`;
-    }
-    if (user?.isGuest) return '';
-    return `<div class="notif-wrap"><button type="button" class="icon-btn notif-btn" onclick="toggleUserNotificationsPanel(event)" aria-label="Notifications" aria-expanded="false" aria-controls="userNotifPanel">${icon('bell', 'icon-md')}<span id="userNotifBadge" class="notif-badge hidden">0</span></button><div id="userNotifPanel" class="user-notif-panel hidden" role="region" aria-label="Your notifications"></div></div>`;
+    const rareBadge =
+        isGuide || isITManager
+            ? `<span id="rareAlertBadge" class="notif-badge notif-badge--secondary hidden">0</span>`
+            : '';
+    return `<div class="notif-wrap"><button type="button" class="icon-btn notif-btn" onclick="toggleUserNotificationsPanel(event)" aria-label="Notifications" aria-expanded="false" aria-controls="userNotifPanel">${icon('bell', 'icon-md')}<span id="userNotifBadge" class="notif-badge hidden">0</span>${rareBadge}</button><div id="userNotifPanel" class="user-notif-panel hidden" role="region" aria-label="Your notifications"></div></div>`;
 }
 
 /** Bottom tab bar on narrow screens — matches primary sidebar destinations. */
@@ -5542,7 +5567,8 @@ async function renderGuideDashboard() {
     const profileLine = guideProfile
         ? `${escapeHtml(guideProfile.certification_level || 'guide')} • ${escapeHtml(String(guideProfile.languages || '[]'))}`
         : 'Profile unavailable';
-    return `<div class="guide-dashboard">${renderDashboardShell({
+    const shiftBanner = renderGuideShiftBanner(dashboard.activeShift);
+    return `<div class="guide-dashboard">${shiftBanner}${renderDashboardShell({
         primaryTitle: "Today's Tours",
         primaryIcon: 'clock',
         primaryItems: guideItems,
@@ -5674,8 +5700,11 @@ async function renderItAdminOpsPanels() {
         /**/
     }
     const checks = health?.checks || {};
+    const dbMeta = health?.database_meta || {};
+    const dbSizeMb =
+        dbMeta.size_bytes != null ? `${(Number(dbMeta.size_bytes) / (1024 * 1024)).toFixed(1)} MB` : null;
     const healthRows = health
-        ? `<div class="seasonal-item"><strong>Database</strong> ${escapeHtml(health.database || 'unknown')}</div>
+        ? `<div class="seasonal-item"><strong>Database</strong> ${escapeHtml(health.database || 'unknown')}${dbSizeMb ? ` · ${escapeHtml(dbSizeMb)}` : ''}${dbMeta.active_connections != null ? ` · ${escapeHtml(String(dbMeta.active_connections))} active conn.` : ''}</div>
            <div class="seasonal-item"><strong>Sync service</strong> ${escapeHtml(health.syncService || 'unknown')} · pending ${escapeHtml(String(checks.pending_sync_items ?? '—'))}</div>
            <div class="seasonal-item"><strong>Geolocation pulse</strong> ${escapeHtml(health.geolocation || 'unknown')} · ${escapeHtml(String(checks.location_updates_last_15m ?? 0))} updates (15m)</div>
            <div class="seasonal-item"><strong>Feedback ingest</strong> ${escapeHtml(health.feedbackIngest || 'unknown')} · ${escapeHtml(String(checks.feedback_last_24h ?? 0))} last 24h</div>`
@@ -5691,13 +5720,27 @@ async function renderItAdminOpsPanels() {
                   .join('')
             : '<div class="seasonal-item">No audit log entries yet.</div>';
     const schemaStatus = schema?.status || {};
-    const schemaRows = Object.entries(schemaStatus)
-        .slice(0, 18)
-        .map(([table, meta]) => {
-            const count = meta?.count ?? 0;
-            const st = meta?.status || (meta?.exists === false ? 'missing' : 'active');
-            return `<div class="seasonal-item"><strong>${escapeHtml(table)}</strong> <span class="ui-modal-muted">${escapeHtml(st)}</span> · ${escapeHtml(String(count))} rows</div>`;
-        })
+    const migrationInfo = schema?.migrations || {};
+    const schemaDb = schema?.database || {};
+    const migrationSummary =
+        migrationInfo.applied != null
+            ? `<div class="seasonal-item"><strong>Migrations</strong> ${escapeHtml(String(migrationInfo.applied))} applied${migrationInfo.pending ? ` · <span class="ui-modal-muted">${escapeHtml(String(migrationInfo.pending))} pending</span>` : ''}${migrationInfo.latest_applied ? ` · latest ${escapeHtml(migrationInfo.latest_applied)}` : ''}</div>`
+            : '';
+    const schemaDbSummary =
+        schemaDb.size_bytes != null
+            ? `<div class="seasonal-item"><strong>Database size</strong> ${escapeHtml((Number(schemaDb.size_bytes) / (1024 * 1024)).toFixed(1))} MB · ${escapeHtml(String(schemaDb.name || 'PostgreSQL'))}</div>`
+            : '';
+    const schemaRows = [migrationSummary, schemaDbSummary]
+        .filter(Boolean)
+        .concat(
+            Object.entries(schemaStatus)
+                .slice(0, 18)
+                .map(([table, meta]) => {
+                    const count = meta?.count ?? 0;
+                    const st = meta?.status || (meta?.exists === false ? 'missing' : 'active');
+                    return `<div class="seasonal-item"><strong>${escapeHtml(table)}</strong> <span class="ui-modal-muted">${escapeHtml(st)}</span> · ${escapeHtml(String(count))} rows</div>`;
+                })
+        )
         .join('');
     const poiRows =
         Array.isArray(pois) && pois.length
@@ -5713,7 +5756,7 @@ async function renderItAdminOpsPanels() {
         Array.isArray(backups?.backups) && backups.backups.length
             ? backups.backups
                   .slice(0, 8)
-                  .map((b) => `<div class="seasonal-item"><strong>${escapeHtml(b.report_type || 'backup')}</strong><br><small>${escapeHtml(String(b.created_at || b.report_date || ''))}</small></div>`)
+                  .map((b) => `<div class="seasonal-item"><strong>${escapeHtml(b.report_type || 'backup')}</strong><br><small>${escapeHtml(String(b.generated_at || b.created_at || b.report_date || ''))}</small></div>`)
                   .join('')
             : '<div class="seasonal-item">No backup records yet.</div>';
     const faqRows =
@@ -5774,8 +5817,8 @@ async function renderItAdminOpsPanels() {
     </div>
     <div class="dashboard-feature-grid">
         <div class="section-card" id="itSchemaStatusPanel">
-            <div class="section-header"><h3>${icon('database', 'icon-sm')} Database tables</h3><button type="button" class="small-btn ghost-btn" onclick="refreshItSchemaStatusPanel()">Refresh</button></div>
-            <p class="animals-page-blurb">Row counts for core PostgreSQL tables — operational DB console for IT managers.</p>
+            <div class="section-header"><h3>${icon('database', 'icon-sm')} Database tables</h3><div class="info-chip-row"><button type="button" class="small-btn ghost-btn" onclick="refreshItSchemaStatusPanel()">Refresh</button><button type="button" class="small-btn" onclick="submitItDatabaseAnalyze()">Run ANALYZE</button></div></div>
+            <p class="animals-page-blurb">Row counts, migration status, and database size — operational PostgreSQL console for IT managers.</p>
             <div id="itSchemaStatusMount" class="seasonal-list" style="max-height:280px;overflow:auto;">${schemaRows || '<div class="seasonal-item">Schema status unavailable.</div>'}</div>
         </div>
         <div class="section-card" id="itBackupPanel">
@@ -5936,9 +5979,38 @@ window.refreshItSchemaStatusPanel = async function () {
     mount.innerHTML = '<div class="seasonal-item">Loading…</div>';
     const schema = await API.getAdminSchemaStatus().catch(() => null);
     const schemaStatus = schema?.status || {};
-    mount.innerHTML = Object.entries(schemaStatus)
-        .map(([table, meta]) => `<div class="seasonal-item"><strong>${escapeHtml(table)}</strong> <span class="ui-modal-muted">${escapeHtml(meta?.status || 'active')}</span> · ${escapeHtml(String(meta?.count ?? 0))} rows</div>`)
-        .join('') || '<div class="seasonal-item">Schema status unavailable.</div>';
+    const migrationInfo = schema?.migrations || {};
+    const schemaDb = schema?.database || {};
+    const header = [
+        migrationInfo.applied != null
+            ? `<div class="seasonal-item"><strong>Migrations</strong> ${escapeHtml(String(migrationInfo.applied))} applied${migrationInfo.pending ? ` · ${escapeHtml(String(migrationInfo.pending))} pending` : ''}</div>`
+            : '',
+        schemaDb.size_bytes != null
+            ? `<div class="seasonal-item"><strong>Database size</strong> ${escapeHtml((Number(schemaDb.size_bytes) / (1024 * 1024)).toFixed(1))} MB</div>`
+            : ''
+    ]
+        .filter(Boolean)
+        .join('');
+    mount.innerHTML =
+        header +
+            Object.entries(schemaStatus)
+                .map(([table, meta]) => `<div class="seasonal-item"><strong>${escapeHtml(table)}</strong> <span class="ui-modal-muted">${escapeHtml(meta?.status || 'active')}</span> · ${escapeHtml(String(meta?.count ?? 0))} rows</div>`)
+                .join('') ||
+        '<div class="seasonal-item">Schema status unavailable.</div>';
+};
+
+window.submitItDatabaseAnalyze = async function () {
+    if (!requireITManagerAccess('database maintenance')) return;
+    const ok = await showConfirmDialog('Run ANALYZE on operational PostgreSQL tables? This refreshes query planner statistics and is safe to run during normal operations.');
+    if (!ok) return;
+    showToast('Running ANALYZE…', 'info');
+    const result = await API.runDatabaseAnalyze().catch(() => null);
+    if (result?.success) {
+        showToast(`ANALYZE complete on ${result.analyzed?.length || 0} table(s).`, 'success');
+        await refreshItSchemaStatusPanel();
+        return;
+    }
+    showToast(result?.error || 'ANALYZE failed.', 'danger');
 };
 
 window.submitItCreateBackup = async function () {
@@ -7583,6 +7655,9 @@ function openTourAssignmentModal({ mode, guides, routes }) {
 
 function describeTourAssignmentError(out, fallback) {
     if (!out) return fallback;
+    if (out.parkAccessDenied || out.code === 'PARK_ACCESS_DENIED') {
+        return 'Park access is required for tour assignments. Use demo “Force inside” or connect inside the park boundary.';
+    }
     if (Array.isArray(out.errors) && out.errors.length) {
         const detail = out.errors
             .map((e) => e?.msg || e?.message || (e?.param ? `Invalid ${e.param}` : ''))
@@ -7590,9 +7665,13 @@ function describeTourAssignmentError(out, fallback) {
             .join('; ');
         if (detail) return detail;
     }
-    if (out.error) return out.error;
+    if (out.error) return out.detail ? `${out.error} (${out.detail})` : out.error;
     if (out.status === 503) return 'Tour scheduling is unavailable until database migrations are applied.';
+    if (out.status === 403) return out.message || out.error || 'Access denied — check your IT manager role and park access.';
     if (out.status === 404) return 'Selected guide or route was not found (it may be inactive).';
+    if (out.status === 400 && out.error === 'No park available. Provide park_id or seed parks.') {
+        return 'No park is configured. Run database seeds (npm run seed) before assigning tours.';
+    }
     if (out.status) return `${fallback} (HTTP ${out.status})`;
     return fallback;
 }
@@ -7621,6 +7700,9 @@ window.itOpsAssignSingleTourPrompt = async function () {
         return;
     }
     showToast('Tour assigned to guide successfully.', 'success');
+    if (window.currentView === 'it_tour_assignments') {
+        await renderView('it_tour_assignments', { updateHash: false, suppressAccessToast: true });
+    }
 };
 
 window.itOpsAssignWeeklyToursPrompt = async function () {
@@ -7651,6 +7733,9 @@ window.itOpsAssignWeeklyToursPrompt = async function () {
         return;
     }
     showToast(`Weekly assignments created: ${out.created_count || 0}.`, 'success');
+    if (window.currentView === 'it_tour_assignments') {
+        await renderView('it_tour_assignments', { updateHash: false, suppressAccessToast: true });
+    }
 };
 
 window.itOpsCreateBackupNow = async function () {
@@ -9287,9 +9372,54 @@ async function clockInOut() {
         return;
     }
     const m = new TourGuideManager();
-    const s = await m.clockIn();
-    if (!s.success) await m.clockOut();
-    renderView('guide_dashboard');
+    const status = await API.getGuideShiftStatus().catch(() => null);
+    const onDuty = status?.shift?.status === 'active';
+    const result = onDuty ? await m.clockOut() : await m.clockIn();
+    if (result.success) {
+        const shift = result.shift || null;
+        if (onDuty) {
+            showToast(`Clocked out${result.hoursWorked ? ` — ${result.hoursWorked} h on duty` : ''}.`, 'success');
+        } else {
+            const at = shift?.actual_start
+                ? new Date(shift.actual_start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+                : 'now';
+            showToast(`Clocked in at ${at}. You are on duty — check the banner above.`, 'success');
+        }
+        updateGuideShiftBannerDom(onDuty ? null : shift, onDuty);
+        await refreshUserNotificationBadge().catch(() => {});
+        await renderView('guide_dashboard', { updateHash: false, suppressAccessToast: true });
+        await refreshHeaderNotificationBadges().catch(() => {});
+        return;
+    }
+    showToast(result.error || (onDuty ? 'Could not clock out.' : 'Could not clock in.'), 'danger');
+}
+
+function updateGuideShiftBannerDom(activeShift, wasClockOut) {
+    const banner = document.getElementById('guideShiftBanner');
+    if (!banner) return;
+    const onDuty = !wasClockOut && Boolean(activeShift && activeShift.status === 'active');
+    banner.classList.toggle('guide-shift-banner--on', onDuty);
+    banner.classList.toggle('guide-shift-banner--off', !onDuty);
+    const title = document.getElementById('guideShiftBannerTitle');
+    const detail = document.getElementById('guideShiftBannerDetail');
+    const btn = document.getElementById('guideShiftBannerBtn');
+    if (title) title.textContent = onDuty ? 'On duty' : 'Off duty';
+    if (detail) {
+        if (onDuty) {
+            const startedAt = activeShift?.actual_start
+                ? new Date(activeShift.actual_start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+                : null;
+            detail.textContent = startedAt
+                ? `Clocked in at ${startedAt}. IT operations can see you as available.`
+                : 'You are clocked in for today. IT operations can see you as available.';
+        } else {
+            detail.textContent = 'Clock in when your park shift starts so IT can track guides on duty.';
+        }
+    }
+    if (btn) {
+        btn.textContent = onDuty ? 'Clock Out' : 'Clock In';
+        btn.classList.toggle('ghost-btn', onDuty);
+    }
 }
 
 window.addTourNotePrompt = async function () {
@@ -9846,8 +9976,8 @@ async function refreshRareAlertBadge() {
     const badge = document.getElementById('rareAlertBadge');
     if (!badge) return;
     const user = Auth.getCurrentUser() || {};
-    const role = user.role || user.userType || user.user_type;
-    if (role !== 'it_manager' && role !== 'guide') {
+    const role = getEffectiveRole(user);
+    if (!isITStaffRole(role) && role !== 'guide') {
         badge.classList.add('hidden');
         return;
     }
@@ -9866,7 +9996,12 @@ function renderUserNotificationsList(notifications = []) {
         .map((n) => {
             const id = escAttrBareUuid(n.notification_id || n.id);
             const unread = n.is_read === false || n.read === false;
-            return `<button type="button" class="user-notif-item${unread ? ' is-unread' : ''}" onclick="markUserNotificationRead('${id}')">
+            const data = n.data && typeof n.data === 'object' ? n.data : {};
+            const linkView = data.link_view ? String(data.link_view) : '';
+            const openFn = linkView
+                ? `markUserNotificationRead('${id}'); openNotificationLink('${escJsAttr(linkView)}');`
+                : `markUserNotificationRead('${id}')`;
+            return `<button type="button" class="user-notif-item${unread ? ' is-unread' : ''}" onclick="${openFn}">
                 <strong>${escapeHtml(n.title || n.type || 'Notification')}</strong>
                 <span>${escapeHtml(String(n.message || n.body || '').slice(0, 160))}</span>
                 <small>${escapeHtml(String(n.created_at || '').slice(0, 19).replace('T', ' '))}</small>
@@ -9878,13 +10013,12 @@ function renderUserNotificationsList(notifications = []) {
 async function refreshUserNotificationBadge() {
     const badge = document.getElementById('userNotifBadge');
     if (!badge) return;
-    const user = Auth.getCurrentUser() || {};
-    const role = user.role || user.userType || user.user_type;
-    if (role === 'it_manager' || role === 'guide' || user.isGuest) {
+    if (!Auth.isAuthenticated?.() || String(Auth.token || '').startsWith('demo.')) {
         badge.classList.add('hidden');
         return;
     }
-    if (!Auth.isAuthenticated?.() || String(Auth.token || '').startsWith('demo.')) {
+    const user = Auth.getCurrentUser() || {};
+    if (user.isGuest) {
         badge.classList.add('hidden');
         return;
     }
@@ -9922,7 +10056,15 @@ window.markUserNotificationRead = async function markUserNotificationRead(id) {
         const rows = Array.isArray(data?.notifications) ? data.notifications : [];
         panel.innerHTML = `<div class="user-notif-head"><strong>Notifications</strong><button type="button" class="small-btn ghost-btn" onclick="markAllUserNotificationsRead()">Mark all read</button></div><div class="user-notif-list">${renderUserNotificationsList(rows)}</div>`;
     }
-    refreshUserNotificationBadge().catch(() => {});
+    await refreshUserNotificationBadge().catch(() => {});
+};
+
+window.openNotificationLink = async function openNotificationLink(linkView) {
+    const view = String(linkView || '').trim();
+    if (!view) return;
+    const panel = document.getElementById('userNotifPanel');
+    if (panel) panel.classList.add('hidden');
+    await navigateTo(view);
 };
 
 window.markAllUserNotificationsRead = async function markAllUserNotificationsRead() {
